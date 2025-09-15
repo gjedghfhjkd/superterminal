@@ -1,13 +1,13 @@
 from PyQt5.QtWidgets import (QTreeWidget, QTreeWidgetItem, QMenu, QAction, 
                              QInputDialog, QMessageBox, QLineEdit, QApplication)
 from PyQt5.QtCore import Qt, pyqtSignal, QMimeData
-from PyQt5.QtGui import QKeyEvent, QDrag, QBrush
+from PyQt5.QtGui import QKeyEvent, QDrag
 
 class SessionTreeWidget(QTreeWidget):
     context_menu_requested = pyqtSignal(str, object)
     session_double_clicked = pyqtSignal(object)
     rename_requested = pyqtSignal(str, object)
-    session_moved = pyqtSignal(int, str)  # Новый сигнал: session_index, target_folder
+    session_moved = pyqtSignal(int, str, str)  # session_index, target_folder, current_folder
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -79,20 +79,27 @@ class SessionTreeWidget(QTreeWidget):
         if item_type not in ["session", "folder"]:
             return
             
+        # Сохраняем информацию о текущей папке сессии
+        current_folder = None
+        if item_type == "session":
+            parent = item.parent()
+            if parent and parent.data(0, Qt.UserRole) == "folder":
+                current_folder = parent.data(0, Qt.UserRole + 1)
+        
         # Создаем drag operation
         drag = QDrag(self)
         mime_data = QMimeData()
         
         if item_type == "session":
             session_index = item.data(0, Qt.UserRole + 1)
-            mime_data.setText(f"session:{session_index}")
+            mime_data.setText(f"session:{session_index}:{current_folder}")
         else:  # folder
             folder_name = item.data(0, Qt.UserRole + 1)
             mime_data.setText(f"folder:{folder_name}")
             
         drag.setMimeData(mime_data)
         drag.exec_(Qt.MoveAction)
-    
+        
     def dragEnterEvent(self, event):
         """Разрешаем drag enter"""
         if event.mimeData().hasText():
@@ -111,44 +118,56 @@ class SessionTreeWidget(QTreeWidget):
         mime_data = event.mimeData().text()
         target_item = self.itemAt(event.pos())
         
+        print(f"Drop event: {mime_data} on {target_item.text(0) if target_item else 'None'}")
+        
         # Определяем тип перетаскиваемого элемента
         if mime_data.startswith("session:"):
-            session_index = int(mime_data.split(":")[1])
-            self.handle_session_drop(session_index, target_item, event.pos())
+            self.handle_session_drop(mime_data, target_item)
         elif mime_data.startswith("folder:"):
             folder_name = mime_data.split(":")[1]
-            self.handle_folder_drop(folder_name, target_item, event.pos())
+            self.handle_folder_drop(folder_name, target_item)
             
         event.acceptProposedAction()
+
     
-    def handle_session_drop(self, session_index, target_item, drop_position):
+    def handle_session_drop(self, mime_data, target_item):
         """Обработка drop сессии"""
+        parts = mime_data.split(":")
+        session_index = int(parts[1])
+        current_folder = parts[2] if len(parts) > 2 else None
+        
+        print(f"Handling session drop: {session_index} from folder: {current_folder} on {target_item.text(0) if target_item else 'None'}")
+        
         if not target_item:
             # Бросили на пустое место - удаляем из папки
-            self.session_moved.emit(session_index, None)
+            print("Dropped on empty space - removing from folder")
+            self.session_moved.emit(session_index, None, current_folder)
             return
             
         target_type = target_item.data(0, Qt.UserRole)
+        print(f"Target type: {target_type}")
         
         if target_type == "folder":
             # Бросили на папку - перемещаем в эту папку
             folder_name = target_item.data(0, Qt.UserRole + 1)
-            self.session_moved.emit(session_index, folder_name)
+            print(f"Dropped on folder: {folder_name}")
+            self.session_moved.emit(session_index, folder_name, current_folder)
         elif target_type == "session":
-            # Бросили на другую сессию - определяем куда именно
+            # Бросили на сессию - определяем родительскую папку
             parent = target_item.parent()
             if parent and parent.data(0, Qt.UserRole) == "folder":
-                # Бросили на сессию внутри папки - перемещаем в эту папку
+                # Целевая сессия находится в папке
                 folder_name = parent.data(0, Qt.UserRole + 1)
-                self.session_moved.emit(session_index, folder_name)
+                print(f"Dropped on session in folder: {folder_name}")
+                self.session_moved.emit(session_index, folder_name, current_folder)
             else:
-                # Бросили на сессию без папки - удаляем из папки
-                self.session_moved.emit(session_index, None)
-    
-    def handle_folder_drop(self, folder_name, target_item, drop_position):
+                # Целевая сессия находится в корне - удаляем из папки
+                print("Dropped on session in root - removing from folder")
+                self.session_moved.emit(session_index, None, current_folder)
+
+    def handle_folder_drop(self, folder_name, target_item):
         """Обработка drop папки"""
-        # Для простоты не будем поддерживать перетаскивание папок друг на друга
-        # Можно добавить эту функциональность позже если нужно
+        # Для простоты не будем поддерживать перетаскивание папок
         pass
     
     def keyPressEvent(self, event: QKeyEvent):
@@ -243,28 +262,3 @@ class SessionTreeWidget(QTreeWidget):
                 self.context_menu_requested.emit("add_folder", None)
             elif action == add_session_action:
                 self.context_menu_requested.emit("add_session", None)
-    # В session_tree_widget.py добавьте методы:
-
-    def startDrag(self, supportedActions):
-        """Начало перетаскивания с визуальными эффектами"""
-        item = self.currentItem()
-        if item:
-            item.setBackground(0, QColor("#fff3cd"))  # Подсветка перетаскиваемого элемента
-        super().startDrag(supportedActions)
-
-    def dropEvent(self, event):
-        """Обработка drop с восстановлением внешнего вида"""
-        super().dropEvent(event)
-        # Восстанавливаем нормальный вид всех элементов
-        for i in range(self.topLevelItemCount()):
-            item = self.topLevelItem(i)
-            item.setBackground(0, QBrush())
-            self.restore_item_appearance(item)
-        
-    def restore_item_appearance(self, item):
-        """Рекурсивное восстановление внешнего вида элементов"""
-        if not item:
-            return
-        item.setBackground(0, QBrush())
-        for i in range(item.childCount()):
-            self.restore_item_appearance(item.child(i))

@@ -12,41 +12,72 @@ class SessionManager:
         self.config_file = config_file
         self.load_sessions()
     
-    def add_session(self, session: Session, folder: str = None) -> int:
+    def add_session(self, session, folder_name=None):
+        """Добавить новую сессию"""
         session_index = len(self.sessions)
         self.sessions.append(session)
         
-        if folder:
-            if folder not in self.folders:
-                self.folders[folder] = []
-            self.folders[folder].append(session_index)
+        # Если указана папка, добавляем в нее
+        if folder_name:
+            if folder_name not in self.folders:
+                self.folders[folder_name] = []
+            self.folders[folder_name].append(session_index)
         
         self.save_sessions()
         return session_index
     
-    def update_session(self, index: int, session: Session) -> bool:
+    def update_session(self, index, updated_session):
+        """Обновить сессию по индексу"""
         if 0 <= index < len(self.sessions):
-            self.sessions[index] = session
+            old_session = self.sessions[index]
+            print(f"Updating session {index}: {old_session.host} -> {updated_session.host}")
+            print(f"Old folder: {old_session.folder}, New folder: {updated_session.folder}")
+            
+            # Удаляем сессию из старой папки (если была)
+            if old_session.folder and old_session.folder in self.folders:
+                if index in self.folders[old_session.folder]:
+                    self.folders[old_session.folder].remove(index)
+                    # Если папка пустая, можно удалить ее (опционально)
+                    if not self.folders[old_session.folder]:
+                        del self.folders[old_session.folder]
+            
+            # Добавляем сессию в новую папку
+            if updated_session.folder:
+                if updated_session.folder not in self.folders:
+                    self.folders[updated_session.folder] = []
+                if index not in self.folders[updated_session.folder]:
+                    self.folders[updated_session.folder].append(index)
+            
+            self.sessions[index] = updated_session
             self.save_sessions()
             return True
         return False
     
-    def delete_session(self, index: int) -> bool:
+    def delete_session(self, index):
+        """Удалить сессию по индексу"""
         if 0 <= index < len(self.sessions):
-            self.sessions.pop(index)
+            session = self.sessions[index]
             
-            # Remove from all folders
-            for folder_sessions in self.folders.values():
-                if index in folder_sessions:
-                    folder_sessions.remove(index)
+            # Удаляем сессию из папки (если есть)
+            if session.folder and session.folder in self.folders:
+                if index in self.folders[session.folder]:
+                    self.folders[session.folder].remove(index)
+                    # Если папка пустая, удаляем ее
+                    if not self.folders[session.folder]:
+                        del self.folders[session.folder]
             
-            # Update indices in folders (decrement indices greater than deleted index)
-            for folder_name in self.folders:
-                self.folders[folder_name] = [
-                    i if i < index else i - 1 
-                    for i in self.folders[folder_name] 
-                    if i != index
-                ]
+            # Удаляем сессию и сдвигаем индексы в папках
+            del self.sessions[index]
+            
+            # Обновляем индексы в папках (все индексы > удаленного уменьшаем на 1)
+            for folder_name, indices in list(self.folders.items()):
+                new_indices = []
+                for i in indices:
+                    if i > index:
+                        new_indices.append(i - 1)
+                    elif i < index:
+                        new_indices.append(i)
+                self.folders[folder_name] = new_indices
             
             self.save_sessions()
             return True
@@ -81,11 +112,18 @@ class SessionManager:
         self.save_sessions()
         return True
     
-    def get_session(self, index: int) -> Optional[Session]:
+    def get_sessions_in_folder(self, folder_name):
+        """Получить все сессии в указанной папке"""
+        if folder_name not in self.folders:
+            return []
+        
+        # Возвращаем сессии по индексам из folders
+        return [self.sessions[index] for index in self.folders[folder_name]]
+    def get_session(self, index):
+        """Получить сессию по индексу"""
         if 0 <= index < len(self.sessions):
             return self.sessions[index]
         return None
-    
     def get_all_sessions(self) -> List[Session]:
         return self.sessions.copy()
     
@@ -143,6 +181,7 @@ class SessionManager:
             item = QListWidgetItem(session.host)
             item.setData(Qt.UserRole, i)
             list_widget.addItem(item)
+
     def rename_folder(self, old_name, new_name):
         """Переименовать папку"""
         if old_name not in self.folders:

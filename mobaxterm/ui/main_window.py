@@ -288,18 +288,35 @@ class MobaXtermClone(QMainWindow):
         
         # Load saved sessions
         self.load_sessions()
-    def handle_session_move(self, session_index, target_folder):
+
+    def handle_session_move(self, session_index, target_folder, current_folder):
         """Обработка перемещения сессии"""
-        session = self.session_manager.get_session(session_index)
+        print(f"Moving session {session_index} from folder: {current_folder} to folder: {target_folder}")
+        
+        session = self.session_manager.sessions[session_index] if session_index < len(self.session_manager.sessions) else None
         if not session:
+            print("Session not found!")
+            return
+            
+        print(f"Session current folder in DB: {session.folder}")
+        print(f"Source folder (from drag): {current_folder}")
+        print(f"Target folder: {target_folder}")
+        
+        # Проверяем, действительно ли папка изменилась
+        # Сравниваем исходную папку (из которой перемещаем) с целевой папкой
+        if current_folder == target_folder:
+            print("Session is already in the target folder - no need to move")
             return
             
         # Обновляем папку сессии
         session.folder = target_folder
         if self.session_manager.update_session(session_index, session):
+            print("Session updated successfully")
             # Перезагружаем дерево для отображения изменений
             self.load_sessions()
-            
+        else:
+            print("Failed to update session")
+
     def handle_rename_request(self, item_type, item):
         """Обработка запроса на переименование"""
         if item_type == "folder":
@@ -307,7 +324,7 @@ class MobaXtermClone(QMainWindow):
             self.rename_folder(folder_name, item)
         elif item_type == "session":
             session_index = item.data(0, Qt.UserRole + 1)
-            session = self.session_manager.get_session(session_index)
+            session = self.session_manager.sessions[session_index] if session_index < len(self.session_manager.sessions) else None
             if session:
                 self.rename_session(session_index, session, item)
     def rename_session(self, session_index, session, item):
@@ -397,12 +414,15 @@ class MobaXtermClone(QMainWindow):
         self.session_tab.setStyleSheet(self.get_tab_style(False))
         
     def load_sessions(self):
+        print("=== Loading sessions ===")
         self.sessions_tree.clear()
         self.folder_items.clear()
         self.session_items.clear()
         
         # Add folders first
         folders = self.session_manager.get_all_folders()
+        print(f"Found folders: {folders}")
+        
         for folder_name in folders:
             folder_item = QTreeWidgetItem(self.sessions_tree)
             folder_item.setText(0, f"📁 {folder_name}")
@@ -413,6 +433,8 @@ class MobaXtermClone(QMainWindow):
             
             # Add sessions in this folder
             sessions = self.session_manager.get_sessions_in_folder(folder_name)
+            print(f"Folder '{folder_name}' has {len(sessions)} sessions")
+            
             for session in sessions:
                 session_index = self.session_manager.sessions.index(session)
                 session_item = QTreeWidgetItem(folder_item)
@@ -421,27 +443,31 @@ class MobaXtermClone(QMainWindow):
                 session_item.setData(0, Qt.UserRole + 1, session_index)
                 session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
                 self.session_items[session_index] = session_item
+                print(f"  - Session {session_index}: {session.host} (folder: {session.folder})")
         
-        # Add sessions without folders
-        all_session_indices = set(range(len(self.session_manager.sessions)))
-        used_indices = set()
-        for folder_sessions in self.session_manager.folders.values():
-            used_indices.update(folder_sessions)
+        # Add sessions without folders (теперь ищем по session.folder вместо индексов)
+        orphan_sessions = []
+        for session_index, session in enumerate(self.session_manager.sessions):
+            # Используем session_manager.folders вместо self.folders
+            if not session.folder or session.folder not in self.session_manager.folders or session_index not in self.session_manager.folders[session.folder]:
+                orphan_sessions.append((session_index, session))
         
-        orphan_sessions = all_session_indices - used_indices
-        for session_index in orphan_sessions:
-            session = self.session_manager.get_session(session_index)
-            if session:
-                session_item = QTreeWidgetItem(self.sessions_tree)
-                session_item.setText(0, f"🖥️  {session.host}")
-                session_item.setData(0, Qt.UserRole, "session")
-                session_item.setData(0, Qt.UserRole + 1, session_index)
-                session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
-                self.session_items[session_index] = session_item
+        print(f"Orphan sessions (no folder): {[s[0] for s in orphan_sessions]}")
+        
+        for session_index, session in orphan_sessions:
+            session_item = QTreeWidgetItem(self.sessions_tree)
+            session_item.setText(0, f"🖥️  {session.host}")
+            session_item.setData(0, Qt.UserRole, "session")
+            session_item.setData(0, Qt.UserRole + 1, session_index)
+            session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
+            self.session_items[session_index] = session_item
+            print(f"  - Orphan session {session_index}: {session.host} (folder: {session.folder})")
         
         # Expand all folders by default
         for folder_item in self.folder_items.values():
             folder_item.setExpanded(True)
+        
+        print("=== Finished loading sessions ===\n")
         
     def handle_tree_context_menu(self, action_type, item):
         if action_type == "add_folder":
@@ -463,7 +489,7 @@ class MobaXtermClone(QMainWindow):
         elif action_type == "delete_session":
             if item and item.data(0, Qt.UserRole) == "session":
                 session_index = item.data(0, Qt.UserRole + 1)
-                session = self.session_manager.get_session(session_index)
+                session = self.session_manager.sessions[session_index] if session_index < len(self.session_manager.sessions) else None
                 if session:
                     self.delete_session_with_confirmation(session_index, session.host)
         elif action_type == "move_session":
@@ -593,7 +619,7 @@ class MobaXtermClone(QMainWindow):
                 self.load_sessions()
     
     def edit_session(self, session_index):
-        session = self.session_manager.get_session(session_index)
+        session = self.session_manager.sessions[session_index] if session_index < len(self.session_manager.sessions) else None
         if session:
             dialog = SessionDialog(self, session)
             if dialog.exec_() == QDialog.Accepted:
@@ -603,7 +629,7 @@ class MobaXtermClone(QMainWindow):
                     self.load_sessions()
     
     def move_session_to_folder(self, session_index):
-        session = self.session_manager.get_session(session_index)
+        session = self.session_manager.sessions[session_index] if session_index < len(self.session_manager.sessions) else None
         if not session:
             return
         
@@ -634,7 +660,7 @@ class MobaXtermClone(QMainWindow):
             return
             
         session_index = item.data(0, Qt.UserRole + 1)
-        session = self.session_manager.get_session(session_index)
+        session = self.session_manager.sessions[session_index] if session_index < len(self.session_manager.sessions) else None
         
         if session and session.type == 'SSH':
             # Проверяем, не подключены ли мы уже к этой сессии
