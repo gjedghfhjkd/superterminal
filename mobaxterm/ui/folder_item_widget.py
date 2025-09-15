@@ -1,25 +1,26 @@
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton
 from PyQt5.QtCore import Qt, pyqtSignal
 
-class SessionItemWidget(QWidget):
-    delete_clicked = pyqtSignal()
+class FolderItemWidget(QWidget):
+    delete_clicked = pyqtSignal(str)
     
-    def __init__(self, session_name, parent=None):
+    def __init__(self, folder_name, parent=None):
         super().__init__(parent)
-        self.session_name = session_name
+        self.folder_name = folder_name
         self.initUI()
         
     def initUI(self):
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setContentsMargins(10, 5, 8, 5)
         layout.setSpacing(8)
         
-        # Session name label
-        self.name_label = QLabel(self.session_name)
+        # Folder icon and name
+        self.name_label = QLabel(f"📁 {self.folder_name}")
         self.name_label.setStyleSheet("""
             QLabel {
-                color: #333;
+                color: #0078d7;
                 font-size: 14px;
+                font-weight: bold;
                 background: transparent;
             }
         """)
@@ -46,7 +47,7 @@ class SessionItemWidget(QWidget):
             }
         """)
         self.delete_btn.setCursor(Qt.PointingHandCursor)
-        self.delete_btn.clicked.connect(self.delete_clicked.emit)
+        self.delete_btn.clicked.connect(lambda: self.delete_clicked.emit(self.folder_name))
         
         layout.addWidget(self.delete_btn)
         

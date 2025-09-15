@@ -11,6 +11,7 @@ class Session:
     terminal_settings: bool = False
     network_settings: bool = False
     bookmark_settings: bool = False
+    folder: Optional[str] = None
     
     def display_name(self) -> str:
         if self.type == 'SSH':
@@ -27,7 +28,8 @@ class Session:
             'username': self.username,
             'terminal_settings': self.terminal_settings,
             'network_settings': self.network_settings,
-            'bookmark_settings': self.bookmark_settings
+            'bookmark_settings': self.bookmark_settings,
+            'folder': self.folder
         }
     
     @classmethod
@@ -39,5 +41,6 @@ class Session:
             username=data['username'],
             terminal_settings=data.get('terminal_settings', False),
             network_settings=data.get('network_settings', False),
-            bookmark_settings=data.get('bookmark_settings', False)
+            bookmark_settings=data.get('bookmark_settings', False),
+            folder=data.get('folder')
         )

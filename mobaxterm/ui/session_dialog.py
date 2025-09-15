@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QLineEdit, QCheckBox, QSpinBox, QGroupBox,
-                             QDialogButtonBox, QGridLayout, QStackedWidget, QWidget)
+                             QDialogButtonBox, QGridLayout, QStackedWidget, QWidget, QComboBox)
 from PyQt5.QtCore import Qt
 from ..models.session import Session
 
@@ -9,47 +9,115 @@ class SessionDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Session settings")
         self.setModal(True)
-        self.setFixedSize(500, 450)
+        self.setMinimumSize(650, 550)
         self.current_tab = "SSH"
         self.editing_session = session is not None
         self.session_to_edit = session
+        self.parent = parent
         self.initUI()
         
         if session:
             self.load_session_data(session)
         
     def initUI(self):
-        # Set white background for the whole dialog
+        # Основные стили
         self.setStyleSheet("""
             QDialog {
                 background-color: white;
+                font-size: 12px;
+            }
+            QLabel {
+                font-size: 12px;
+                color: #333;
+            }
+            QLineEdit, QSpinBox, QComboBox {
+                font-size: 12px;
+                padding: 6px;
+                border: 1px solid #ccc;
+                border-radius: 3px;
+                background-color: white;
+            }
+            QLineEdit:focus, QSpinBox:focus, QComboBox:focus {
+                border-color: #0078d7;
+            }
+            QPushButton {
+                font-size: 12px;
+                padding: 8px 12px;
+                border-radius: 4px;
+                border: 1px solid #ccc;
+                background-color: #f8f9fa;
+            }
+            QPushButton:hover {
+                background-color: #e9ecef;
+            }
+            QPushButton:checked {
+                background-color: #0078d7;
+                color: white;
+                border-color: #005fa3;
+            }
+            QCheckBox {
+                font-size: 12px;
+                spacing: 5px;
+            }
+            QGroupBox {
+                font-weight: bold;
+                font-size: 13px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 15px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: #0078d7;
+            }
+            QDialogButtonBox QPushButton {
+                min-width: 80px;
+                min-height: 30px;
+            }
+            QDialogButtonBox QPushButton[text="OK"] {
+                background-color: #0078d7;
+                color: white;
+                border-color: #005fa3;
+            }
+            QDialogButtonBox QPushButton[text="OK"]:hover {
+                background-color: #005fa3;
+            }
+            QDialogButtonBox QPushButton[text="Cancel"] {
+                background-color: #6c757d;
+                color: white;
+                border-color: #545b62;
+            }
+            QDialogButtonBox QPushButton[text="Cancel"]:hover {
+                background-color: #545b62;
             }
         """)
         
-        layout = QVBoxLayout(self)
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(15, 15, 15, 15)
         
         # SSH/SFTP tabs
         tabs_layout = QHBoxLayout()
-        tabs_layout.setSpacing(0)
+        tabs_layout.setSpacing(5)
         
         self.ssh_btn = QPushButton("SSH")
         self.sftp_btn = QPushButton("SFTP")
         
-        # Configure tab buttons
         for btn in [self.ssh_btn, self.sftp_btn]:
             btn.setCheckable(True)
-            btn.setFixedHeight(30)
+            btn.setFixedHeight(35)
             btn.setFixedWidth(80)
-            btn.setStyleSheet(self.get_tab_style(False))
             tabs_layout.addWidget(btn)
         
         self.ssh_btn.setChecked(True)
-        self.ssh_btn.setStyleSheet(self.get_tab_style(True))
         
         tabs_layout.addStretch()
-        layout.addLayout(tabs_layout)
+        main_layout.addLayout(tabs_layout)
         
-        # Stacked widget for different settings
+        # Stacked widget для разных настроек
         self.stacked_widget = QStackedWidget()
         
         # SSH settings page
@@ -62,18 +130,29 @@ class SessionDialog(QDialog):
         self.init_sftp_page()
         self.stacked_widget.addWidget(self.sftp_page)
         
-        layout.addWidget(self.stacked_widget)
+        main_layout.addWidget(self.stacked_widget)
         
         # Session type label
         self.session_label = QLabel("Secure Shell (SSH) session")
-        self.session_label.setStyleSheet("font-weight: bold; color: #0078d7;")
-        layout.addWidget(self.session_label)
+        self.session_label.setStyleSheet("""
+            QLabel {
+                font-weight: bold;
+                color: #0078d7;
+                font-size: 13px;
+                padding: 8px;
+                background-color: #f0f8ff;
+                border-radius: 4px;
+                border: 1px solid #cce5ff;
+            }
+        """)
+        self.session_label.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(self.session_label)
         
         # Buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
-        layout.addWidget(button_box)
+        main_layout.addWidget(button_box)
         
         # Connect signals
         self.ssh_btn.clicked.connect(self.switch_to_ssh)
@@ -86,111 +165,101 @@ class SessionDialog(QDialog):
                     background-color: #0078d7;
                     color: white;
                     border: 1px solid #005fa3;
-                    padding: 5px;
                     font-weight: bold;
-                    border-radius: 3px;
+                }
+                QPushButton:hover {
+                    background-color: #005fa3;
                 }
             """
         else:
             return """
                 QPushButton {
-                    background-color: #f0f0f0;
-                    color: black;
-                    border: 1px solid #ccc;
-                    padding: 5px;
-                    font-weight: bold;
-                    border-radius: 3px;
+                    background-color: #f8f9fa;
+                    color: #495057;
+                    border: 1px solid #dee2e6;
                 }
                 QPushButton:hover {
-                    background-color: #e0e0e0;
+                    background-color: #e9ecef;
                 }
             """
     
     def init_ssh_page(self):
         layout = QVBoxLayout(self.ssh_page)
+        layout.setSpacing(10)
+        layout.setContentsMargins(5, 5, 5, 5)
         
-        # Basic SSH settings group - WHITE COLOR
-        basic_group = QGroupBox("📌 Basic SSH settings")
-        basic_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold; 
-                color: black;
-                background-color: white;
-                border: 1px solid #ccc;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 15px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-                color: black;
-            }
-        """)
+        # Basic SSH settings group
+        basic_group = QGroupBox("Basic SSH settings")
         basic_layout = QGridLayout(basic_group)
+        basic_layout.setSpacing(8)
+        basic_layout.setContentsMargins(12, 15, 12, 12)
         
-        basic_layout.addWidget(QLabel("Remote host *"), 0, 0)
+        # Row 0: Remote host
+        host_label = QLabel("Remote host:")
+        host_label.setMinimumWidth(100)
+        basic_layout.addWidget(host_label, 0, 0, Qt.AlignRight)
+        
         self.ssh_host_input = QLineEdit()
-        self.ssh_host_input.setStyleSheet("background-color: white; color: black; border: 1px solid #ccc;")
+        self.ssh_host_input.setPlaceholderText("hostname or IP")
         basic_layout.addWidget(self.ssh_host_input, 0, 1)
         
+        # Row 1: Username checkbox
         self.ssh_username_check = QCheckBox("Specify username")
-        self.ssh_username_check.setStyleSheet("color: black;")
         basic_layout.addWidget(self.ssh_username_check, 1, 0, 1, 2)
         
-        # Username input (always visible but disabled by default)
-        username_label = QLabel("Username")
-        username_label.setStyleSheet("color: black;")
-        basic_layout.addWidget(username_label, 2, 0)
+        # Row 2: Username label and input
+        username_label = QLabel("Username:")
+        username_label.setMinimumWidth(100)
+        basic_layout.addWidget(username_label, 2, 0, Qt.AlignRight)
         
         self.ssh_username_input = QLineEdit()
-        self.ssh_username_input.setPlaceholderText("Enter username")
-        self.ssh_username_input.setStyleSheet("background-color: #f5f5f5; color: #999; border: 1px solid #ccc;")
+        self.ssh_username_input.setPlaceholderText("username")
         self.ssh_username_input.setEnabled(False)
         basic_layout.addWidget(self.ssh_username_input, 2, 1)
         
+        # Row 3: Port checkbox
         self.ssh_port_check = QCheckBox("Custom port")
-        self.ssh_port_check.setChecked(False)
-        self.ssh_port_check.setStyleSheet("color: black;")
-        basic_layout.addWidget(self.ssh_port_check, 3, 0)
+        basic_layout.addWidget(self.ssh_port_check, 3, 0, 1, 2)
+        
+        # Row 4: Port label and input
+        port_label = QLabel("Port:")
+        port_label.setMinimumWidth(100)
+        basic_layout.addWidget(port_label, 4, 0, Qt.AlignRight)
         
         self.ssh_port_input = QSpinBox()
         self.ssh_port_input.setRange(1, 65535)
         self.ssh_port_input.setValue(22)
-        self.ssh_port_input.setStyleSheet("background-color: #f5f5f5; color: #999; border: 1px solid #ccc;")
         self.ssh_port_input.setEnabled(False)
-        basic_layout.addWidget(self.ssh_port_input, 3, 1)
+        basic_layout.addWidget(self.ssh_port_input, 4, 1)
+        
+        # Row 5: Folder label and combo
+        folder_label = QLabel("Folder:")
+        folder_label.setMinimumWidth(100)
+        basic_layout.addWidget(folder_label, 5, 0, Qt.AlignRight)
+        
+        self.folder_combo = QComboBox()
+        self.folder_combo.addItem("(No folder)", None)
+        
+        # Load existing folders
+        if self.parent and hasattr(self.parent, 'session_manager'):
+            folders = self.parent.session_manager.get_all_folders()
+            for folder in folders:
+                self.folder_combo.addItem(folder, folder)
+        
+        self.folder_combo.addItem("+ Create new folder...", "new")
+        basic_layout.addWidget(self.folder_combo, 5, 1)
         
         layout.addWidget(basic_group)
         
-        # Advanced SSH settings group - WHITE COLOR
-        advanced_group = QGroupBox("📌 Advanced SSH settings")
-        advanced_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold; 
-                color: black;
-                background-color: white;
-                border: 1px solid #ccc;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 15px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-                color: black;
-            }
-        """)
+        # Advanced SSH settings group
+        advanced_group = QGroupBox("Advanced SSH settings")
         advanced_layout = QVBoxLayout(advanced_group)
+        advanced_layout.setSpacing(8)
+        advanced_layout.setContentsMargins(12, 15, 12, 12)
         
         self.ssh_terminal_check = QCheckBox("Terminal settings")
-        self.ssh_terminal_check.setStyleSheet("color: black;")
         self.ssh_network_check = QCheckBox("Network settings")
-        self.ssh_network_check.setStyleSheet("color: black;")
         self.ssh_bookmark_check = QCheckBox("Bookmark settings")
-        self.ssh_bookmark_check.setStyleSheet("color: black;")
         
         advanced_layout.addWidget(self.ssh_terminal_check)
         advanced_layout.addWidget(self.ssh_network_check)
@@ -202,107 +271,126 @@ class SessionDialog(QDialog):
         # Connect signals
         self.ssh_username_check.toggled.connect(self.toggle_username_field)
         self.ssh_port_check.toggled.connect(self.toggle_port_field)
+        self.folder_combo.currentIndexChanged.connect(self.on_folder_changed)
+        
+    def on_folder_changed(self, index):
+        if self.folder_combo.currentData() == "new":
+            folder_name, ok = QInputDialog.getText(
+                self, 
+                "New Folder", 
+                "Enter folder name:",
+                QLineEdit.Normal
+            )
+            
+            if ok and folder_name:
+                if self.parent and hasattr(self.parent, 'session_manager'):
+                    if self.parent.session_manager.add_folder(folder_name):
+                        self.folder_combo.insertItem(self.folder_combo.count() - 1, folder_name, folder_name)
+                        self.folder_combo.setCurrentText(folder_name)
+                else:
+                    self.folder_combo.setCurrentIndex(0)
         
     def toggle_username_field(self, checked):
         self.ssh_username_input.setEnabled(checked)
-        if checked:
-            self.ssh_username_input.setStyleSheet("background-color: white; color: black; border: 1px solid #ccc;")
-        else:
-            self.ssh_username_input.setStyleSheet("background-color: #f5f5f5; color: #999; border: 1px solid #ccc;")
+        if not checked:
             self.ssh_username_input.clear()
     
     def toggle_port_field(self, checked):
         self.ssh_port_input.setEnabled(checked)
-        if checked:
-            self.ssh_port_input.setStyleSheet("background-color: white; color: black; border: 1px solid #ccc;")
-        else:
-            self.ssh_port_input.setStyleSheet("background-color: #f5f5f5; color: #999; border: 1px solid #ccc;")
+        if not checked:
             self.ssh_port_input.setValue(22)
     
     def init_sftp_page(self):
         layout = QVBoxLayout(self.sftp_page)
+        layout.setSpacing(10)
+        layout.setContentsMargins(5, 5, 5, 5)
         
-        # Basic SFTP settings group - WHITE COLOR
-        basic_group = QGroupBox("📌 Basic SFTP settings")
-        basic_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold; 
-                color: black;
-                background-color: white;
-                border: 1px solid #ccc;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 15px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-                color: black;
-            }
-        """)
+        basic_group = QGroupBox("Basic SFTP settings")
         basic_layout = QGridLayout(basic_group)
+        basic_layout.setSpacing(8)
+        basic_layout.setContentsMargins(12, 15, 12, 12)
         
-        host_label = QLabel("Remote host ▼")
-        host_label.setStyleSheet("color: black;")
-        basic_layout.addWidget(host_label, 0, 0)
+        # Row 0: Remote host
+        host_label = QLabel("Remote host:")
+        host_label.setMinimumWidth(100)
+        basic_layout.addWidget(host_label, 0, 0, Qt.AlignRight)
+        
         self.sftp_host_input = QLineEdit()
-        self.sftp_host_input.setStyleSheet("background-color: white; color: black; border: 1px solid #ccc;")
+        self.sftp_host_input.setPlaceholderText("hostname or IP")
         basic_layout.addWidget(self.sftp_host_input, 0, 1)
         
-        username_label = QLabel("Username")
-        username_label.setStyleSheet("color: black;")
-        basic_layout.addWidget(username_label, 1, 0)
+        # Row 1: Username
+        username_label = QLabel("Username:")
+        username_label.setMinimumWidth(100)
+        basic_layout.addWidget(username_label, 1, 0, Qt.AlignRight)
+        
         self.sftp_username_input = QLineEdit()
-        self.sftp_username_input.setPlaceholderText("Enter username")
-        self.sftp_username_input.setStyleSheet("background-color: white; color: black; border: 1px solid #ccc;")
+        self.sftp_username_input.setPlaceholderText("username")
         basic_layout.addWidget(self.sftp_username_input, 1, 1)
         
-        port_label = QLabel("Port")
-        port_label.setStyleSheet("color: black;")
-        basic_layout.addWidget(port_label, 2, 0)
+        # Row 2: Port
+        port_label = QLabel("Port:")
+        port_label.setMinimumWidth(100)
+        basic_layout.addWidget(port_label, 2, 0, Qt.AlignRight)
+        
         self.sftp_port_input = QSpinBox()
         self.sftp_port_input.setRange(1, 65535)
         self.sftp_port_input.setValue(22)
-        self.sftp_port_input.setStyleSheet("background-color: white; color: black; border: 1px solid #ccc;")
         basic_layout.addWidget(self.sftp_port_input, 2, 1)
+        
+        # Row 3: Folder
+        folder_label = QLabel("Folder:")
+        folder_label.setMinimumWidth(100)
+        basic_layout.addWidget(folder_label, 3, 0, Qt.AlignRight)
+        
+        self.sftp_folder_combo = QComboBox()
+        self.sftp_folder_combo.addItem("(No folder)", None)
+        
+        if self.parent and hasattr(self.parent, 'session_manager'):
+            folders = self.parent.session_manager.get_all_folders()
+            for folder in folders:
+                self.sftp_folder_combo.addItem(folder, folder)
+        
+        self.sftp_folder_combo.addItem("+ Create new folder...", "new")
+        basic_layout.addWidget(self.sftp_folder_combo, 3, 1)
         
         layout.addWidget(basic_group)
         
-        # Advanced SFTP settings group - WHITE COLOR
-        advanced_group = QGroupBox("📌 Advanced SFTP settings")
-        advanced_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold; 
-                color: black;
-                background-color: white;
-                border: 1px solid #ccc;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 15px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-                color: black;
-            }
-        """)
+        advanced_group = QGroupBox("Advanced SFTP settings")
         advanced_layout = QVBoxLayout(advanced_group)
+        advanced_layout.setSpacing(8)
+        advanced_layout.setContentsMargins(12, 15, 12, 12)
         
         self.sftp_bookmark_check = QCheckBox("Bookmark settings")
-        self.sftp_bookmark_check.setStyleSheet("color: black;")
         advanced_layout.addWidget(self.sftp_bookmark_check)
         
         layout.addWidget(advanced_group)
         layout.addStretch()
+        
+        self.sftp_folder_combo.currentIndexChanged.connect(self.on_sftp_folder_changed)
+        
+    def on_sftp_folder_changed(self, index):
+        if self.sftp_folder_combo.currentData() == "new":
+            folder_name, ok = QInputDialog.getText(
+                self, 
+                "New Folder", 
+                "Enter folder name:",
+                QLineEdit.Normal
+            )
+            
+            if ok and folder_name:
+                if self.parent and hasattr(self.parent, 'session_manager'):
+                    if self.parent.session_manager.add_folder(folder_name):
+                        self.sftp_folder_combo.insertItem(self.sftp_folder_combo.count() - 1, folder_name, folder_name)
+                        self.sftp_folder_combo.setCurrentText(folder_name)
+                else:
+                    self.sftp_folder_combo.setCurrentIndex(0)
         
     def switch_to_ssh(self):
         self.current_tab = "SSH"
         self.ssh_btn.setChecked(True)
         self.sftp_btn.setChecked(False)
         
-        # Update button styles
         self.ssh_btn.setStyleSheet(self.get_tab_style(True))
         self.sftp_btn.setStyleSheet(self.get_tab_style(False))
         
@@ -314,7 +402,6 @@ class SessionDialog(QDialog):
         self.sftp_btn.setChecked(True)
         self.ssh_btn.setChecked(False)
         
-        # Update button styles
         self.sftp_btn.setStyleSheet(self.get_tab_style(True))
         self.ssh_btn.setStyleSheet(self.get_tab_style(False))
         
@@ -322,7 +409,6 @@ class SessionDialog(QDialog):
         self.session_label.setText("SFTP session")
         
     def load_session_data(self, session: Session):
-        """Load session data into the form for editing"""
         if session.type == 'SSH':
             self.ssh_btn.click()
             self.ssh_host_input.setText(session.host)
@@ -331,28 +417,37 @@ class SessionDialog(QDialog):
                 self.ssh_username_check.setChecked(True)
                 self.ssh_username_input.setText(session.username)
                 self.ssh_username_input.setEnabled(True)
-                self.ssh_username_input.setStyleSheet("background-color: white; color: black; border: 1px solid #ccc;")
             
             if session.port != 22:
                 self.ssh_port_check.setChecked(True)
                 self.ssh_port_input.setValue(session.port)
                 self.ssh_port_input.setEnabled(True)
-                self.ssh_port_input.setStyleSheet("background-color: white; color: black; border: 1px solid #ccc;")
+            
+            if session.folder:
+                index = self.folder_combo.findData(session.folder)
+                if index >= 0:
+                    self.folder_combo.setCurrentIndex(index)
             
             self.ssh_terminal_check.setChecked(session.terminal_settings)
             self.ssh_network_check.setChecked(session.network_settings)
             self.ssh_bookmark_check.setChecked(session.bookmark_settings)
             
-        else:  # SFTP
+        else:
             self.sftp_btn.click()
             self.sftp_host_input.setText(session.host)
             self.sftp_username_input.setText(session.username or "")
             self.sftp_port_input.setValue(session.port)
+            
+            if session.folder:
+                index = self.sftp_folder_combo.findData(session.folder)
+                if index >= 0:
+                    self.sftp_folder_combo.setCurrentIndex(index)
+            
             self.sftp_bookmark_check.setChecked(session.bookmark_settings)
         
     def get_session_data(self) -> Session:
         if self.current_tab == "SSH":
-            return Session(
+            session = Session(
                 type='SSH',
                 host=self.ssh_host_input.text(),
                 port=self.ssh_port_input.value() if self.ssh_port_check.isChecked() else 22,
@@ -361,11 +456,15 @@ class SessionDialog(QDialog):
                 network_settings=self.ssh_network_check.isChecked(),
                 bookmark_settings=self.ssh_bookmark_check.isChecked()
             )
+            session.folder = self.folder_combo.currentData()
+            return session
         else:
-            return Session(
+            session = Session(
                 type='SFTP',
                 host=self.sftp_host_input.text(),
                 port=self.sftp_port_input.value(),
                 username=self.sftp_username_input.text(),
                 bookmark_settings=self.sftp_bookmark_check.isChecked()
             )
+            session.folder = self.sftp_folder_combo.currentData()
+            return session
