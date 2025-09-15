@@ -1,13 +1,14 @@
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
-                             QHBoxLayout, QTextEdit, QSplitter,
+                             QHBoxLayout, QSplitter,
                              QLabel, QPushButton, QMessageBox, QDialog, 
                              QMenu, QAction, QInputDialog,
-                             QProgressBar, QLineEdit, QFrame, QApplication,
+                             QProgressBar, QFrame, QApplication,
                              QTreeWidget, QTreeWidgetItem)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSize
 from PyQt5.QtGui import QTextCursor, QColor, QFont
 from .session_dialog import SessionDialog
 from .session_tree_widget import SessionTreeWidget
+from .terminal_tabs import TerminalTabs
 from ..core.session_manager import SessionManager
 from ..core.ssh_client import SSHClient
 from ..models.session import Session
@@ -19,13 +20,14 @@ class SSHThread(QThread):
     output_received = pyqtSignal(str)
     connection_status = pyqtSignal(bool, str)
     
-    def __init__(self, session):
+    def __init__(self, session, terminal_tab):
         super().__init__()
         self.session = session
+        self.terminal_tab = terminal_tab
         self.ssh_client = SSHClient()
         
     def run(self):
-        self.ssh_client.output_received.connect(self.output_received.emit)
+        self.ssh_client.output_received.connect(self.terminal_tab.append_output)
         self.ssh_client.connection_status.connect(self.connection_status.emit)
         self.ssh_client.connect(
             host=self.session.host,
@@ -37,23 +39,21 @@ class MobaXtermClone(QMainWindow):
     def __init__(self):
         super().__init__()
         self.session_manager = SessionManager()
-        self.ssh_thread = None
-        self.current_session = None
+        self.ssh_threads = {}  # session_index -> SSHThread
+        self.current_session_index = None
         self.is_connected = False
-        self.folder_items = {}  # folder_name -> QTreeWidgetItem
-        self.session_items = {}  # session_index -> QTreeWidgetItem
+        self.folder_items = {}
+        self.session_items = {}
         self.initUI()
         
     def initUI(self):
         self.setWindowTitle('SuperTerminal')
         self.setGeometry(100, 100, 1200, 800)
         
-        # Устанавливаем увеличенный шрифт
         font = QFont()
         font.setPointSize(12)
         self.setFont(font)
         
-        # Central widget and main layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
@@ -190,17 +190,6 @@ class MobaXtermClone(QMainWindow):
                 background-color: #d1e7ff;
                 border: 1px solid #90caf9;
             }
-            QTreeWidget::branch:has-siblings:adjoins-item {
-                border-image: none;
-            }
-            QTreeWidget::branch:open:has-children {
-                image: url(none);
-                border-image: none;
-            }
-            QTreeWidget::branch:closed:has-children {
-                image: url(none);
-                border-image: none;
-            }
         """)
         left_layout.addWidget(self.sessions_tree)
         
@@ -224,7 +213,7 @@ class MobaXtermClone(QMainWindow):
         self.add_session_btn.clicked.connect(self.add_new_session)
         left_layout.addWidget(self.add_session_btn)
         
-        # Right panel for terminal
+        # Right panel for terminal tabs
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setSpacing(5)
@@ -248,59 +237,10 @@ class MobaXtermClone(QMainWindow):
         """)
         right_layout.addWidget(self.progress_bar)
         
-        # Terminal container
-        terminal_container = QWidget()
-        terminal_layout = QVBoxLayout(terminal_container)
-        terminal_layout.setSpacing(0)
-        terminal_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Terminal output
-        self.terminal_output = QTextEdit()
-        self.terminal_output.setStyleSheet("""
-            QTextEdit {
-                background-color: black;
-                color: #00ff00;
-                font-family: 'Consolas', 'Courier New', monospace;
-                font-size: 14px;
-                border: 2px solid #ccc;
-                border-radius: 4px;
-                padding: 5px;
-            }
-        """)
-        self.terminal_output.setPlainText("")
-        
-        # Command input area
-        input_container = QWidget()
-        input_layout = QHBoxLayout(input_container)
-        input_layout.setSpacing(5)
-        input_layout.setContentsMargins(0, 4, 0, 0)
-        
-        self.prompt_label = QLabel("$")
-        self.prompt_label.setStyleSheet("color: #00ff00; font-weight: bold; font-size: 16px;")
-        self.prompt_label.setFixedWidth(20)
-        
-        self.command_input = QLineEdit()
-        self.command_input.setStyleSheet("""
-            QLineEdit {
-                background-color: black;
-                color: #00ff00;
-                border: 2px solid #555;
-                border-radius: 2px;
-                padding: 5px;
-                font-family: 'Consolas', 'Courier New', monospace;
-                font-size: 14px;
-            }
-        """)
-        self.command_input.setDisabled(True)
-        self.command_input.setPlaceholderText("Type command...")
-        self.command_input.returnPressed.connect(self.execute_command)
-        
-        input_layout.addWidget(self.prompt_label)
-        input_layout.addWidget(self.command_input)
-        
-        terminal_layout.addWidget(self.terminal_output)
-        terminal_layout.addWidget(input_container)
-        right_layout.addWidget(terminal_container)
+        # Terminal tabs
+        self.terminal_tabs = TerminalTabs()
+        self.terminal_tabs.tab_close_requested.connect(self.close_terminal_tab)
+        right_layout.addWidget(self.terminal_tabs)
         
         # Bottom status bar
         bottom_status = QWidget()
@@ -368,7 +308,7 @@ class MobaXtermClone(QMainWindow):
                     background-color: #e9ecef;
                 }
             """
-
+        
     def on_session_tab_clicked(self):
         self.session_tab.setChecked(True)
         self.servers_tab.setChecked(False)
@@ -393,25 +333,30 @@ class MobaXtermClone(QMainWindow):
             folder_item.setText(0, f"📁 {folder_name}")
             folder_item.setData(0, Qt.UserRole, "folder")
             folder_item.setData(0, Qt.UserRole + 1, folder_name)
+            folder_item.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator)
             self.folder_items[folder_name] = folder_item
             
             # Add sessions in this folder
             sessions = self.session_manager.get_sessions_in_folder(folder_name)
             for session in sessions:
                 session_index = self.session_manager.sessions.index(session)
-                self.add_session_to_tree(session, session_index, folder_item)
+                session_item = QTreeWidgetItem(folder_item)
+                session_item.setText(0, f"🖥️  {session.host}")
+                session_item.setData(0, Qt.UserRole, "session")
+                session_item.setData(0, Qt.UserRole + 1, session_index)
+                session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
+                self.session_items[session_index] = session_item
         
         # Add sessions without folders
         all_session_indices = set(range(len(self.session_manager.sessions)))
         used_indices = set()
-
         for folder_sessions in self.session_manager.folders.values():
             used_indices.update(folder_sessions)
         
         orphan_sessions = all_session_indices - used_indices
         for session_index in orphan_sessions:
             session = self.session_manager.get_session(session_index)
-            if session:  # Добавляем проверку на существование сессии
+            if session:
                 session_item = QTreeWidgetItem(self.sessions_tree)
                 session_item.setText(0, f"🖥️  {session.host}")
                 session_item.setData(0, Qt.UserRole, "session")
@@ -423,78 +368,6 @@ class MobaXtermClone(QMainWindow):
         for folder_item in self.folder_items.values():
             folder_item.setExpanded(True)
         
-        
-    def add_folder_to_list(self, folder_name):
-        item = QListWidgetItem(self.sessions_list)
-        item.setData(Qt.UserRole, {"type": "folder", "name": folder_name})
-        
-        folder_widget = FolderItemWidget(folder_name)
-        folder_widget.delete_clicked.connect(self.delete_folder_with_confirmation)
-        
-        self.sessions_list.addItem(item)
-        self.sessions_list.setItemWidget(item, folder_widget)
-        item.setSizeHint(folder_widget.sizeHint())
-        
-        self.folder_items[folder_name] = item
-        
-    def add_session_to_list(self, session, index, folder_name=None):
-        item = QListWidgetItem(self.sessions_list)
-        
-        # Добавляем префикс папки для отображения
-        display_name = session.host
-        if folder_name:
-            display_name = f"{folder_name} / {session.host}"
-        
-        item.setData(Qt.UserRole, {"type": "session", "index": index, "folder": folder_name})
-        
-        session_widget = SessionItemWidget(display_name)  # Используем улучшенное имя
-        session_widget.delete_clicked.connect(lambda: self.delete_session_with_confirmation(index, session.host))
-        
-        self.sessions_list.addItem(item)
-        self.sessions_list.setItemWidget(item, session_widget)
-        item.setSizeHint(session_widget.sizeHint())
-        
-    def delete_session_with_confirmation(self, session_index, session_name):
-        reply = QMessageBox.question(
-            self,
-            "Confirm Delete",
-            f"Are you sure you want to delete session:\n{session_name}?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        
-        if reply == QMessageBox.Yes:
-            if self.session_manager.delete_session(session_index):
-                # Перезагружаем дерево
-                self.load_sessions()
-        
-    def add_new_session(self, folder_name=None):
-        dialog = SessionDialog(self)
-        if dialog.exec_() == QDialog.Accepted:
-            session = dialog.get_session_data()
-            # Если папка указана в диалоге, используем ее
-            target_folder = session.folder or folder_name
-            session_index = self.session_manager.add_session(session, target_folder)
-            
-            if target_folder:
-                # Добавляем в папку
-                if target_folder in self.folder_items:
-                    folder_item = self.folder_items[target_folder]
-                else:
-                    folder_item = self.add_folder_to_tree(target_folder)
-                self.add_session_to_tree(session, session_index, folder_item)
-            else:
-                # Добавляем в корень
-                self.add_session_to_tree(session, session_index, self.sessions_tree)
-
-    def add_session_to_tree(self, session, index, parent_item):
-        session_item = QTreeWidgetItem(parent_item)
-        session_item.setText(0, f"🖥️  {session.host}")
-        session_item.setData(0, Qt.UserRole, "session")
-        session_item.setData(0, Qt.UserRole + 1, index)
-        session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
-        self.session_items[index] = session_item
-
     def handle_tree_context_menu(self, action_type, item):
         if action_type == "add_folder":
             self.add_new_folder()
@@ -522,228 +395,64 @@ class MobaXtermClone(QMainWindow):
             if item and item.data(0, Qt.UserRole) == "session":
                 session_index = item.data(0, Qt.UserRole + 1)
                 self.move_session_to_folder(session_index)
-    def move_session_to_folder(self, session_index):
-        session = self.session_manager.get_session(session_index)
-        if not session:
-            return
-        
-        # Получаем список всех папок
-        folders = self.session_manager.get_all_folders()
-        
-        # Создаем диалог для выбора папки
-        folder_name, ok = QInputDialog.getItem(
-            self,
-            "Move Session",
-            f"Select folder for session '{session.host}':",
-            ["(No folder)"] + folders,
-            0,  # default index
-            False  # not editable
-        )
-        
-        if ok:
-            target_folder = folder_name if folder_name != "(No folder)" else None
-            
-            # Обновляем сессию
-            session.folder = target_folder
-            if self.session_manager.update_session(session_index, session):
-                # Перезагружаем дерево
-                self.load_sessions()
-    def show_loading(self, message="Connecting..."):
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setRange(0, 0)
-        self.status_indicator.setStyleSheet("""
-            QLabel {
-                background-color: #ffc107;
-                color: white;
-                border-radius: 9px;
-                font-size: 10px;
-                font-weight: bold;
-            }
-        """)
-        self.status_label.setText("Connecting...")
-        self.connection_info.setText(f"⏳ {message}")
-        
-    def hide_loading(self):
-        self.progress_bar.setVisible(False)
-        
-    def update_connection_status(self, connected, message):
-        self.hide_loading()
-        self.is_connected = connected
-        
-        if connected:
-            self.status_indicator.setStyleSheet("""
-                QLabel {
-                    background-color: #28a745;
-                    color: white;
-                    border-radius: 9px;
-                    font-size: 10px;
-                    font-weight: bold;
-                }
-            """)
-            self.status_label.setText("Connected")
-            self.command_input.setDisabled(False)
-            self.command_input.setFocus()
-        else:
-            self.status_indicator.setStyleSheet("""
-                QLabel {
-                    background-color: #dc3545;
-                    color: white;
-                    border-radius: 9px;
-                    font-size: 10px;
-                    font-weight: bold;
-                }
-            """)
-            self.status_label.setText("Disconnected")
-            self.command_input.setDisabled(True)
-            
-        self.connection_info.setText(message)
-        self.terminal_output.append(message)
-        
-    def connect_to_session(self, item):
-        if item.data(0, Qt.UserRole) != "session":
-            return
-            
-        if self.is_connected:
-            QMessageBox.warning(self, "Warning", "Please disconnect from current session first")
-            return
-            
-        session_index = item.data(0, Qt.UserRole + 1)
-        session = self.session_manager.get_session(session_index)
-        
-        if session and session.type == 'SSH':
-            self.current_session = session
-            self.show_loading(f"Connecting to {session.host}...")
-            self.terminal_output.clear()
-            
-            self.ssh_thread = SSHThread(session)
-            self.ssh_thread.output_received.connect(self.terminal_output.append)
-            self.ssh_thread.connection_status.connect(self.update_connection_status)
-            self.ssh_thread.start()
     
+    def add_new_session(self, folder_name=None):
+        dialog = SessionDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            session = dialog.get_session_data()
+            # Если папка указана в диалоге, используем ее
+            target_folder = session.folder or folder_name
+            session_index = self.session_manager.add_session(session, target_folder)
             
-    def execute_command(self):
-        if self.is_connected and self.ssh_thread and self.command_input.text():
-            command = self.command_input.text()
-            self.terminal_output.append(f"$ {command}")
-            self.ssh_thread.ssh_client.send_command(command)
-            self.command_input.clear()
-            
-    def show_context_menu(self, position):
-        item = self.sessions_list.itemAt(position)
-        if not item:
-            # Context menu for empty area
-            menu = QMenu(self)
-            menu.setStyleSheet("""
-                QMenu {
-                    background-color: white;
-                    border: 2px solid #ddd;
-                    border-radius: 5px;
-                    padding: 6px;
-                    font-size: 14px;
-                }
-                QMenu::item {
-                    padding: 6px 24px;
-                    font-size: 14px;
-                    color: #333;
-                }
-                QMenu::item:selected {
-                    background-color: #e3f2fd;
-                    color: #1976d2;
-                }
-            """)
-            
-            add_folder_action = QAction("📁 Add Folder", self)
-            add_session_action = QAction("➕ Add Session", self)
-            
-            menu.addAction(add_folder_action)
-            menu.addAction(add_session_action)
-            
-            action = menu.exec_(self.sessions_list.mapToGlobal(position))
-            
-            if action == add_folder_action:
-                self.add_new_folder()
-            elif action == add_session_action:
-                self.add_new_session()
-                
-        else:
-            item_data = item.data(Qt.UserRole)
-            if item_data["type"] == "folder":
-                self.show_folder_context_menu(item, position)
+            if target_folder:
+                # Добавляем в папку
+                if target_folder in self.folder_items:
+                    folder_item = self.folder_items[target_folder]
+                else:
+                    folder_item = self.add_folder_to_tree(target_folder)
+                self.add_session_to_tree(session, session_index, folder_item)
             else:
-                self.show_session_context_menu(item, position)
+                # Добавляем в корень
+                self.add_session_to_tree(session, session_index, self.sessions_tree)
     
-    def show_folder_context_menu(self, item, position):
-        menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: white;
-                border: 2px solid #ddd;
-                border-radius: 5px;
-                padding: 6px;
-                font-size: 14px;
-            }
-            QMenu::item {
-                padding: 6px 24px;
-                font-size: 14px;
-                color: #333;
-            }
-            QMenu::item:selected {
-                background-color: #e3f2fd;
-                color: #1976d2;
-            }
-        """)
+    def add_session_to_tree(self, session, index, parent_item):
+        session_item = QTreeWidgetItem(parent_item)
+        session_item.setText(0, f"🖥️  {session.host}")
+        session_item.setData(0, Qt.UserRole, "session")
+        session_item.setData(0, Qt.UserRole + 1, index)
+        session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
+        self.session_items[index] = session_item
         
-        delete_action = QAction("🗑️ Delete Folder", self)
-        add_session_action = QAction("➕ Add Session to Folder", self)
-        
-        menu.addAction(add_session_action)
-        menu.addAction(delete_action)
-        
-        action = menu.exec_(self.sessions_list.mapToGlobal(position))
-        
-        if action == delete_action:
-            folder_name = item.data(Qt.UserRole)["name"]
-            self.delete_folder_with_confirmation(folder_name)
-        elif action == add_session_action:
-            folder_name = item.data(Qt.UserRole)["name"]
-            self.add_new_session_to_folder(folder_name)
+    def add_folder_to_tree(self, folder_name):
+        folder_item = QTreeWidgetItem(self.sessions_tree)
+        folder_item.setText(0, f"📁 {folder_name}")
+        folder_item.setData(0, Qt.UserRole, "folder")
+        folder_item.setData(0, Qt.UserRole + 1, folder_name)
+        folder_item.setToolTip(0, f"Folder: {folder_name}")
+        folder_item.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator)
+        folder_item.setExpanded(True)
+        self.folder_items[folder_name] = folder_item
+        return folder_item
     
-    def show_session_context_menu(self, item, position):
-        menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: white;
-                border: 2px solid #ddd;
-                border-radius: 5px;
-                padding: 6px;
-                font-size: 14px;
-            }
-            QMenu::item {
-                padding: 6px 24px;
-                font-size: 14px;
-                color: #333;
-            }
-            QMenu::item:selected {
-                background-color: #e3f2fd;
-                color: #1976d2;
-            }
-        """)
-        
-        delete_action = QAction("🗑️ Delete Session", self)
-        edit_action = QAction("✏️ Edit Session", self)
-        
-        menu.addAction(edit_action)
-        menu.addAction(delete_action)
-        
-        action = menu.exec_(self.sessions_list.mapToGlobal(position))
-        
-        if action == delete_action:
-            session_index = item.data(Qt.UserRole)["index"]
-            session = self.session_manager.get_session(session_index)
-            if session:
-                self.delete_session_with_confirmation(session_index, session.host)
-        elif action == edit_action:
-            self.edit_session_item(item)
+    def add_new_session_to_folder(self, folder_name):
+        dialog = SessionDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            session = dialog.get_session_data()
+            # Принудительно устанавливаем папку
+            session.folder = folder_name
+            session_index = self.session_manager.add_session(session, folder_name)
+            
+            if folder_name in self.folder_items:
+                folder_item = self.folder_items[folder_name]
+            else:
+                folder_item = self.add_folder_to_tree(folder_name)
+            
+            session_item = QTreeWidgetItem(folder_item)
+            session_item.setText(0, f"🖥️  {session.host}")
+            session_item.setData(0, Qt.UserRole, "session")
+            session_item.setData(0, Qt.UserRole + 1, session_index)
+            session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
+            self.session_items[session_index] = session_item
     
     def add_new_folder(self):
         folder_name, ok = QInputDialog.getText(
@@ -756,18 +465,7 @@ class MobaXtermClone(QMainWindow):
         if ok and folder_name:
             if self.session_manager.add_folder(folder_name):
                 self.add_folder_to_tree(folder_name)
-
-    def add_folder_to_tree(self, folder_name):
-        folder_item = QTreeWidgetItem(self.sessions_tree)
-        folder_item.setText(0, f"📁 {folder_name}")
-        folder_item.setData(0, Qt.UserRole, "folder")
-        folder_item.setData(0, Qt.UserRole + 1, folder_name)
-        folder_item.setToolTip(0, f"Folder: {folder_name}")
-        folder_item.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator)
-        folder_item.setExpanded(True)
-        self.folder_items[folder_name] = folder_item
-        return folder_item
-
+    
     def delete_folder_with_confirmation(self, folder_name):
         # Получаем сессии в папке
         sessions_in_folder = self.session_manager.get_sessions_in_folder(folder_name)
@@ -796,21 +494,20 @@ class MobaXtermClone(QMainWindow):
                     self.sessions_tree.takeTopLevelItem(self.sessions_tree.indexOfTopLevelItem(folder_item))
                     del self.folder_items[folder_name]
     
-    def add_new_session_to_folder(self, folder_name):
-        dialog = SessionDialog(self)
-        if dialog.exec_() == QDialog.Accepted:
-            session = dialog.get_session_data()
-            # Принудительно устанавливаем папку
-            session.folder = folder_name
-            session_index = self.session_manager.add_session(session, folder_name)
-            
-            if folder_name in self.folder_items:
-                folder_item = self.folder_items[folder_name]
-            else:
-                folder_item = self.add_folder_to_tree(folder_name)
-            
-            self.add_session_to_tree(session, session_index, folder_item)
-
+    def delete_session_with_confirmation(self, session_index, session_name):
+        reply = QMessageBox.question(
+            self,
+            "Confirm Delete",
+            f"Are you sure you want to delete session:\n{session_name}?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            if self.session_manager.delete_session(session_index):
+                # Перезагружаем дерево
+                self.load_sessions()
+    
     def edit_session(self, session_index):
         session = self.session_manager.get_session(session_index)
         if session:
@@ -820,25 +517,168 @@ class MobaXtermClone(QMainWindow):
                 if self.session_manager.update_session(session_index, updated_session):
                     # Перезагружаем дерево для отображения изменений
                     self.load_sessions()
-    def edit_session_item(self, item):
-        item_data = item.data(Qt.UserRole)
-        if item_data["type"] != "session":
+    
+    def move_session_to_folder(self, session_index):
+        session = self.session_manager.get_session(session_index)
+        if not session:
+            return
+        
+        # Получаем список всех папок
+        folders = self.session_manager.get_all_folders()
+        
+        # Создаем диалог для выбора папки
+        folder_name, ok = QInputDialog.getItem(
+            self,
+            "Move Session",
+            f"Select folder for session '{session.host}':",
+            ["(No folder)"] + folders,
+            0,  # default index
+            False  # not editable
+        )
+        
+        if ok:
+            target_folder = folder_name if folder_name != "(No folder)" else None
+            
+            # Обновляем сессию
+            session.folder = target_folder
+            if self.session_manager.update_session(session_index, session):
+                # Перезагружаем дерево
+                self.load_sessions()
+    
+    def connect_to_session(self, item):
+        if item.data(0, Qt.UserRole) != "session":
             return
             
-        session_index = item_data["index"]
+        session_index = item.data(0, Qt.UserRole + 1)
         session = self.session_manager.get_session(session_index)
         
-        if session:
-            dialog = SessionDialog(self, session)
-            if dialog.exec_() == QDialog.Accepted:
-                updated_session = dialog.get_session_data()
-                if self.session_manager.update_session(session_index, updated_session):
-                    # Update the widget text
-                    widget = self.sessions_list.itemWidget(item)
-                    if widget:
-                        widget.name_label.setText(updated_session.host)
-                    # Reload to handle folder changes
-                    self.load_sessions()
+        if session and session.type == 'SSH':
+            # Проверяем, не подключены ли мы уже к этой сессии
+            if session_index in self.ssh_threads:
+                # Переключаемся на существующую вкладку
+                for i in range(self.terminal_tabs.count()):
+                    tab = self.terminal_tabs.widget(i)
+                    if hasattr(tab, 'session_index') and tab.session_index == session_index:
+                        self.terminal_tabs.setCurrentIndex(i)
+                        return
+                return
+            
+            self.current_session_index = session_index
+            self.show_loading(f"Connecting to {session.host}...")
+            
+            # Создаем новую вкладку терминала
+            terminal_tab = self.terminal_tabs.add_terminal_tab(session)
+            terminal_tab.session_index = session_index
+            terminal_tab.command_input.returnPressed.connect(
+                lambda: self.execute_command(session_index)
+            )
+            
+            # Создаем и запускаем SSH поток
+            ssh_thread = SSHThread(session, terminal_tab)
+            ssh_thread.connection_status.connect(
+                lambda status, msg: self.update_connection_status(session_index, status, msg)
+            )
+            ssh_thread.start()
+            
+            self.ssh_threads[session_index] = ssh_thread
+    
+    def execute_command(self, session_index):
+        if session_index in self.ssh_threads:
+            ssh_thread = self.ssh_threads[session_index]
+            terminal_tab = self.terminal_tabs.get_current_terminal()
+            if terminal_tab and terminal_tab.command_input.text():
+                command = terminal_tab.command_input.text()
+                terminal_tab.append_output(f"$ {command}")
+                ssh_thread.ssh_client.send_command(command)
+                terminal_tab.command_input.clear()
+    
+    def update_connection_status(self, session_index, connected, message):
+        self.hide_loading()
+        
+        if connected:
+            self.status_indicator.setStyleSheet("""
+                QLabel {
+                    background-color: #28a745;
+                    color: white;
+                    border-radius: 9px;
+                    font-size: 10px;
+                    font-weight: bold;
+                }
+            """)
+            self.status_label.setText("Connected")
+            
+            # Включаем ввод для текущей вкладки
+            terminal_tab = self.terminal_tabs.get_current_terminal()
+            if terminal_tab:
+                terminal_tab.enable_input()
+        else:
+            if not any(thread.isRunning() for thread in self.ssh_threads.values()):
+                self.status_indicator.setStyleSheet("""
+                    QLabel {
+                        background-color: #dc3545;
+                        color: white;
+                        border-radius: 9px;
+                        font-size: 10px;
+                        font-weight: bold;
+                    }
+                """)
+                self.status_label.setText("Disconnected")
+            
+        self.connection_info.setText(message)
+        
+        # Добавляем сообщение в соответствующую вкладку
+        for i in range(self.terminal_tabs.count()):
+            tab = self.terminal_tabs.widget(i)
+            if hasattr(tab, 'session_index') and tab.session_index == session_index:
+                tab.append_output(message)
+                break
+    
+    def close_terminal_tab(self, index):
+        tab = self.terminal_tabs.widget(index)
+        if hasattr(tab, 'session_index'):
+            session_index = tab.session_index
+            if session_index in self.ssh_threads:
+                # Отключаем SSH соединение
+                ssh_thread = self.ssh_threads[session_index]
+                if ssh_thread.isRunning():
+                    ssh_thread.ssh_client.disconnect()
+                    ssh_thread.quit()
+                    ssh_thread.wait()
+                del self.ssh_threads[session_index]
+        
+        self.terminal_tabs.removeTab(index)
+        
+        # Если закрыли все вкладки, обновляем статус
+        if self.terminal_tabs.count() == 0:
+            self.status_indicator.setStyleSheet("""
+                QLabel {
+                    background-color: #dc3545;
+                    color: white;
+                    border-radius: 9px;
+                    font-size: 10px;
+                    font-weight: bold;
+                }
+            """)
+            self.status_label.setText("Disconnected")
+            self.connection_info.setText("Ready to connect")
+    
+    def show_loading(self, message="Connecting..."):
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 0)
+        self.status_indicator.setStyleSheet("""
+            QLabel {
+                background-color: #ffc107;
+                color: white;
+                border-radius: 9px;
+                font-size: 10px;
+                font-weight: bold;
+            }
+        """)
+        self.status_label.setText("Connecting...")
+        self.connection_info.setText(f"⏳ {message}")
+        
+    def hide_loading(self):
+        self.progress_bar.setVisible(False)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
