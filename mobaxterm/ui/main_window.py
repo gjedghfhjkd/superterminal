@@ -190,6 +190,10 @@ class MobaXtermClone(QMainWindow):
                 background-color: #d1e7ff;
                 border: 1px solid #90caf9;
             }
+            QTreeWidget::item[dragging="true"] {
+                background-color: #fff3cd;
+                border: 1px dashed #ffc107;
+            }
         """)
         left_layout.addWidget(self.sessions_tree)
         
@@ -278,11 +282,24 @@ class MobaXtermClone(QMainWindow):
         self.servers_tab.clicked.connect(self.on_servers_tab_clicked)
         self.sessions_tree.session_double_clicked.connect(self.connect_to_session)
         self.sessions_tree.context_menu_requested.connect(self.handle_tree_context_menu)
-        self.sessions_tree.rename_requested.connect(self.handle_rename_request)  # Новый сигнал
+        self.sessions_tree.rename_requested.connect(self.handle_rename_request)
+        self.sessions_tree.session_moved.connect(self.handle_session_move)
 
         
         # Load saved sessions
         self.load_sessions()
+    def handle_session_move(self, session_index, target_folder):
+        """Обработка перемещения сессии"""
+        session = self.session_manager.get_session(session_index)
+        if not session:
+            return
+            
+        # Обновляем папку сессии
+        session.folder = target_folder
+        if self.session_manager.update_session(session_index, session):
+            # Перезагружаем дерево для отображения изменений
+            self.load_sessions()
+            
     def handle_rename_request(self, item_type, item):
         """Обработка запроса на переименование"""
         if item_type == "folder":
