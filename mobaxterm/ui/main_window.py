@@ -414,60 +414,24 @@ class MobaXtermClone(QMainWindow):
         self.session_tab.setStyleSheet(self.get_tab_style(False))
         
     def load_sessions(self):
-        print("=== Loading sessions ===")
+        """Загрузка сессий с поддержкой вложенных папок"""
         self.sessions_tree.clear()
         self.folder_items.clear()
         self.session_items.clear()
         
-        # Add folders first
-        folders = self.session_manager.get_all_folders()
-        print(f"Found folders: {folders}")
+        # Создаем древовидную структуру папок
+        folder_tree = {}
+        all_folders = self.session_manager.get_all_folders()
         
-        for folder_name in folders:
-            folder_item = QTreeWidgetItem(self.sessions_tree)
-            folder_item.setText(0, f"📁 {folder_name}")
-            folder_item.setData(0, Qt.UserRole, "folder")
-            folder_item.setData(0, Qt.UserRole + 1, folder_name)
-            folder_item.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator)
-            self.folder_items[folder_name] = folder_item
+        # Строим дерево папок
+        for folder_path in all_folders:
+            parts = folder_path.split('/')
+            current_level = folder_tree
             
-            # Add sessions in this folder
-            sessions = self.session_manager.get_sessions_in_folder(folder_name)
-            print(f"Folder '{folder_name}' has {len(sessions)} sessions")
-            
-            for session in sessions:
-                session_index = self.session_manager.sessions.index(session)
-                session_item = QTreeWidgetItem(folder_item)
-                session_item.setText(0, f"🖥️  {session.host}")
-                session_item.setData(0, Qt.UserRole, "session")
-                session_item.setData(0, Qt.UserRole + 1, session_index)
-                session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
-                self.session_items[session_index] = session_item
-                print(f"  - Session {session_index}: {session.host} (folder: {session.folder})")
-        
-        # Add sessions without folders (теперь ищем по session.folder вместо индексов)
-        orphan_sessions = []
-        for session_index, session in enumerate(self.session_manager.sessions):
-            # Используем session_manager.folders вместо self.folders
-            if not session.folder or session.folder not in self.session_manager.folders or session_index not in self.session_manager.folders[session.folder]:
-                orphan_sessions.append((session_index, session))
-        
-        print(f"Orphan sessions (no folder): {[s[0] for s in orphan_sessions]}")
-        
-        for session_index, session in orphan_sessions:
-            session_item = QTreeWidgetItem(self.sessions_tree)
-            session_item.setText(0, f"🖥️  {session.host}")
-            session_item.setData(0, Qt.UserRole, "session")
-            session_item.setData(0, Qt.UserRole + 1, session_index)
-            session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
-            self.session_items[session_index] = session_item
-            print(f"  - Orphan session {session_index}: {session.host} (folder: {session.folder})")
-        
-        # Expand all folders by default
-        for folder_item in self.folder_items.values():
-            folder_item.setExpanded(True)
-        
-        print("=== Finished loading sessions ===\n")
+            for part in parts:
+                if part not in current_level:
+                    current_level[part] = {}
+                current_level = current_level[part]
         
     def handle_tree_context_menu(self, action_type, item):
         if action_type == "add_folder":

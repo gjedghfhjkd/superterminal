@@ -69,6 +69,36 @@
       "network_settings": false,
       "bookmark_settings": false,
       "folder": "dev"
+    },
+    {
+      "type": "SSH",
+      "host": "prod-1",
+      "port": 22,
+      "username": null,
+      "terminal_settings": false,
+      "network_settings": false,
+      "bookmark_settings": false,
+      "folder": "prod"
+    },
+    {
+      "type": "SSH",
+      "host": "test",
+      "port": 22,
+      "username": null,
+      "terminal_settings": false,
+      "network_settings": false,
+      "bookmark_settings": false,
+      "folder": "prod"
+    },
+    {
+      "type": "SSH",
+      "host": "stage-1",
+      "port": 22,
+      "username": null,
+      "terminal_settings": false,
+      "network_settings": false,
+      "bookmark_settings": false,
+      "folder": "ss"
     }
   ],
   "folders": {
@@ -84,6 +114,16 @@
     "dev": [
       5,
       6
+    ],
+    "ss": [
+      9
+    ],
+    "prod": [
+      7,
+      8
+    ],
+    "test": [
+      8
     ]
   },
   "version": 2

@@ -83,19 +83,45 @@ class SessionManager:
             return True
         return False
     
-    def add_folder(self, folder_name: str) -> bool:
-        if folder_name and folder_name not in self.folders:
-            self.folders[folder_name] = []
-            self.save_sessions()
-            return True
-        return False
+    def add_folder(self, folder_path: str) -> bool:
+        """Добавить новую папку"""
+        if not folder_path or folder_path in self.folders:
+            return False
+        
+        # Создаем все родительские папки
+        parts = folder_path.split('/')
+        for i in range(1, len(parts)):
+            parent_path = '/'.join(parts[:i])
+            if parent_path not in self.folders:
+                self.folders[parent_path] = []
+        
+        self.folders[folder_path] = []
+        self.save_sessions()
+        return True
     
-    def delete_folder(self, folder_name: str) -> bool:
-        if folder_name in self.folders:
-            del self.folders[folder_name]
-            self.save_sessions()
-            return True
-        return False
+    def delete_folder(self, folder_path: str) -> bool:
+        """Удалить папку и все дочерние папки"""
+        if folder_path not in self.folders:
+            return False
+        
+        # Находим все дочерние папки
+        folders_to_delete = []
+        for path in list(self.folders.keys()):
+            if path == folder_path or path.startswith(folder_path + '/'):
+                folders_to_delete.append(path)
+        
+        # Удаляем папки и перемещаем сессии в родительскую папку
+        parent_path = '/'.join(folder_path.split('/')[:-1])
+        for path in folders_to_delete:
+            # Перемещаем сессии в родительскую папку
+            for session_index in self.folders[path]:
+                if session_index < len(self.sessions):
+                    self.sessions[session_index].folder = parent_path if parent_path else None
+            
+            del self.folders[path]
+        
+        self.save_sessions()
+        return True
     
     def move_session_to_folder(self, session_index: int, folder_name: str) -> bool:
         # Remove from all folders first
@@ -112,18 +138,18 @@ class SessionManager:
         self.save_sessions()
         return True
     
-    def get_sessions_in_folder(self, folder_name):
+    def get_sessions_in_folder(self, folder_path: str) -> List[Session]:
         """Получить все сессии в указанной папке"""
-        if folder_name not in self.folders:
+        if folder_path not in self.folders:
             return []
-        
-        # Возвращаем сессии по индексам из folders
-        return [self.sessions[index] for index in self.folders[folder_name]]
+        return [self.sessions[index] for index in self.folders[folder_path]]
+
     def get_session(self, index):
         """Получить сессию по индексу"""
         if 0 <= index < len(self.sessions):
             return self.sessions[index]
         return None
+
     def get_all_sessions(self) -> List[Session]:
         return self.sessions.copy()
     
@@ -133,8 +159,27 @@ class SessionManager:
         return []
     
     def get_all_folders(self) -> List[str]:
-        return list(self.folders.keys())
-    
+        """Получить все уникальные папки (включая родительские)"""
+        all_folders = set()
+        for folder_path in self.folders.keys():
+            # Добавляем все родительские папки
+            parts = folder_path.split('/')
+            for i in range(1, len(parts) + 1):
+                parent_path = '/'.join(parts[:i])
+                all_folders.add(parent_path)
+        return sorted(all_folders)
+    def get_child_folders(self, parent_path: str = "") -> List[str]:
+        """Получить дочерние папки"""
+        children = set()
+        for folder_path in self.folders.keys():
+            if folder_path.startswith(parent_path + '/') if parent_path else '/' not in folder_path:
+                remaining = folder_path[len(parent_path):].lstrip('/')
+                if '/' in remaining:
+                    child_name = remaining.split('/')[0]
+                    children.add(child_name)
+                else:
+                    children.add(remaining)
+        return sorted(children)
     def clear_sessions(self) -> None:
         self.sessions.clear()
         self.folders.clear()
@@ -182,22 +227,29 @@ class SessionManager:
             item.setData(Qt.UserRole, i)
             list_widget.addItem(item)
 
-    def rename_folder(self, old_name, new_name):
+    def rename_folder(self, old_path: str, new_path: str) -> bool:
         """Переименовать папку"""
-        if old_name not in self.folders:
+        if old_path not in self.folders or new_path in self.folders:
             return False
-            
-        if new_name in self.folders:
-            # Папка с таким именем уже существует
-            return False
-            
-        # Переименовываем папку
-        self.folders[new_name] = self.folders.pop(old_name)
         
-        # Обновляем ссылки на папку в сессиях
-        for session in self.sessions:
-            if session.folder == old_name:
-                session.folder = new_name
+        # Обновляем пути для всех дочерних папок и сессий
+        old_prefix = old_path + '/'
+        for path in list(self.folders.keys()):
+            if path == old_path:
+                # Переименовываем саму папку
+                self.folders[new_path] = self.folders.pop(old_path)
+                # Обновляем сессии в этой папке
+                for session_index in self.folders[new_path]:
+                    if session_index < len(self.sessions):
+                        self.sessions[session_index].folder = new_path
+            elif path.startswith(old_prefix):
+                # Переименовываем дочерние папки
+                new_child_path = new_path + path[len(old_path):]
+                self.folders[new_child_path] = self.folders.pop(path)
+                # Обновляем сессии в дочерних папках
+                for session_index in self.folders[new_child_path]:
+                    if session_index < len(self.sessions):
+                        self.sessions[session_index].folder = new_child_path
         
         self.save_sessions()
         return True

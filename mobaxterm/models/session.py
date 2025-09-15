@@ -10,9 +10,12 @@ class Session:
     username: Optional[str] = None
     terminal_settings: bool = False
     network_settings: bool = False
+    folder: Optional[str] = None 
     bookmark_settings: bool = False
     folder: Optional[str] = None
-    
+    def __post_init__(self):
+        if self.folder and self.folder.startswith('/'):
+            self.folder = self.folder[1:]
     def display_name(self) -> str:
         if self.type == 'SSH':
             username_part = f"({self.username})" if self.username else ""

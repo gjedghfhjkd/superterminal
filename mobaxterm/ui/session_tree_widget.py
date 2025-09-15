@@ -131,7 +131,7 @@ class SessionTreeWidget(QTreeWidget):
 
     
     def handle_session_drop(self, mime_data, target_item):
-        """Обработка drop сессии"""
+        """Обработка drop сессии для вложенных папок"""
         parts = mime_data.split(":")
         session_index = int(parts[1])
         current_folder = parts[2] if len(parts) > 2 else None
@@ -140,29 +140,24 @@ class SessionTreeWidget(QTreeWidget):
         
         if not target_item:
             # Бросили на пустое место - удаляем из папки
-            print("Dropped on empty space - removing from folder")
             self.session_moved.emit(session_index, None, current_folder)
             return
             
         target_type = target_item.data(0, Qt.UserRole)
-        print(f"Target type: {target_type}")
         
         if target_type == "folder":
             # Бросили на папку - перемещаем в эту папку
-            folder_name = target_item.data(0, Qt.UserRole + 1)
-            print(f"Dropped on folder: {folder_name}")
-            self.session_moved.emit(session_index, folder_name, current_folder)
+            folder_path = target_item.data(0, Qt.UserRole + 1)
+            self.session_moved.emit(session_index, folder_path, current_folder)
         elif target_type == "session":
             # Бросили на сессию - определяем родительскую папку
             parent = target_item.parent()
             if parent and parent.data(0, Qt.UserRole) == "folder":
                 # Целевая сессия находится в папке
-                folder_name = parent.data(0, Qt.UserRole + 1)
-                print(f"Dropped on session in folder: {folder_name}")
-                self.session_moved.emit(session_index, folder_name, current_folder)
+                folder_path = parent.data(0, Qt.UserRole + 1)
+                self.session_moved.emit(session_index, folder_path, current_folder)
             else:
                 # Целевая сессия находится в корне - удаляем из папки
-                print("Dropped on session in root - removing from folder")
                 self.session_moved.emit(session_index, None, current_folder)
 
     def handle_folder_drop(self, folder_name, target_item):
@@ -209,7 +204,8 @@ class SessionTreeWidget(QTreeWidget):
                 add_session_action = QAction("➕ Add Session", self)
                 rename_action = QAction("✏️ Rename Folder", self)
                 delete_folder_action = QAction("🗑️ Delete Folder", self)
-                
+                add_subfolder_action = QAction("📁 Add Subfolder", self)
+                menu.addAction(add_subfolder_action)
                 menu.addAction(toggle_action)
                 menu.addSeparator()
                 menu.addAction(add_session_action)
