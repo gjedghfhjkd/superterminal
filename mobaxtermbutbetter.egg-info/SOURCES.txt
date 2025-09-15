@@ -1,0 +1,13 @@
+setup.py
+mobaxterm/__init__.py
+mobaxterm/core/__init__.py
+mobaxterm/core/session_manager.py
+mobaxterm/models/__init__.py
+mobaxterm/models/sessions.py
+mobaxterm/ui/__init__.py
+mobaxterm/ui/main_window.py
+mobaxterm/ui/session_dialog.py
+mobaxtermbutbetter.egg-info/PKG-INFO
+mobaxtermbutbetter.egg-info/SOURCES.txt
+mobaxtermbutbetter.egg-info/dependency_links.txt
+mobaxtermbutbetter.egg-info/top_level.txt
