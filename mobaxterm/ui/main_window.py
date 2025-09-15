@@ -278,10 +278,68 @@ class MobaXtermClone(QMainWindow):
         self.servers_tab.clicked.connect(self.on_servers_tab_clicked)
         self.sessions_tree.session_double_clicked.connect(self.connect_to_session)
         self.sessions_tree.context_menu_requested.connect(self.handle_tree_context_menu)
+        self.sessions_tree.rename_requested.connect(self.handle_rename_request)  # Новый сигнал
+
         
         # Load saved sessions
         self.load_sessions()
+    def handle_rename_request(self, item_type, item):
+        """Обработка запроса на переименование"""
+        if item_type == "folder":
+            folder_name = item.data(0, Qt.UserRole + 1)
+            self.rename_folder(folder_name, item)
+        elif item_type == "session":
+            session_index = item.data(0, Qt.UserRole + 1)
+            session = self.session_manager.get_session(session_index)
+            if session:
+                self.rename_session(session_index, session, item)
+    def rename_session(self, session_index, session, item):
+        """Переименование сессии"""
+        new_name, ok = QInputDialog.getText(
+            self,
+            "Rename Session",
+            "Enter new session name:",
+            QLineEdit.Normal,
+            session.host  # Используем текущее имя хоста как значение по умолчанию
+        )
         
+        if ok and new_name and new_name != session.host:
+            # Создаем копию сессии с новым именем
+            updated_session = Session(
+                type=session.type,
+                host=new_name,
+                port=session.port,
+                username=session.username,
+                folder=session.folder,
+                terminal_settings=session.terminal_settings,
+                network_settings=session.network_settings,
+                bookmark_settings=session.bookmark_settings
+            )
+            
+            if self.session_manager.update_session(session_index, updated_session):
+                # Обновляем отображение
+                item.setText(0, f"🖥️  {new_name}")
+                item.setToolTip(0, f"{session.type} - {new_name}:{session.port}")
+    
+    def rename_folder(self, old_folder_name, item):
+        """Переименование папки"""
+        new_folder_name, ok = QInputDialog.getText(
+            self,
+            "Rename Folder",
+            "Enter new folder name:",
+            QLineEdit.Normal,
+            old_folder_name
+        )
+        
+        if ok and new_folder_name and new_folder_name != old_folder_name:
+            if self.session_manager.rename_folder(old_folder_name, new_folder_name):
+                # Обновляем отображение
+                item.setText(0, f"📁 {new_folder_name}")
+                item.setData(0, Qt.UserRole + 1, new_folder_name)
+                
+                # Обновляем словарь folder_items
+                if old_folder_name in self.folder_items:
+                    self.folder_items[new_folder_name] = self.folder_items.pop(old_folder_name)
     def get_tab_style(self, is_active: bool) -> str:
         if is_active:
             return """
@@ -395,7 +453,16 @@ class MobaXtermClone(QMainWindow):
             if item and item.data(0, Qt.UserRole) == "session":
                 session_index = item.data(0, Qt.UserRole + 1)
                 self.move_session_to_folder(session_index)
-    
+    def keyPressEvent(self, event):
+        # Глобальная обработка F2 и Delete
+        if event.key() == Qt.Key_F2 or event.key() == Qt.Key_Delete:
+            # Передаем событие дереву сессий, если оно в фокусе
+            if self.sessions_tree.hasFocus():
+                # Дерево само обработает эти клавиши
+                event.ignore()  # Позволяем дереву обработать событие
+                return
+                
+        super().keyPressEvent(event)
     def add_new_session(self, folder_name=None):
         dialog = SessionDialog(self)
         if dialog.exec_() == QDialog.Accepted:

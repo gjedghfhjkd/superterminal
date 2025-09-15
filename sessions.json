@@ -2,13 +2,13 @@
   "sessions": [
     {
       "type": "SSH",
-      "host": "sdsds",
+      "host": "test",
       "port": 22,
       "username": null,
       "terminal_settings": false,
       "network_settings": false,
       "bookmark_settings": false,
-      "folder": "test"
+      "folder": "sdsd"
     },
     {
       "type": "SSH",
@@ -18,27 +18,7 @@
       "terminal_settings": false,
       "network_settings": false,
       "bookmark_settings": false,
-      "folder": "test"
-    },
-    {
-      "type": "SSH",
-      "host": "sdsd",
-      "port": 22,
-      "username": null,
-      "terminal_settings": false,
-      "network_settings": false,
-      "bookmark_settings": false,
-      "folder": null
-    },
-    {
-      "type": "SSH",
-      "host": "dsds",
-      "port": 22,
-      "username": null,
-      "terminal_settings": false,
-      "network_settings": false,
-      "bookmark_settings": false,
-      "folder": "test"
+      "folder": "sdsd"
     },
     {
       "type": "SSH",
@@ -49,16 +29,26 @@
       "network_settings": false,
       "bookmark_settings": false,
       "folder": "sdsd"
+    },
+    {
+      "type": "SSH",
+      "host": "dsds",
+      "port": 22,
+      "username": null,
+      "terminal_settings": false,
+      "network_settings": false,
+      "bookmark_settings": false,
+      "folder": "Prod"
     }
   ],
   "folders": {
-    "test": [
-      0,
-      1,
+    "sdsd": [
       3
     ],
-    "sdsd": [
-      4
+    "Prod": [
+      0,
+      1,
+      2
     ]
   },
   "version": 2

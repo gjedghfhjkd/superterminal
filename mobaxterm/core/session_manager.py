@@ -143,7 +143,25 @@ class SessionManager:
             item = QListWidgetItem(session.host)
             item.setData(Qt.UserRole, i)
             list_widget.addItem(item)
-    
+    def rename_folder(self, old_name, new_name):
+        """Переименовать папку"""
+        if old_name not in self.folders:
+            return False
+            
+        if new_name in self.folders:
+            # Папка с таким именем уже существует
+            return False
+            
+        # Переименовываем папку
+        self.folders[new_name] = self.folders.pop(old_name)
+        
+        # Обновляем ссылки на папку в сессиях
+        for session in self.sessions:
+            if session.folder == old_name:
+                session.folder = new_name
+        
+        self.save_sessions()
+        return True
     def confirm_delete_session(self, parent, session_name: str) -> bool:
         reply = QMessageBox.question(
             parent, 
@@ -153,7 +171,7 @@ class SessionManager:
             QMessageBox.No
         )
         return reply == QMessageBox.Yes
-        
+
     def delete_folder(self, folder_name: str) -> bool:
         if folder_name in self.folders:
             # Получаем индексы сессий в этой папке
