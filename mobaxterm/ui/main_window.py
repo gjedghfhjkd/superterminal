@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QSplitter,
                              QLabel, QPushButton, QMessageBox, QDialog, 
-                             QMenu, QAction, QInputDialog,
+                             QMenu, QAction, QInputDialog, QLineEdit,
                              QProgressBar, QFrame, QApplication,
                              QTreeWidget, QTreeWidgetItem)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSize
