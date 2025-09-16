@@ -48,8 +48,15 @@ class SSHClient(QObject):
             # Request a PTY with sane dimensions and xterm-256color
             self.shell = self.client.invoke_shell(term='xterm-256color', width=160, height=40)
             self.shell.settimeout(0.0)
+            # Immediately disable echo before we start capturing output to avoid
+            # printing our setup commands
+            try:
+                self.shell.send("stty -echo 2>/dev/null\n")
+                time.sleep(0.05)
+            except Exception:
+                pass
             
-            # Start reading thread
+            # Start reading thread (after echo disabled)
             self.read_thread = threading.Thread(target=self.read_output)
             self.read_thread.daemon = True
             self.read_thread.start()
@@ -111,8 +118,8 @@ class SSHClient(QObject):
         """Set prompt to [user@host cwd]$ and enable sane terminal controls."""
         try:
             # Stepwise to let -echo take effect before further commands are echoed
-            # Turn off echo and hide prompt while configuring; clear last echoed line
-            self.shell.send("stty -echo 2>/dev/null; PS1=; printf '\033[1A\r\033[K'\n")
+            # Turn off echo (already off earlier) and keep prompt empty while configuring
+            self.shell.send("PS1=\n")
             time.sleep(0.05)
             self.shell.send("stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null\n")
             time.sleep(0.02)
