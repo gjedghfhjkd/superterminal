@@ -218,6 +218,8 @@ class SessionTreeWidget(QTreeWidget):
                     item.setExpanded(not item.isExpanded())
                 elif action == add_session_action:
                     self.context_menu_requested.emit("add_session_to_folder", item)
+                elif action == add_subfolder_action:
+                    self.context_menu_requested.emit("add_subfolder", item)
                 elif action == rename_action:
                     self.rename_requested.emit("folder", item)
                 elif action == delete_folder_action:
