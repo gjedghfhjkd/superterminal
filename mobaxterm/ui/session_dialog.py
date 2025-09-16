@@ -232,20 +232,28 @@ class SessionDialog(QDialog):
         self.ssh_host_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         basic_layout.addWidget(self.ssh_host_input, 0, 1)
         
-        # Row 1: Username label and input (always enabled)
+        # Row 1: Session name (optional, defaults to Remote host)
+        name_label = QLabel("Session name:")
+        name_label.setMinimumWidth(100)
+        basic_layout.addWidget(name_label, 1, 0, Qt.AlignRight)
+        
+        self.ssh_name_input = QLineEdit()
+        self.ssh_name_input.setPlaceholderText("defaults to Remote host")
+        self.ssh_name_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        basic_layout.addWidget(self.ssh_name_input, 1, 1)
+        
+        # Row 2: Username label and input (always enabled)
         username_label = QLabel("Username:")
         username_label.setMinimumWidth(100)
-        basic_layout.addWidget(username_label, 1, 0, Qt.AlignRight)
+        basic_layout.addWidget(username_label, 2, 0, Qt.AlignRight)
         
         self.ssh_username_input = QLineEdit()
         self.ssh_username_input.setPlaceholderText("username")
         self.ssh_username_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        basic_layout.addWidget(self.ssh_username_input, 1, 1)
+        # Default username to root
+        self.ssh_username_input.setText("root")
+        basic_layout.addWidget(self.ssh_username_input, 2, 1)
         
-        
-        # Row 2: Port checkbox
-        self.ssh_port_check = QCheckBox("Custom port")
-        basic_layout.addWidget(self.ssh_port_check, 2, 1)
         
         # Row 3: Port label and input
         port_label = QLabel("Port:")
@@ -255,7 +263,7 @@ class SessionDialog(QDialog):
         self.ssh_port_input = QSpinBox()
         self.ssh_port_input.setRange(1, 65535)
         self.ssh_port_input.setValue(22)
-        self.ssh_port_input.setEnabled(False)
+        self.ssh_port_input.setEnabled(True)
         self.ssh_port_input.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         basic_layout.addWidget(self.ssh_port_input, 3, 1)
         
@@ -383,7 +391,6 @@ class SessionDialog(QDialog):
         layout.addStretch()
         
         # Connect signals
-        self.ssh_port_check.toggled.connect(self.toggle_port_field)
         self.folder_combo.currentIndexChanged.connect(self.on_folder_changed)
         self.auth_method_combo.currentIndexChanged.connect(self.on_auth_method_changed)
         self.key_path_browse.clicked.connect(self.on_browse_key)
@@ -408,10 +415,6 @@ class SessionDialog(QDialog):
                 else:
                     self.folder_combo.setCurrentIndex(0)
         
-    def toggle_port_field(self, checked):
-        self.ssh_port_input.setEnabled(checked)
-        if not checked:
-            self.ssh_port_input.setValue(22)
     
     def init_sftp_page(self):
         layout = QVBoxLayout(self.sftp_page)
@@ -562,14 +565,13 @@ class SessionDialog(QDialog):
         if session.type == 'SSH':
             self.ssh_btn.click()
             self.ssh_host_input.setText(session.host)
+            # Load session name (fallback to host)
+            self.ssh_name_input.setText(session.name or session.host)
             
             if session.username:
                 self.ssh_username_input.setText(session.username)
             
-            if session.port != 22:
-                self.ssh_port_check.setChecked(True)
-                self.ssh_port_input.setValue(session.port)
-                self.ssh_port_input.setEnabled(True)
+            self.ssh_port_input.setValue(session.port)
             
             if session.folder:
                 index = self.folder_combo.findData(session.folder)
@@ -609,7 +611,8 @@ class SessionDialog(QDialog):
             session = Session(
                 type='SSH',
                 host=self.ssh_host_input.text(),
-                port=self.ssh_port_input.value() if self.ssh_port_check.isChecked() else 22,
+                port=self.ssh_port_input.value(),
+                name=(self.ssh_name_input.text().strip() or None),
                 username=(self.ssh_username_input.text() or None),
                 auth_method=self.auth_method_combo.currentData(),
                 private_key_path=self.key_path_input.text() if self.auth_method_combo.currentData() == 'key' and self.key_path_input.text() else None,

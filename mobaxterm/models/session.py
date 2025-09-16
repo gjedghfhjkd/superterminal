@@ -7,6 +7,7 @@ class Session:
     type: str  # 'SSH' or 'SFTP'
     host: str
     port: int
+    name: Optional[str] = None
     username: Optional[str] = None
     auth_method: str = "password"  # 'password' | 'key'
     private_key_path: Optional[str] = None
@@ -31,6 +32,7 @@ class Session:
             'type': self.type,
             'host': self.host,
             'port': self.port,
+            'name': self.name,
             'username': self.username,
 
             'auth_method': self.auth_method,
@@ -48,6 +50,7 @@ class Session:
             type=data['type'],
             host=data['host'],
             port=data['port'],
+            name=data.get('name'),
             username=data['username'],
             auth_method=data.get('auth_method', 'password'),
             private_key_path=data.get('private_key_path'),
