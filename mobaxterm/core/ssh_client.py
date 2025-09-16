@@ -13,6 +13,9 @@ class SSHClient(QObject):
         self.shell = None
         self.is_connected = False
         self.read_thread = None
+        # Buffer of bytes we expect to be echoed; we will strip this prefix
+        # from the next incoming recv() chunks to avoid printing our setup commands
+        self._suppress_bytes = b""
         
     def connect(self, host, port=22, username=None, password=None, auth_method='password', key_filename=None, passphrase=None, allow_agent=True, look_for_keys=False):
         try:
@@ -95,6 +98,15 @@ class SSHClient(QObject):
             try:
                 if self.shell and self.shell.recv_ready():
                     data_bytes = self.shell.recv(32768)
+                    # Suppress any expected echoed bytes from our recent sends
+                    if self._suppress_bytes:
+                        n = min(len(self._suppress_bytes), len(data_bytes))
+                        i = 0
+                        while i < n and data_bytes[i] == self._suppress_bytes[i]:
+                            i += 1
+                        if i > 0:
+                            data_bytes = data_bytes[i:]
+                            self._suppress_bytes = self._suppress_bytes[i:]
                     if not data_bytes:
                         time.sleep(0.02)
                         continue
@@ -126,20 +138,28 @@ class SSHClient(QObject):
     def configure_remote_environment(self):
         """Set prompt to [user@host cwd]$ and enable sane terminal controls."""
         try:
-            # Stepwise to let -echo take effect before further commands are echoed
-            # Turn off echo (already off earlier) and keep prompt empty while configuring
-            self.shell.send("PS1=\n")
-            time.sleep(0.05)
-            self.shell.send("stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null\n")
-            time.sleep(0.02)
+            # 1) keyboard/erase settings (may be echoed; prepare to suppress)
+            cmd1 = "stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null\n"
+            self._suppress_bytes += cmd1.encode('utf-8')
+            self.shell.send(cmd1)
+            time.sleep(0.01)
+            # 2) keep PS1 empty to avoid prompt prints during setup
+            cmd2 = "PS1=\n"
+            self._suppress_bytes += cmd2.encode('utf-8')
+            self.shell.send(cmd2)
+            time.sleep(0.01)
+            # 3) line discipline (not echoed when echo off)
             self.shell.send("stty echo icanon icrnl -inlcr -igncr onlcr 2>/dev/null\n")
-            time.sleep(0.02)
+            time.sleep(0.01)
+            # 4) bash tweak
             self.shell.send("if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off'; fi 2>/dev/null\n")
-            time.sleep(0.02)
+            time.sleep(0.01)
+            # 5) prompt and locale
             self.shell.send("export PS1='[\\u@\\h \\w]\\$ '\n")
-            time.sleep(0.02)
+            time.sleep(0.01)
             self.shell.send("export LANG=C.UTF-8 LC_ALL=C.UTF-8 2>/dev/null\n")
-            time.sleep(0.02)
+            time.sleep(0.01)
+            # 6) re-enable echo
             self.shell.send("stty echo 2>/dev/null\n")
         except Exception:
             pass
