@@ -40,6 +40,17 @@ class NestedFolderDialog(QDialog):
         self.parent_combo.addItem("(Root)", "")
         for folder in self.existing_folders:
             self.parent_combo.addItem(folder, folder)
+        # Ensure dropdown selection is visible for parent folder combo
+        self.parent_combo.view().setStyleSheet("""
+            QAbstractItemView {
+                background-color: white;
+                border: 1px solid #ccc;
+                selection-background-color: #0078d7;
+                selection-color: white;
+            }
+            QAbstractItemView::item { height: 28px; padding: 6px; color: #333; }
+            QAbstractItemView::item:hover { background-color: #e9f3ff; color: #0a58ca; }
+        """)
         
         # Folder name
         name_label = QLabel("Folder name:")

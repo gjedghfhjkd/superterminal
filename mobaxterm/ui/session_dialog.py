@@ -258,6 +258,17 @@ class SessionDialog(QDialog):
         
         self.folder_combo.addItem("+ Create new folder...", "new")
         basic_layout.addWidget(self.folder_combo, 4, 1)
+        # Ensure dropdown selection is visible for folder combo
+        self.folder_combo.view().setStyleSheet("""
+            QAbstractItemView {
+                background-color: white;
+                border: 1px solid #ccc;
+                selection-background-color: #0078d7;
+                selection-color: white;
+            }
+            QAbstractItemView::item { height: 28px; padding: 6px; color: #333; }
+            QAbstractItemView::item:hover { background-color: #e9f3ff; color: #0a58ca; }
+        """)
         
         layout.addWidget(basic_group)
         
@@ -279,6 +290,17 @@ class SessionDialog(QDialog):
         self.auth_method_combo.addItem("Password", "password")
         self.auth_method_combo.addItem("SSH key", "key")
         auth_layout.addWidget(self.auth_method_combo, 0, 1)
+        # Ensure dropdown selection is visible for auth method combo
+        self.auth_method_combo.view().setStyleSheet("""
+            QAbstractItemView {
+                background-color: white;
+                border: 1px solid #ccc;
+                selection-background-color: #0078d7;
+                selection-color: white;
+            }
+            QAbstractItemView::item { height: 28px; padding: 6px; color: #333; }
+            QAbstractItemView::item:hover { background-color: #e9f3ff; color: #0a58ca; }
+        """)
 
         # Row 1: Password (for password auth)
         self.auth_password_label = QLabel("Password:")
