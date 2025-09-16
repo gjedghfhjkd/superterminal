@@ -120,8 +120,9 @@ class TerminalTab(QWidget):
             if key in (Qt.Key_Return, Qt.Key_Enter):
                 if self.local_echo_enabled:
                     self._write("\n")
-                # Send CRLF to be safe with various ttys
-                self._send("\r\n")
+                # Send both CR and LF to maximize compatibility
+                self._send("\r")
+                self._send("\n")
                 return True
             # Backspace
             if key == Qt.Key_Backspace:

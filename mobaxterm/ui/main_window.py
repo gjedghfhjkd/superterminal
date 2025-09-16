@@ -49,6 +49,8 @@ class SSHThread(QThread):
             allow_agent=True,
             look_for_keys=True
         )
+        # Start event loop so queued signals (input_to_send) are processed in this thread
+        self.exec_()
 
 class MobaXtermClone(QMainWindow):
     def __init__(self):

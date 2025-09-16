@@ -88,7 +88,10 @@ class SSHClient(QObject):
                     if not data_bytes:
                         time.sleep(0.02)
                         continue
-                    data = data_bytes.decode('utf-8', errors='ignore')
+                    try:
+                        data = data_bytes.decode('utf-8')
+                    except UnicodeDecodeError:
+                        data = data_bytes.decode('utf-8', errors='ignore')
                     if data:
                         self.output_received.emit(data)
                 else:
