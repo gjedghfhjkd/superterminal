@@ -8,7 +8,7 @@ class CloseButton(QPushButton):
         super().__init__(parent)
         self.setFixedSize(16, 16)
         self.setStyleSheet("""
-            CloseButton {
+            QPushButton {
                 background-color: transparent;
                 border: none;
                 border-radius: 3px;
@@ -16,13 +16,13 @@ class CloseButton(QPushButton):
                 font-size: 12px;
                 font-weight: bold;
             }
-            CloseButton:hover {
+            QPushButton:hover {
                 background-color: rgba(255, 71, 87, 0.15); /* soft red square on hover */
                 color: #ff4757; /* cross becomes red */
                 border-radius: 3px;
                 border: 1px solid rgba(255, 71, 87, 0.65); /* red outline */
             }
-            CloseButton:pressed {
+            QPushButton:pressed {
                 background-color: #ff4757; /* solid red when pressed */
                 color: white; /* white cross for contrast when pressed */
                 border: 1px solid rgba(224, 58, 73, 0.85);
@@ -31,6 +31,8 @@ class CloseButton(QPushButton):
         self.setText("×")
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip("Close")
+        # Ensure Qt tracks hover state for style engine
+        self.setAttribute(Qt.WA_Hover, True)
         # Prepare subtle red glow effect (disabled by default)
         self._shadow = QGraphicsDropShadowEffect(self)
         self._shadow.setBlurRadius(0)
