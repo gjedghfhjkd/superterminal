@@ -33,7 +33,11 @@ class SSHThread(QThread):
             host=self.session.host,
             port=self.session.port,
             username=self.session.username,
-            password=self.session.password
+            auth_method=getattr(self.session, 'auth_method', 'password'),
+            key_filename=getattr(self.session, 'private_key_path', None),
+            passphrase=getattr(self.session, 'private_key_passphrase', None),
+            allow_agent=True,
+            look_for_keys=True
         )
 
 class MobaXtermClone(QMainWindow):
