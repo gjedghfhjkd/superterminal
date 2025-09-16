@@ -49,6 +49,9 @@ class TerminalTab(QWidget):
         self.prompt_text = "$ "
         # Local echo is off by default; remote shell echoes characters
         self.local_echo_enabled = False
+        # Minimal line editor state for rendering interactive line updates
+        self._line_buffer = ""
+        self._line_cursor = 0
         
         # Only the terminal area is shown; input happens inline
         layout.addWidget(self.terminal_output)
@@ -65,24 +68,93 @@ class TerminalTab(QWidget):
         self.terminal_output.setReadOnly(True)
         
     def append_output(self, text):
-        # Strip ANSI/OSC sequences for readability in QTextEdit
-        s = self._strip_ansi(text)
-        # Process control chars: BEL and Backspace; normalize EOLs
-        s = s.replace('\r\n', '\n')
-        # We'll interpret bare CR as newline for simplicity
-        s = s.replace('\r', '\n')
-        # Remove BELs (terminal beeps)
-        s = s.replace('\x07', '')
-
-        # Render while handling backspaces by deleting previous chars
-        for ch in s:
-            if ch == '\x08':  # backspace
-                cursor = self.terminal_output.textCursor()
-                cursor.movePosition(QTextCursor.End)
-                cursor.deletePreviousChar()
-                self.terminal_output.setTextCursor(cursor)
+        # Minimal parser to handle interactive line editing sequences from bash/readline
+        i = 0
+        while i < len(text):
+            ch = text[i]
+            # Handle ESC sequences
+            if ch == '\x1b':
+                if i + 1 < len(text):
+                    nxt = text[i + 1]
+                    # OSC: ESC ] ... (BEL or ESC \) — skip
+                    if nxt == ']':
+                        i += 2
+                        while i < len(text) and text[i] not in ('\x07',):
+                            # handle ESC \
+                            if text[i] == '\x1b' and i + 1 < len(text) and text[i+1] == '\\':
+                                i += 2
+                                break
+                            i += 1
+                        # skip terminator
+                        i += 1
+                        continue
+                    # CSI: ESC [ ...
+                    if nxt == '[':
+                        i += 2
+                        # collect parameters
+                        params = ''
+                        while i < len(text) and not ('@' <= text[i] <= '~'):
+                            params += text[i]
+                            i += 1
+                        if i < len(text):
+                            cmd = text[i]
+                            # Handle a few basics
+                            if cmd == 'D':  # cursor left
+                                self._line_cursor = max(0, self._line_cursor - 1)
+                                self._render_current_line()
+                            elif cmd == 'C':  # cursor right
+                                self._line_cursor = min(len(self._line_buffer), self._line_cursor + 1)
+                                self._render_current_line()
+                            elif cmd == 'K':  # erase to end of line
+                                self._line_buffer = self._line_buffer[:self._line_cursor]
+                                self._render_current_line()
+                            # ignore others
+                            i += 1
+                            continue
+                # Unrecognized ESC, skip
+                i += 1
                 continue
-            self._write(ch)
+            # BEL - ignore
+            if ch == '\x07':
+                i += 1
+                continue
+            # Backspace moves caret left
+            if ch == '\x08':
+                if self._line_cursor > 0:
+                    self._line_cursor -= 1
+                    self._render_current_line()
+                i += 1
+                continue
+            # DEL treated like backspace erase
+            if ch == '\x7f':
+                if self._line_cursor > 0:
+                    self._line_buffer = self._line_buffer[:self._line_cursor-1] + self._line_buffer[self._line_cursor:]
+                    self._line_cursor -= 1
+                    self._render_current_line()
+                i += 1
+                continue
+            # CR / LF handling
+            if ch == '\r':
+                # Move to line start
+                self._line_cursor = 0
+                self._render_current_line()
+                i += 1
+                continue
+            if ch == '\n':
+                # Flush current line and newline
+                self._replace_current_line(self._line_buffer)
+                self._write('\n')
+                self._line_buffer = ''
+                self._line_cursor = 0
+                i += 1
+                continue
+            # Printable character
+            self._line_buffer = (
+                self._line_buffer[:self._line_cursor] + ch + self._line_buffer[self._line_cursor:]
+            )
+            self._line_cursor += 1
+            self._render_current_line()
+            i += 1
         # Auto-scroll to bottom
         cursor = self.terminal_output.textCursor()
         cursor.movePosition(QTextCursor.End)
@@ -93,6 +165,16 @@ class TerminalTab(QWidget):
         cursor.movePosition(QTextCursor.End)
         cursor.insertText(text)
         self.terminal_output.setTextCursor(cursor)
+
+    def _replace_current_line(self, text: str):
+        cursor = self.terminal_output.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        cursor.movePosition(QTextCursor.StartOfBlock, QTextCursor.KeepAnchor)
+        cursor.insertText(text)
+        self.terminal_output.setTextCursor(cursor)
+
+    def _render_current_line(self):
+        self._replace_current_line(self._line_buffer)
 
     def set_key_sender(self, sender_callable):
         """Provide a callable that will be used to send raw key data to SSH."""
