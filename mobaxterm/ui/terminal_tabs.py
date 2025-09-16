@@ -104,7 +104,7 @@ class TerminalTab(QWidget):
                         while len(tail_lines) >= 3 and tail_lines[-1].strip() == '' and tail_lines[-2].strip() == '':
                             tail_lines.pop()
                         # Deduplicate identical prompt lines at the very end
-                        prompt_re = re.compile(r"(^.+@.+:.*[#$]\s$|^\[[^\n]*\][#$]\s$)")
+                        prompt_re = re.compile(r"(^.+@.+:.*[#$]\s*$|^\[[^\n]*\][#$]\s*$)")
                         # Keep removing duplicates among last lines
                         changed = True
                         while changed and len(tail_lines) >= 2:

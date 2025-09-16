@@ -124,7 +124,7 @@ class SSHClient(QObject):
         """Set prompt to [user@host cwd]$ and enable sane terminal controls."""
         try:
             # First: turn echo OFF so next commands are not echoed by the PTY
-            cmd0 = "stty -echo 2>/dev/null\r"
+            cmd0 = "stty -echo 2>/dev/null\n"
             self._suppress_bytes += cmd0.encode('utf-8')
             self.shell.send(cmd0)
             time.sleep(0.02)
@@ -136,7 +136,7 @@ class SSHClient(QObject):
                 "stty icanon icrnl -inlcr -igncr onlcr 2>/dev/null; "
                 "if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off' >/dev/null 2>&1; fi; "
                 "export LANG=C.UTF-8 LC_ALL=C.UTF-8 >/dev/null 2>&1; "
-                "stty echo 2>/dev/null\r"
+                "stty echo 2>/dev/null\n"
             )
             self.shell.send(cmd)
         except Exception:
