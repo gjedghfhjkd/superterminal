@@ -131,15 +131,13 @@ class SSHClient(QObject):
             time.sleep(0.02)
 
             # Then: run all settings with echo OFF, finally re-enable echo
+            # Do NOT touch PS1 or PROMPT_COMMAND to avoid extra prompts
             cmd = (
-                "OLD_PS1=\"$PS1\"; OLD_PC=\"$PROMPT_COMMAND\"; "
-                "PS1=; PROMPT_COMMAND=; "
                 "stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null; "
                 "stty icanon icrnl -inlcr -igncr onlcr 2>/dev/null; "
                 "if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off' >/dev/null 2>&1; fi; "
                 "export LANG=C.UTF-8 LC_ALL=C.UTF-8 >/dev/null 2>&1; "
-                "stty echo 2>/dev/null; "
-                "PS1=\"$OLD_PS1\"; PROMPT_COMMAND=\"$OLD_PC\"\n"
+                "stty echo 2>/dev/null\n"
             )
             self.shell.send(cmd)
         except Exception:
