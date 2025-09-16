@@ -8,6 +8,10 @@ class Session:
     host: str
     port: int
     username: Optional[str] = None
+    # Authentication fields
+    auth_method: str = "password"  # 'password' | 'key'
+    private_key_path: Optional[str] = None
+    private_key_passphrase: Optional[str] = None
     terminal_settings: bool = False
     network_settings: bool = False
     folder: Optional[str] = None 
@@ -29,6 +33,9 @@ class Session:
             'host': self.host,
             'port': self.port,
             'username': self.username,
+            'auth_method': self.auth_method,
+            'private_key_path': self.private_key_path,
+            'private_key_passphrase': self.private_key_passphrase,
             'terminal_settings': self.terminal_settings,
             'network_settings': self.network_settings,
             'bookmark_settings': self.bookmark_settings,
@@ -42,6 +49,9 @@ class Session:
             host=data['host'],
             port=data['port'],
             username=data['username'],
+            auth_method=data.get('auth_method', 'password'),
+            private_key_path=data.get('private_key_path'),
+            private_key_passphrase=data.get('private_key_passphrase'),
             terminal_settings=data.get('terminal_settings', False),
             network_settings=data.get('network_settings', False),
             bookmark_settings=data.get('bookmark_settings', False),

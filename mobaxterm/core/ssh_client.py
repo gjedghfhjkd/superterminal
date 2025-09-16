@@ -14,7 +14,7 @@ class SSHClient(QObject):
         self.is_connected = False
         self.read_thread = None
         
-    def connect(self, host, port=22, username=None, password=None):
+    def connect(self, host, port=22, username=None, password=None, auth_method='password', key_filename=None, passphrase=None, allow_agent=True, look_for_keys=False):
         try:
             self.output_received.emit("🔗 Connecting to server...")
             
@@ -22,15 +22,26 @@ class SSHClient(QObject):
             self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             
             # Try to connect with timeout
-            self.client.connect(
-                hostname=host,
-                port=port,
-                username=username,
-                password=password,
-                timeout=10,
-                look_for_keys=False,
-                allow_agent=False
-            )
+            connect_kwargs = {
+                'hostname': host,
+                'port': port,
+                'username': username,
+                'timeout': 10,
+            }
+
+            if auth_method == 'key':
+                # Use provided private key file or fall back to agent/default keys
+                connect_kwargs['key_filename'] = key_filename
+                connect_kwargs['passphrase'] = passphrase
+                connect_kwargs['allow_agent'] = True if allow_agent is None else allow_agent
+                connect_kwargs['look_for_keys'] = True if look_for_keys is None else look_for_keys
+                # Do not pass password when using key auth
+            else:
+                connect_kwargs['password'] = password
+                connect_kwargs['allow_agent'] = False
+                connect_kwargs['look_for_keys'] = False
+
+            self.client.connect(**connect_kwargs)
             
             self.is_connected = True
             self.shell = self.client.invoke_shell()

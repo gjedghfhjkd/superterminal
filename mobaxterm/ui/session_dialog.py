@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QLineEdit, QCheckBox, QSpinBox, QGroupBox,
-                             QDialogButtonBox, QGridLayout, QStackedWidget, QWidget, QComboBox)
+                             QDialogButtonBox, QGridLayout, QStackedWidget, QWidget, QComboBox,
+                             QFileDialog, QInputDialog)
 from PyQt5.QtCore import Qt
 from ..models.session import Session
 
@@ -193,6 +194,8 @@ class SessionDialog(QDialog):
         basic_layout = QGridLayout(basic_group)
         basic_layout.setSpacing(8)
         basic_layout.setContentsMargins(12, 15, 12, 12)
+        basic_layout.setColumnStretch(0, 0)
+        basic_layout.setColumnStretch(1, 1)
         
         # Row 0: Remote host
         host_label = QLabel("Remote host:")
@@ -251,6 +254,51 @@ class SessionDialog(QDialog):
         
         layout.addWidget(basic_group)
         
+        # Authentication group
+        auth_group = QGroupBox("Authentication")
+        auth_layout = QGridLayout(auth_group)
+        auth_layout.setSpacing(8)
+        auth_layout.setContentsMargins(12, 15, 12, 12)
+        auth_layout.setColumnStretch(0, 0)
+        auth_layout.setColumnStretch(1, 1)
+
+        # Row 0: Method
+        auth_method_label = QLabel("Method:")
+        auth_method_label.setMinimumWidth(100)
+        auth_layout.addWidget(auth_method_label, 0, 0, Qt.AlignRight)
+
+        self.auth_method_combo = QComboBox()
+        self.auth_method_combo.addItem("Password", "password")
+        self.auth_method_combo.addItem("SSH key", "key")
+        auth_layout.addWidget(self.auth_method_combo, 0, 1)
+
+        # Row 1: Private key path
+        key_path_label = QLabel("Private key:")
+        key_path_label.setMinimumWidth(100)
+        auth_layout.addWidget(key_path_label, 1, 0, Qt.AlignRight)
+
+        key_path_container = QWidget()
+        key_path_h = QHBoxLayout(key_path_container)
+        key_path_h.setContentsMargins(0, 0, 0, 0)
+        key_path_h.setSpacing(6)
+        self.key_path_input = QLineEdit()
+        self.key_path_browse = QPushButton("Browse…")
+        self.key_path_browse.setFixedWidth(90)
+        key_path_h.addWidget(self.key_path_input)
+        key_path_h.addWidget(self.key_path_browse)
+        auth_layout.addWidget(key_path_container, 1, 1)
+
+        # Row 2: Passphrase
+        passphrase_label = QLabel("Passphrase:")
+        passphrase_label.setMinimumWidth(100)
+        auth_layout.addWidget(passphrase_label, 2, 0, Qt.AlignRight)
+
+        self.passphrase_input = QLineEdit()
+        self.passphrase_input.setEchoMode(QLineEdit.Password)
+        auth_layout.addWidget(self.passphrase_input, 2, 1)
+
+        layout.addWidget(auth_group)
+
         # Advanced SSH settings group
         advanced_group = QGroupBox("Advanced SSH settings")
         advanced_layout = QVBoxLayout(advanced_group)
@@ -272,6 +320,11 @@ class SessionDialog(QDialog):
         self.ssh_username_check.toggled.connect(self.toggle_username_field)
         self.ssh_port_check.toggled.connect(self.toggle_port_field)
         self.folder_combo.currentIndexChanged.connect(self.on_folder_changed)
+        self.auth_method_combo.currentIndexChanged.connect(self.on_auth_method_changed)
+        self.key_path_browse.clicked.connect(self.on_browse_key)
+
+        # Initialize auth controls state
+        self.on_auth_method_changed(self.auth_method_combo.currentIndex())
         
     def on_folder_changed(self, index):
         if self.folder_combo.currentData() == "new":
@@ -309,6 +362,8 @@ class SessionDialog(QDialog):
         basic_layout = QGridLayout(basic_group)
         basic_layout.setSpacing(8)
         basic_layout.setContentsMargins(12, 15, 12, 12)
+        basic_layout.setColumnStretch(0, 0)
+        basic_layout.setColumnStretch(1, 1)
         
         # Row 0: Remote host
         host_label = QLabel("Remote host:")
@@ -431,6 +486,15 @@ class SessionDialog(QDialog):
             self.ssh_terminal_check.setChecked(session.terminal_settings)
             self.ssh_network_check.setChecked(session.network_settings)
             self.ssh_bookmark_check.setChecked(session.bookmark_settings)
+            # Load auth
+            if hasattr(session, 'auth_method'):
+                method_index = self.auth_method_combo.findData(session.auth_method)
+                if method_index >= 0:
+                    self.auth_method_combo.setCurrentIndex(method_index)
+            if hasattr(session, 'private_key_path') and session.private_key_path:
+                self.key_path_input.setText(session.private_key_path)
+            if hasattr(session, 'private_key_passphrase') and session.private_key_passphrase:
+                self.passphrase_input.setText(session.private_key_passphrase)
             
         else:
             self.sftp_btn.click()
@@ -452,6 +516,9 @@ class SessionDialog(QDialog):
                 host=self.ssh_host_input.text(),
                 port=self.ssh_port_input.value() if self.ssh_port_check.isChecked() else 22,
                 username=self.ssh_username_input.text() if self.ssh_username_check.isChecked() else None,
+                auth_method=self.auth_method_combo.currentData(),
+                private_key_path=self.key_path_input.text() if self.auth_method_combo.currentData() == 'key' and self.key_path_input.text() else None,
+                private_key_passphrase=self.passphrase_input.text() if self.auth_method_combo.currentData() == 'key' and self.passphrase_input.text() else None,
                 terminal_settings=self.ssh_terminal_check.isChecked(),
                 network_settings=self.ssh_network_check.isChecked(),
                 bookmark_settings=self.ssh_bookmark_check.isChecked()
@@ -468,3 +535,15 @@ class SessionDialog(QDialog):
             )
             session.folder = self.sftp_folder_combo.currentData()
             return session
+
+    def on_auth_method_changed(self, index):
+        method = self.auth_method_combo.currentData()
+        is_key = method == 'key'
+        self.key_path_input.setEnabled(is_key)
+        self.key_path_browse.setEnabled(is_key)
+        self.passphrase_input.setEnabled(is_key)
+
+    def on_browse_key(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Private Key", "", "All Files (*)")
+        if file_path:
+            self.key_path_input.setText(file_path)
