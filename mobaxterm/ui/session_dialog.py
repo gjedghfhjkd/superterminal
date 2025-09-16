@@ -194,6 +194,8 @@ class SessionDialog(QDialog):
         basic_layout = QGridLayout(basic_group)
         basic_layout.setSpacing(8)
         basic_layout.setContentsMargins(12, 15, 12, 12)
+        basic_layout.setColumnStretch(0, 0)
+        basic_layout.setColumnStretch(1, 1)
         
         # Row 0: Remote host
         host_label = QLabel("Remote host:")
@@ -257,6 +259,8 @@ class SessionDialog(QDialog):
         auth_layout = QGridLayout(auth_group)
         auth_layout.setSpacing(8)
         auth_layout.setContentsMargins(12, 15, 12, 12)
+        auth_layout.setColumnStretch(0, 0)
+        auth_layout.setColumnStretch(1, 1)
 
         # Row 0: Method
         auth_method_label = QLabel("Method:")
@@ -318,6 +322,9 @@ class SessionDialog(QDialog):
         self.folder_combo.currentIndexChanged.connect(self.on_folder_changed)
         self.auth_method_combo.currentIndexChanged.connect(self.on_auth_method_changed)
         self.key_path_browse.clicked.connect(self.on_browse_key)
+
+        # Initialize auth controls state
+        self.on_auth_method_changed(self.auth_method_combo.currentIndex())
         
     def on_folder_changed(self, index):
         if self.folder_combo.currentData() == "new":
@@ -355,6 +362,8 @@ class SessionDialog(QDialog):
         basic_layout = QGridLayout(basic_group)
         basic_layout.setSpacing(8)
         basic_layout.setContentsMargins(12, 15, 12, 12)
+        basic_layout.setColumnStretch(0, 0)
+        basic_layout.setColumnStretch(1, 1)
         
         # Row 0: Remote host
         host_label = QLabel("Remote host:")
