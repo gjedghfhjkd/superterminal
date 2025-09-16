@@ -1,6 +1,7 @@
 import paramiko
 from PyQt5.QtCore import QObject, pyqtSignal
 import os
+import posixpath
 import stat
 import time
 
@@ -90,11 +91,12 @@ class SFTPClient(QObject):
             # Normalize to absolute path
             if not new_path:
                 new_path = self.current_path or '/'
+            # Always build POSIX-style path for remote
             if not new_path.startswith('/'):
                 base = self.current_path or '/'
-                candidate = os.path.normpath(os.path.join(base, new_path))
+                candidate = posixpath.normpath(posixpath.join(base, new_path))
             else:
-                candidate = os.path.normpath(new_path)
+                candidate = posixpath.normpath(new_path)
 
             # Some SFTP servers don't support normalize for relative, build absolute
             try:
@@ -106,7 +108,7 @@ class SFTPClient(QObject):
                 st = self.sftp.stat(norm)
                 if not stat.S_ISDIR(getattr(st, 'st_mode', 0)):
                     # If it's a file, use its directory
-                    norm = os.path.dirname(norm) or '/'
+                    norm = posixpath.dirname(norm) or '/'
             except Exception:
                 # Fallback: try listdir to confirm
                 try:

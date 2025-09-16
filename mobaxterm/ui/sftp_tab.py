@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QMimeData
 from PyQt5.QtGui import QDrag
+import posixpath
 import os
 import time
 
@@ -80,6 +81,13 @@ class SFTPTab(QWidget):
         self.remote_tree.setHeaderLabels(["Name", "Size", "Modified"])
         self.remote_tree.setColumnWidth(0, 280)
         self.remote_tree.setAlternatingRowColors(True)
+        self.remote_tree.setExpandsOnDoubleClick(False)
+        try:
+            # Prevent double-click from triggering inline edit
+            from PyQt5.QtWidgets import QAbstractItemView
+            self.remote_tree.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        except Exception:
+            pass
         self.remote_tree.setSelectionMode(QTreeWidget.ExtendedSelection)
         self.remote_tree.setDragEnabled(True)
         self.remote_tree.setAcceptDrops(True)
@@ -103,6 +111,11 @@ class SFTPTab(QWidget):
         self.remote_up_btn.clicked.connect(lambda: self.remote_up_dir.emit())
         self.remote_path_edit.returnPressed.connect(self.on_remote_path_enter)
         self.remote_tree.itemDoubleClicked.connect(self.on_remote_item_double_clicked)
+        # Some styles emit activated rather than doubleClicked; handle both
+        try:
+            self.remote_tree.itemActivated.connect(self.on_remote_item_activated)
+        except Exception:
+            pass
 
         # DnD handlers
         self.local_tree.startDrag = self._start_drag_local
@@ -306,6 +319,10 @@ class SFTPTab(QWidget):
         except Exception:
             pass
 
+    def on_remote_item_activated(self, item, column):
+        # Delegate to double-click handler
+        self.on_remote_item_double_clicked(item, column)
+
     def on_remote_path_enter(self):
         path = self.remote_path_edit.text().strip()
         if path:
@@ -321,10 +338,10 @@ class SFTPTab(QWidget):
             self.remote_up_dir.emit()
             return
         if is_dir:
-            # Build new path relative to current
-            if self._remote_path.endswith('/'):
-                new_path = self._remote_path + name
-            else:
-                new_path = self._remote_path + '/' + name
+            # Build POSIX path relative to current
+            base = self._remote_path or '/'
+            new_path = posixpath.normpath(posixpath.join(base, name))
+            if not new_path.startswith('/'):
+                new_path = '/' + new_path
             self.remote_change_dir.emit(new_path)
 
