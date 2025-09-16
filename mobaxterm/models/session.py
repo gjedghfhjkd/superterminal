@@ -8,6 +8,7 @@ class Session:
     host: str
     port: int
     username: Optional[str] = None
+    password: Optional[str] = None
     terminal_settings: bool = False
     network_settings: bool = False
     folder: Optional[str] = None 
@@ -29,6 +30,7 @@ class Session:
             'host': self.host,
             'port': self.port,
             'username': self.username,
+            'password': self.password,
             'terminal_settings': self.terminal_settings,
             'network_settings': self.network_settings,
             'bookmark_settings': self.bookmark_settings,
@@ -42,6 +44,7 @@ class Session:
             host=data['host'],
             port=data['port'],
             username=data['username'],
+            password=data.get('password'),
             terminal_settings=data.get('terminal_settings', False),
             network_settings=data.get('network_settings', False),
             bookmark_settings=data.get('bookmark_settings', False),

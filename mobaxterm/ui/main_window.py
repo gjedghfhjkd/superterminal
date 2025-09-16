@@ -32,7 +32,8 @@ class SSHThread(QThread):
         self.ssh_client.connect(
             host=self.session.host,
             port=self.session.port,
-            username=self.session.username
+            username=self.session.username,
+            password=self.session.password
         )
 
 class MobaXtermClone(QMainWindow):
@@ -359,6 +360,7 @@ class MobaXtermClone(QMainWindow):
                 host=new_name,
                 port=session.port,
                 username=session.username,
+                password=session.password,
                 folder=session.folder,
                 terminal_settings=session.terminal_settings,
                 network_settings=session.network_settings,
