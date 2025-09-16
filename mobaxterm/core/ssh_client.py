@@ -59,6 +59,11 @@ class SSHClient(QObject):
 
             # Configure remote environment: prompt and terminal behavior
             self.configure_remote_environment()
+            # Advertise UTF-8
+            try:
+                self.shell.send("export LANG=C.UTF-8 LC_ALL=C.UTF-8 2>/dev/null\n")
+            except Exception:
+                pass
             
         except paramiko.AuthenticationException:
             error_msg = "❌ Authentication failed. Please check credentials."

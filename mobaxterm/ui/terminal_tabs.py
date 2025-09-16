@@ -41,6 +41,7 @@ class TerminalTab(QWidget):
         self.input_enabled = False
         self.current_input = ""
         self.prompt_text = "$ "
+        self.local_echo_enabled = True
         
         # Only the terminal area is shown; input happens inline
         layout.addWidget(self.terminal_output)
@@ -57,9 +58,11 @@ class TerminalTab(QWidget):
         self.terminal_output.setReadOnly(True)
         
     def append_output(self, text):
-        # Strip ANSI escape sequences for readability in QTextEdit
+        # Strip ANSI escape sequences for readability in QTextEdit, but
+        # keep a minimal subset for CR handling
         cleaned = self._strip_ansi(text)
         # Normalize line endings
+        # Convert CRLF and bare CR to LF
         cleaned = cleaned.replace('\r\n', '\n').replace('\r', '\n')
         self._write(cleaned)
         # Auto-scroll to bottom
@@ -115,11 +118,19 @@ class TerminalTab(QWidget):
                 return True
             # Enter / Return
             if key in (Qt.Key_Return, Qt.Key_Enter):
+                if self.local_echo_enabled:
+                    self._write("\n")
                 # Send CRLF to be safe with various ttys
                 self._send("\r\n")
                 return True
             # Backspace
             if key == Qt.Key_Backspace:
+                # Local erase for UI feedback
+                if self.local_echo_enabled:
+                    cursor = self.terminal_output.textCursor()
+                    cursor.movePosition(QTextCursor.End)
+                    cursor.deletePreviousChar()
+                    self.terminal_output.setTextCursor(cursor)
                 self._send("\x7f")  # DEL
                 return True
             # Tab completion
@@ -161,6 +172,8 @@ class TerminalTab(QWidget):
             # Printable characters
             text = event.text()
             if text:
+                if self.local_echo_enabled:
+                    self._write(text)
                 self._send(text)
                 return True
         return super().eventFilter(obj, event)
