@@ -49,10 +49,18 @@ class SSHClient(QObject):
             self.shell = self.client.invoke_shell(term='xterm-256color', width=160, height=40)
             self.shell.settimeout(0.0)
             # Immediately disable echo before we start capturing output to avoid
-            # printing our setup commands
+            # printing our setup commands. Then flush any echoed bytes.
             try:
                 self.shell.send("stty -echo 2>/dev/null\n")
                 time.sleep(0.05)
+                # Flush echoed content (do not emit to UI)
+                flush_deadline = time.time() + 0.2
+                while time.time() < flush_deadline and self.shell.recv_ready():
+                    try:
+                        _ = self.shell.recv(65535)
+                    except Exception:
+                        break
+                    time.sleep(0.01)
             except Exception:
                 pass
             
@@ -61,6 +69,7 @@ class SSHClient(QObject):
             self.read_thread.daemon = True
             self.read_thread.start()
             
+            # Emit status to UI only (do not write to terminal widget)
             self.connection_status.emit(True, f"✅ Connected to {host}:{port}")
 
             # Configure remote environment silently (suppress echo while setting)
