@@ -113,17 +113,18 @@ class TerminalTab(QWidget):
                                     col = 1
                                 self._line_cursor = max(0, min(len(self._line_buffer), col - 1))
                                 self._render_current_line()
-                            elif cmd == 'K':  # erase in line (default: to end)
-                                # Default to end-of-line when params empty
+                            elif cmd == 'K':  # erase in line
+                                # Reset the editable line on K with mode 2 or when just after CR
                                 mode = params if params else '0'
-                                if mode == '0':
-                                    self._line_buffer = self._line_buffer[:self._line_cursor]
-                                elif mode == '1':
-                                    self._line_buffer = self._line_buffer[self._line_cursor:]
-                                    self._line_cursor = 0
-                                elif mode == '2':
+                                if mode == '2' or self._in_prompt:
                                     self._line_buffer = ''
                                     self._line_cursor = 0
+                                elif mode == '0':  # to end
+                                    self._line_buffer = self._line_buffer[:self._line_cursor]
+                                elif mode == '1':  # to start
+                                    self._line_buffer = self._line_buffer[self._line_cursor:]
+                                    self._line_cursor = 0
+                                self._in_prompt = False
                                 self._render_current_line()
                             # ignore others
                             i += 1
@@ -152,9 +153,10 @@ class TerminalTab(QWidget):
                 continue
             # CR / LF handling
             if ch == '\r':
-                # Move to line start
+                # Begin a fresh editable line repaint (readline typically emits CR before redrawing)
+                self._line_buffer = ''
                 self._line_cursor = 0
-                self._render_current_line()
+                self._in_prompt = True
                 i += 1
                 continue
             if ch == '\n':
