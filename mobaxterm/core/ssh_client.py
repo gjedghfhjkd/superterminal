@@ -56,13 +56,8 @@ class SSHClient(QObject):
             
             self.connection_status.emit(True, f"✅ Connected to {host}:{port}")
 
-            # Configure remote environment: prompt and terminal behavior
+            # Configure remote environment silently (suppress echo while setting)
             self.configure_remote_environment()
-            # Advertise UTF-8
-            try:
-                self.shell.send("export LANG=C.UTF-8 LC_ALL=C.UTF-8 2>/dev/null\n")
-            except Exception:
-                pass
             
         except paramiko.AuthenticationException:
             error_msg = "❌ Authentication failed. Please check credentials."
@@ -115,17 +110,14 @@ class SSHClient(QObject):
     def configure_remote_environment(self):
         """Set prompt to [user@host cwd]$ and enable sane terminal controls."""
         try:
-            # Disable XON/XOFF so Ctrl+S/Ctrl+Q do not freeze terminal; set Ctrl-C/D
-            # Ensure canonical mode and echo; prefer ERASE=^H for compatibility
-            # Prefer ERASE=^? (DEL); if не поддерживается, bash всё равно примет Ctrl+H из UI
-            self.shell.send("stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null\n")
-            self.shell.send("stty echo icanon icrnl -inlcr -igncr onlcr 2>/dev/null\n")
-            # Disable bracketed paste to avoid \x1b[?2004h noise
-            # Use bash builtins when available; ignore errors on other shells
-            self.shell.send("if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off'; fi 2>/dev/null\n")
-            # Set a simple, portable prompt. Works in bash/sh; \u,\h,\w are bash, but many servers use bash.
-            # If not bash, this will be ignored harmlessly.
-            self.shell.send("export PS1='[\\u@\\h \\w]\\$ '\n")
+            self.shell.send(
+                "stty -echo 2>/dev/null; "
+                "stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null; "
+                "stty echo icanon icrnl -inlcr -igncr onlcr 2>/dev/null; "
+                "if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off'; fi 2>/dev/null; "
+                "export PS1='[\\u@\\h \\w]\\$ '; export LANG=C.UTF-8 LC_ALL=C.UTF-8 2>/dev/null; "
+                "stty echo 2>/dev/null\n"
+            )
         except Exception:
             pass
     
