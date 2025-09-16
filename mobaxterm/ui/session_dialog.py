@@ -213,7 +213,7 @@ class SessionDialog(QDialog):
         
         # Row 1: Username checkbox
         self.ssh_username_check = QCheckBox("Specify username")
-        basic_layout.addWidget(self.ssh_username_check, 1, 0, 1, 2)
+        basic_layout.addWidget(self.ssh_username_check, 1, 1)
         
         # Row 2: Username label and input
         username_label = QLabel("Username:")
@@ -241,7 +241,7 @@ class SessionDialog(QDialog):
         
         # Row 4: Port checkbox
         self.ssh_port_check = QCheckBox("Custom port")
-        basic_layout.addWidget(self.ssh_port_check, 4, 0, 1, 2)
+        basic_layout.addWidget(self.ssh_port_check, 4, 1)
         
         # Row 5: Port label and input
         port_label = QLabel("Port:")
