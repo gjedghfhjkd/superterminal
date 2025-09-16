@@ -13,6 +13,26 @@ class NestedFolderDialog(QDialog):
         
     def initUI(self):
         layout = QVBoxLayout(self)
+        # Improve dropdown selection contrast inside this dialog
+        self.setStyleSheet("""
+            QComboBox QAbstractItemView {
+                background-color: white;
+                border: 1px solid #ccc;
+            }
+            QComboBox QAbstractItemView::item {
+                height: 28px;
+                padding: 6px;
+                color: #333;
+            }
+            QComboBox QAbstractItemView::item:hover {
+                background-color: #e9f3ff;
+                color: #0a58ca;
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background-color: #0078d7;
+                color: white;
+            }
+        """)
         
         # Parent folder selection
         parent_label = QLabel("Parent folder:")

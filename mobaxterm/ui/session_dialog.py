@@ -96,6 +96,25 @@ class SessionDialog(QDialog):
             QDialogButtonBox QPushButton[text="Cancel"]:hover {
                 background-color: #545b62;
             }
+            /* Improve dropdown (popup) visibility for all combo boxes */
+            QComboBox QAbstractItemView {
+                background-color: white;
+                border: 1px solid #ccc;
+                outline: none;
+            }
+            QComboBox QAbstractItemView::item {
+                height: 28px;
+                padding: 6px;
+                color: #333;
+            }
+            QComboBox QAbstractItemView::item:hover {
+                background-color: #e9f3ff;
+                color: #0a58ca;
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background-color: #0078d7;
+                color: white;
+            }
         """)
         
         main_layout = QVBoxLayout(self)
