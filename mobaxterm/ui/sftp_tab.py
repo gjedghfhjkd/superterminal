@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
-    QLineEdit, QPushButton, QTreeWidget, QTreeWidgetItem, QLabel, QMenu, QAction, QInputDialog
+    QLineEdit, QPushButton, QTreeWidget, QTreeWidgetItem, QLabel, QMenu, QAction, QInputDialog, QMessageBox
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QMimeData
 from PyQt5.QtGui import QDrag
@@ -274,6 +274,30 @@ class SFTPTab(QWidget):
         items = self.local_tree.selectedItems()
         if not items:
             return
+        # Confirm
+        count = 0
+        names = []
+        for it in items:
+            data = it.data(0, Qt.UserRole)
+            if not data:
+                continue
+            name = data.get('name')
+            if name == '..':
+                continue
+            names.append(name)
+            count += 1
+        if count == 0:
+            return
+        preview = ", ".join(names[:5]) + (" …" if len(names) > 5 else "")
+        reply = QMessageBox.question(
+            self,
+            "Confirm Delete",
+            f"Delete {count} selected item(s)?\n\n{preview}\n\nThis action cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            return
         for it in items:
             data = it.data(0, Qt.UserRole)
             if not data:
@@ -314,8 +338,23 @@ class SFTPTab(QWidget):
 
     def on_remote_delete(self):
         paths = self._collect_selected_remote_paths()
-        if paths:
-            self.request_remote_delete.emit(paths)
+        if not paths:
+            return
+        # Confirm
+        import os as _os
+        count = len(paths)
+        names = [_os.path.basename(p.rstrip('/')) or p for p in paths]
+        preview = ", ".join(names[:5]) + (" …" if len(names) > 5 else "")
+        reply = QMessageBox.question(
+            self,
+            "Confirm Delete",
+            f"Delete {count} selected item(s) on remote?\n\n{preview}\n\nFolders will be removed recursively.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            return
+        self.request_remote_delete.emit(paths)
 
     def on_remote_rename(self):
         items = self.remote_tree.selectedItems()
