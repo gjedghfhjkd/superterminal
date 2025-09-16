@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QTreeWidget, QTreeWidgetItem, QMenu, QAction, 
                              QInputDialog, QMessageBox, QLineEdit, QApplication)
-from PyQt5.QtCore import Qt, pyqtSignal, QMimeData
+from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QTimer
 from PyQt5.QtGui import QKeyEvent, QDrag
 
 class SessionTreeWidget(QTreeWidget):
@@ -45,6 +45,14 @@ class SessionTreeWidget(QTreeWidget):
         self.setDropIndicatorShown(True)
         self.setDragDropMode(QTreeWidget.InternalMove)
         self.setSelectionMode(QTreeWidget.SingleSelection)
+        # Автопрокрутка при DnD
+        self.setAutoScroll(True)
+        self.setAutoScrollMargin(24)
+        self._drag_active = False
+        self._last_drag_pos = None
+        self._auto_scroll_timer = QTimer(self)
+        self._auto_scroll_timer.setInterval(50)
+        self._auto_scroll_timer.timeout.connect(self._perform_auto_scroll)
         
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.on_context_menu)
@@ -104,12 +112,26 @@ class SessionTreeWidget(QTreeWidget):
     def dragEnterEvent(self, event):
         """Разрешаем drag enter"""
         if event.mimeData().hasText():
+            self._drag_active = True
+            self._last_drag_pos = event.pos()
+            if not self._auto_scroll_timer.isActive():
+                self._auto_scroll_timer.start()
             event.acceptProposedAction()
     
     def dragMoveEvent(self, event):
         """Обработка движения при перетаскивании"""
         if event.mimeData().hasText():
+            # Запоминаем последнюю позицию для автопрокрутки
+            self._last_drag_pos = event.pos()
             event.acceptProposedAction()
+    
+    def dragLeaveEvent(self, event):
+        """Остановка автопрокрутки при выходе из области виджета"""
+        self._drag_active = False
+        self._last_drag_pos = None
+        if self._auto_scroll_timer.isActive():
+            self._auto_scroll_timer.stop()
+        super().dragLeaveEvent(event)
     
     def dropEvent(self, event):
         """Обработка drop"""
@@ -129,6 +151,11 @@ class SessionTreeWidget(QTreeWidget):
             self.handle_folder_drop(folder_name, target_item)
             
         event.acceptProposedAction()
+        # Завершаем автопрокрутку
+        self._drag_active = False
+        self._last_drag_pos = None
+        if self._auto_scroll_timer.isActive():
+            self._auto_scroll_timer.stop()
 
     
     def handle_session_drop(self, mime_data, target_item):
@@ -184,6 +211,32 @@ class SessionTreeWidget(QTreeWidget):
 
         # Эмитим сигнал перемещения
         self.folder_moved.emit(folder_name, target_parent)
+    
+    def _perform_auto_scroll(self):
+        """Плавная прокрутка списка при перетаскивании у краев видимой области."""
+        if not self._drag_active or self._last_drag_pos is None:
+            return
+        viewport_rect = self.viewport().rect()
+        margin = 24
+        vertical_delta = 0
+        horizontal_delta = 0
+
+        if self._last_drag_pos.y() < viewport_rect.top() + margin:
+            vertical_delta = -20
+        elif self._last_drag_pos.y() > viewport_rect.bottom() - margin:
+            vertical_delta = 20
+
+        if self._last_drag_pos.x() < viewport_rect.left() + margin:
+            horizontal_delta = -20
+        elif self._last_drag_pos.x() > viewport_rect.right() - margin:
+            horizontal_delta = 20
+
+        if vertical_delta != 0:
+            vbar = self.verticalScrollBar()
+            vbar.setValue(vbar.value() + vertical_delta)
+        if horizontal_delta != 0:
+            hbar = self.horizontalScrollBar()
+            hbar.setValue(hbar.value() + horizontal_delta)
     
     def keyPressEvent(self, event: QKeyEvent):
         """Обработка нажатий клавиш"""
