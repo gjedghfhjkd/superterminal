@@ -240,11 +240,15 @@ class SessionDialog(QDialog):
         self.ssh_username_input = QLineEdit()
         self.ssh_username_input.setPlaceholderText("username")
         self.ssh_username_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # Default username to root
+        self.ssh_username_input.setText("root")
         basic_layout.addWidget(self.ssh_username_input, 1, 1)
         
         
         # Row 2: Port checkbox
         self.ssh_port_check = QCheckBox("Custom port")
+        # Ensure unchecked by default
+        self.ssh_port_check.setChecked(False)
         basic_layout.addWidget(self.ssh_port_check, 2, 1)
         
         # Row 3: Port label and input
