@@ -126,15 +126,15 @@ class SSHClient(QObject):
         try:
             # Run configuration in a single compound command to avoid multiple prompts
             cmd = (
-                'OLD_PS1="$PS1"; OLD_PC="$PROMPT_COMMAND"; '
-                'stty -echo 2>/dev/null; '
-                'PS1=; PROMPT_COMMAND=; '
-                'stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null; '
-                'stty icanon icrnl -inlcr -igncr onlcr 2>/dev/null; '
-                'if [ -n "$BASH_VERSION" ]; then bind '\''set enable-bracketed-paste off'\'' >/dev/null 2>&1; fi; '
-                'export LANG=C.UTF-8 LC_ALL=C.UTF-8 >/dev/null 2>&1; '
-                'stty echo 2>/dev/null; '
-                'PS1="$OLD_PS1"; PROMPT_COMMAND="$OLD_PC"\n'
+                "OLD_PS1=\"$PS1\"; OLD_PC=\"$PROMPT_COMMAND\"; "
+                "stty -echo 2>/dev/null; "
+                "PS1=; PROMPT_COMMAND=; "
+                "stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null; "
+                "stty icanon icrnl -inlcr -igncr onlcr 2>/dev/null; "
+                "if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off' >/dev/null 2>&1; fi; "
+                "export LANG=C.UTF-8 LC_ALL=C.UTF-8 >/dev/null 2>&1; "
+                "stty echo 2>/dev/null; "
+                "PS1=\"$OLD_PS1\"; PROMPT_COMMAND=\"$OLD_PC\"\n"
             )
             self.shell.send(cmd)
         except Exception:
