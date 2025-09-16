@@ -452,6 +452,13 @@ class TerminalTabs(QTabWidget):
         # Add faint cross button that becomes prominent on hover with red square
         self._add_close_button_to_tab(tab_index)
         return tab
+
+    def add_sftp_tab(self, session, sftp_tab_widget: QWidget):
+        display_name = getattr(session, 'name', None) or session.host
+        tab_index = self.addTab(sftp_tab_widget, f"📁 {display_name}")
+        self.setCurrentIndex(tab_index)
+        self._add_close_button_to_tab(tab_index)
+        return sftp_tab_widget
         
     def get_current_terminal(self):
         current_widget = self.currentWidget()

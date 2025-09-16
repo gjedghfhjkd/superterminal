@@ -11,6 +11,8 @@ from .session_tree_widget import SessionTreeWidget
 from .terminal_tabs import TerminalTabs
 from ..core.session_manager import SessionManager
 from ..core.ssh_client import SSHClient
+from ..core.sftp_client import SFTPClient
+from .sftp_tab import SFTPTab
 from ..models.session import Session
 import threading
 import time
@@ -51,6 +53,74 @@ class SSHThread(QThread):
         )
         # Start event loop so queued signals (input_to_send) are processed in this thread
         self.exec_()
+
+class SFTPThread(QThread):
+    connection_status = pyqtSignal(bool, str)
+    remote_listing = pyqtSignal(str, list)
+    change_dir = pyqtSignal(str)
+    up_dir = pyqtSignal()
+    upload_files = pyqtSignal(list, str)
+    download_files = pyqtSignal(list, str)
+
+    def __init__(self, session):
+        super().__init__()
+        self.session = session
+        self.client = None
+
+    def run(self):
+        self.client = SFTPClient()
+        self.client.connection_status.connect(self.connection_status.emit)
+        self.client.remote_listing.connect(self.remote_listing.emit)
+        # UI -> thread operations
+        self.change_dir.connect(self.client.change_dir)
+        self.up_dir.connect(self.client.up_dir)
+        self.upload_files.connect(self.client.upload_files)
+        self.download_files.connect(self.client.download_files)
+        # Connect now
+        self.client.connect(
+            host=self.session.host,
+            port=self.session.port,
+            username=self.session.username,
+            password=getattr(self.session, 'password', None),
+            auth_method=getattr(self.session, 'auth_method', 'password'),
+            key_filename=getattr(self.session, 'private_key_path', None),
+            passphrase=getattr(self.session, 'private_key_passphrase', None),
+            allow_agent=True,
+            look_for_keys=True
+        )
+        self.exec_()
+
+    def disconnect(self):
+        try:
+            if self.client:
+                self.client.disconnect()
+        except Exception:
+            pass
+
+    # Wrapper slots to forward calls via signals (queued to this thread)
+    def on_change_dir(self, path: str):
+        try:
+            self.change_dir.emit(path)
+        except Exception:
+            pass
+
+    def on_up_dir(self):
+        try:
+            self.up_dir.emit()
+        except Exception:
+            pass
+
+    def on_upload(self, local_paths: list, remote_dir: str):
+        try:
+            self.upload_files.emit(local_paths, remote_dir)
+        except Exception:
+            pass
+
+    def on_download(self, remote_paths: list, local_dir: str):
+        try:
+            self.download_files.emit(remote_paths, local_dir)
+        except Exception:
+            pass
 
 class MobaXtermClone(QMainWindow):
     def __init__(self):
@@ -374,7 +444,8 @@ class MobaXtermClone(QMainWindow):
             session.name = new_name
             if self.session_manager.update_session(session_index, session):
                 # Обновляем отображение: показываем Session Name, tooltip оставляем с host:port
-                item.setText(0, f"🖥️  {session.name}")
+                icon = "🖥️" if session.type == 'SSH' else "🔗"
+                item.setText(0, f"{icon}  {session.name}")
                 item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
     
     def rename_folder(self, old_folder_name, item):
@@ -530,7 +601,8 @@ class MobaXtermClone(QMainWindow):
     def add_session_to_tree(self, session, index, parent_item):
         session_item = QTreeWidgetItem(parent_item)
         display_name = getattr(session, 'name', None) or session.host
-        session_item.setText(0, f"🖥️  {display_name}")
+        icon = "🖥️" if session.type == 'SSH' else "🔗"
+        session_item.setText(0, f"{icon}  {display_name}")
         session_item.setData(0, Qt.UserRole, "session")
         session_item.setData(0, Qt.UserRole + 1, index)
         session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
@@ -574,7 +646,8 @@ class MobaXtermClone(QMainWindow):
             
             session_item = QTreeWidgetItem(folder_item)
             display_name = getattr(session, 'name', None) or session.host
-            session_item.setText(0, f"🖥️  {display_name}")
+            icon = "🖥️" if session.type == 'SSH' else "🔗"
+            session_item.setText(0, f"{icon}  {display_name}")
             session_item.setData(0, Qt.UserRole, "session")
             session_item.setData(0, Qt.UserRole + 1, session_index)
             session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
@@ -710,6 +783,45 @@ class MobaXtermClone(QMainWindow):
 
             # If the user starts typing immediately, ensure input is enabled
             terminal_tab.enable_input()
+        elif session and session.type == 'SFTP':
+            # Check existing SFTP tab
+            if session_index in getattr(self, 'sftp_threads', {}):
+                for i in range(self.terminal_tabs.count()):
+                    tab = self.terminal_tabs.widget(i)
+                    if hasattr(tab, 'session_index') and tab.session_index == session_index:
+                        self.terminal_tabs.setCurrentIndex(i)
+                        return
+                return
+
+            self.current_session_index = session_index
+            self.show_loading(f"Connecting (SFTP) to {session.host}...")
+
+            # Create SFTP tab UI
+            sftp_tab = SFTPTab(session)
+            sftp_tab.session_index = session_index
+
+            # Start SFTP thread
+            sftp_thread = SFTPThread(session)
+            # Wire UI -> thread navigation via wrapper slots to ensure queued delivery
+            sftp_tab.remote_change_dir.connect(sftp_thread.on_change_dir)
+            sftp_tab.remote_up_dir.connect(sftp_thread.on_up_dir)
+            sftp_tab.request_upload.connect(sftp_thread.on_upload)
+            sftp_tab.request_download.connect(sftp_thread.on_download)
+            # Wire thread -> UI
+            sftp_thread.remote_listing.connect(sftp_tab.set_remote_listing)
+            sftp_thread.connection_status.connect(
+                lambda status, msg: self.update_connection_status(session_index, status, msg)
+            )
+
+            sftp_thread.start()
+
+            # Lazily create dict to track SFTP threads
+            if not hasattr(self, 'sftp_threads'):
+                self.sftp_threads = {}
+            self.sftp_threads[session_index] = sftp_thread
+
+            # Add tab to UI
+            self.terminal_tabs.add_sftp_tab(session, sftp_tab)
     
     def execute_command(self, session_index, command: str):
         if session_index in self.ssh_threads and command is not None:
@@ -766,6 +878,14 @@ class MobaXtermClone(QMainWindow):
                     ssh_thread.quit()
                     ssh_thread.wait()
                 del self.ssh_threads[session_index]
+            # SFTP cleanup
+            if hasattr(self, 'sftp_threads') and session_index in self.sftp_threads:
+                sftp_thread = self.sftp_threads[session_index]
+                if sftp_thread.isRunning():
+                    sftp_thread.disconnect()
+                    sftp_thread.quit()
+                    sftp_thread.wait()
+                del self.sftp_threads[session_index]
         
         self.terminal_tabs.removeTab(index)
         
