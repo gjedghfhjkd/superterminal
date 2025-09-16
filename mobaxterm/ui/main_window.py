@@ -11,6 +11,8 @@ from .session_tree_widget import SessionTreeWidget
 from .terminal_tabs import TerminalTabs
 from ..core.session_manager import SessionManager
 from ..core.ssh_client import SSHClient
+from ..core.sftp_client import SFTPClient
+from .sftp_tab import SFTPTab
 from ..models.session import Session
 import threading
 import time
@@ -51,6 +53,45 @@ class SSHThread(QThread):
         )
         # Start event loop so queued signals (input_to_send) are processed in this thread
         self.exec_()
+
+class SFTPThread(QThread):
+    connection_status = pyqtSignal(bool, str)
+    remote_listing = pyqtSignal(str, list)
+    change_dir = pyqtSignal(str)
+    up_dir = pyqtSignal()
+
+    def __init__(self, session):
+        super().__init__()
+        self.session = session
+        self.client = None
+
+    def run(self):
+        self.client = SFTPClient()
+        self.client.connection_status.connect(self.connection_status.emit)
+        self.client.remote_listing.connect(self.remote_listing.emit)
+        # UI -> thread operations
+        self.change_dir.connect(self.client.change_dir)
+        self.up_dir.connect(self.client.up_dir)
+        # Connect now
+        self.client.connect(
+            host=self.session.host,
+            port=self.session.port,
+            username=self.session.username,
+            password=getattr(self.session, 'password', None),
+            auth_method=getattr(self.session, 'auth_method', 'password'),
+            key_filename=getattr(self.session, 'private_key_path', None),
+            passphrase=getattr(self.session, 'private_key_passphrase', None),
+            allow_agent=True,
+            look_for_keys=True
+        )
+        self.exec_()
+
+    def disconnect(self):
+        try:
+            if self.client:
+                self.client.disconnect()
+        except Exception:
+            pass
 
 class MobaXtermClone(QMainWindow):
     def __init__(self):
@@ -710,6 +751,43 @@ class MobaXtermClone(QMainWindow):
 
             # If the user starts typing immediately, ensure input is enabled
             terminal_tab.enable_input()
+        elif session and session.type == 'SFTP':
+            # Check existing SFTP tab
+            if session_index in getattr(self, 'sftp_threads', {}):
+                for i in range(self.terminal_tabs.count()):
+                    tab = self.terminal_tabs.widget(i)
+                    if hasattr(tab, 'session_index') and tab.session_index == session_index:
+                        self.terminal_tabs.setCurrentIndex(i)
+                        return
+                return
+
+            self.current_session_index = session_index
+            self.show_loading(f"Connecting (SFTP) to {session.host}...")
+
+            # Create SFTP tab UI
+            sftp_tab = SFTPTab(session)
+            sftp_tab.session_index = session_index
+
+            # Start SFTP thread
+            sftp_thread = SFTPThread(session)
+            # Wire UI -> thread navigation
+            sftp_tab.remote_change_dir.connect(sftp_thread.change_dir.emit)
+            sftp_tab.remote_up_dir.connect(sftp_thread.up_dir.emit)
+            # Wire thread -> UI
+            sftp_thread.remote_listing.connect(sftp_tab.set_remote_listing)
+            sftp_thread.connection_status.connect(
+                lambda status, msg: self.update_connection_status(session_index, status, msg)
+            )
+
+            sftp_thread.start()
+
+            # Lazily create dict to track SFTP threads
+            if not hasattr(self, 'sftp_threads'):
+                self.sftp_threads = {}
+            self.sftp_threads[session_index] = sftp_thread
+
+            # Add tab to UI
+            self.terminal_tabs.add_sftp_tab(session, sftp_tab)
     
     def execute_command(self, session_index, command: str):
         if session_index in self.ssh_threads and command is not None:
@@ -766,6 +844,14 @@ class MobaXtermClone(QMainWindow):
                     ssh_thread.quit()
                     ssh_thread.wait()
                 del self.ssh_threads[session_index]
+            # SFTP cleanup
+            if hasattr(self, 'sftp_threads') and session_index in self.sftp_threads:
+                sftp_thread = self.sftp_threads[session_index]
+                if sftp_thread.isRunning():
+                    sftp_thread.disconnect()
+                    sftp_thread.quit()
+                    sftp_thread.wait()
+                del self.sftp_threads[session_index]
         
         self.terminal_tabs.removeTab(index)
         
