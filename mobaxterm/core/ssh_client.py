@@ -124,28 +124,31 @@ class SSHClient(QObject):
     def configure_remote_environment(self):
         """Set prompt to [user@host cwd]$ and enable sane terminal controls."""
         try:
-            # 1) keyboard/erase settings (may be echoed; prepare to suppress)
-            cmd1 = "stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null\n"
-            self._suppress_bytes += cmd1.encode('utf-8')
-            self.shell.send(cmd1)
+            # 1) turn echo OFF first (this line itself may echo; suppress it)
+            cmd0 = "stty -echo 2>/dev/null\n"
+            self._suppress_bytes += cmd0.encode('utf-8')
+            self.shell.send(cmd0)
             time.sleep(0.01)
-            # 2) keep PS1 empty to avoid prompt prints during setup
-            cmd2 = ":; PS1=\n"
-            self._suppress_bytes += cmd2.encode('utf-8')
-            self.shell.send(cmd2)
+            # 2) keep PS1 empty to avoid prompt prints during setup (suppress)
+            cmd_ps1_empty = ":; PS1=\n"
+            self._suppress_bytes += cmd_ps1_empty.encode('utf-8')
+            self.shell.send(cmd_ps1_empty)
             time.sleep(0.01)
-            # 3) line discipline (not echoed when echo off)
-            self.shell.send("stty echo icanon icrnl -inlcr -igncr onlcr 2>/dev/null\n")
+            # 3) keyboard/erase and flow control (with echo still OFF)
+            self.shell.send("stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null\n")
             time.sleep(0.01)
-            # 4) bash tweak (suppress echo if bash)
+            # 4) line discipline (keep echo OFF here explicitly)
+            self.shell.send("stty -echo icanon icrnl -inlcr -igncr onlcr 2>/dev/null\n")
+            time.sleep(0.01)
+            # 5) bash tweak (no output)
             self.shell.send("if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off' >/dev/null 2>&1; fi\n")
             time.sleep(0.01)
-            # 5) prompt and locale
-            self.shell.send("export PS1='[\\u@\\h \\w]\\$ ' >/dev/null 2>&1\n")
-            time.sleep(0.01)
+            # 6) locale and prompt (no output)
             self.shell.send("export LANG=C.UTF-8 LC_ALL=C.UTF-8 >/dev/null 2>&1\n")
             time.sleep(0.01)
-            # 6) re-enable echo
+            self.shell.send("export PS1='[\\u@\\h \\w]\\$ ' >/dev/null 2>&1\n")
+            time.sleep(0.01)
+            # 7) finally re-enable echo
             self.shell.send("stty echo 2>/dev/null\n")
         except Exception:
             pass
