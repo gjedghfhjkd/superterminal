@@ -1,9 +1,10 @@
 from PyQt5.QtWidgets import (QTabWidget, QWidget, QVBoxLayout, QTextEdit, 
                              QHBoxLayout, QLineEdit, QLabel, QPushButton)
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QTextCursor
 
 class TerminalTab(QWidget):
+    command_submitted = pyqtSignal(str)
     def __init__(self, session, parent=None):
         super().__init__(parent)
         self.session = session
@@ -14,7 +15,7 @@ class TerminalTab(QWidget):
         layout.setSpacing(0)
         layout.setContentsMargins(0, 0, 0, 0)
         
-        # Terminal output
+        # Terminal output (now also used for input)
         self.terminal_output = QTextEdit()
         self.terminal_output.setStyleSheet("""
             QTextEdit {
@@ -27,44 +28,28 @@ class TerminalTab(QWidget):
             }
         """)
         self.terminal_output.setPlainText("")
+        self.terminal_output.installEventFilter(self)
+        self.terminal_output.setCursorWidth(2)
+        self.terminal_output.setReadOnly(True)
         
-        # Command input area
-        input_container = QWidget()
-        input_layout = QHBoxLayout(input_container)
-        input_layout.setSpacing(5)
-        input_layout.setContentsMargins(0, 5, 0, 0)
+        # State for inline input handling
+        self.input_enabled = False
+        self.current_input = ""
+        self.prompt_text = "$ "
         
-        self.prompt_label = QLabel("$")
-        self.prompt_label.setStyleSheet("color: #00ff00; font-weight: bold; font-size: 16px;")
-        self.prompt_label.setFixedWidth(20)
-        
-        self.command_input = QLineEdit()
-        self.command_input.setStyleSheet("""
-            QLineEdit {
-                background-color: black;
-                color: #00ff00;
-                border: 1px solid #555;
-                border-radius: 2px;
-                padding: 5px;
-                font-family: 'Consolas', 'Courier New', monospace;
-                font-size: 14px;
-            }
-        """)
-        self.command_input.setDisabled(True)
-        self.command_input.setPlaceholderText("Type command...")
-        
-        input_layout.addWidget(self.prompt_label)
-        input_layout.addWidget(self.command_input)
-        
+        # Only the terminal area is shown; input happens inline
         layout.addWidget(self.terminal_output)
-        layout.addWidget(input_container)
         
     def enable_input(self):
-        self.command_input.setDisabled(False)
-        self.command_input.setFocus()
+        self.input_enabled = True
+        self.terminal_output.setReadOnly(False)
+        self.terminal_output.setFocus()
+        self.current_input = ""
+        self._write(self.prompt_text)
         
     def disable_input(self):
-        self.command_input.setDisabled(True)
+        self.input_enabled = False
+        self.terminal_output.setReadOnly(True)
         
     def append_output(self, text):
         self.terminal_output.append(text)
@@ -72,6 +57,44 @@ class TerminalTab(QWidget):
         cursor = self.terminal_output.textCursor()
         cursor.movePosition(QTextCursor.End)
         self.terminal_output.setTextCursor(cursor)
+
+    def _write(self, text: str):
+        cursor = self.terminal_output.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        cursor.insertText(text)
+        self.terminal_output.setTextCursor(cursor)
+
+    def eventFilter(self, obj, event):
+        if obj is self.terminal_output and event.type() == QEvent.KeyPress:
+            if not self.input_enabled:
+                return True if self.terminal_output.isReadOnly() else False
+            key = event.key()
+            # Handle Enter
+            if key in (Qt.Key_Return, Qt.Key_Enter):
+                self._write("\n")
+                command = self.current_input
+                self.current_input = ""
+                self.command_submitted.emit(command)
+                return True
+            # Handle Backspace
+            if key == Qt.Key_Backspace:
+                if len(self.current_input) > 0:
+                    self.current_input = self.current_input[:-1]
+                    cursor = self.terminal_output.textCursor()
+                    cursor.movePosition(QTextCursor.End)
+                    cursor.deletePreviousChar()
+                    self.terminal_output.setTextCursor(cursor)
+                return True
+            # Block navigation/editing keys to keep cursor at end
+            if key in (Qt.Key_Left, Qt.Key_Up, Qt.Key_Down, Qt.Key_Home, Qt.Key_PageUp, Qt.Key_PageDown):
+                return True
+            # Printable text
+            text = event.text()
+            if text:
+                self.current_input += text
+                self._write(text)
+                return True
+        return super().eventFilter(obj, event)
 
 class TerminalTabs(QTabWidget):
     tab_close_requested = pyqtSignal(int)

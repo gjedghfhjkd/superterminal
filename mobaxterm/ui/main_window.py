@@ -692,8 +692,8 @@ class MobaXtermClone(QMainWindow):
             # Создаем новую вкладку терминала
             terminal_tab = self.terminal_tabs.add_terminal_tab(session)
             terminal_tab.session_index = session_index
-            terminal_tab.command_input.returnPressed.connect(
-                lambda: self.execute_command(session_index)
+            terminal_tab.command_submitted.connect(
+                lambda cmd, idx=session_index: self.execute_command(idx, cmd)
             )
             
             # Создаем и запускаем SSH поток
@@ -705,15 +705,13 @@ class MobaXtermClone(QMainWindow):
             
             self.ssh_threads[session_index] = ssh_thread
     
-    def execute_command(self, session_index):
-        if session_index in self.ssh_threads:
+    def execute_command(self, session_index, command: str):
+        if session_index in self.ssh_threads and command is not None:
             ssh_thread = self.ssh_threads[session_index]
             terminal_tab = self.terminal_tabs.get_current_terminal()
-            if terminal_tab and terminal_tab.command_input.text():
-                command = terminal_tab.command_input.text()
-                terminal_tab.append_output(f"$ {command}")
+            if terminal_tab:
+                # Command line is already visible inline in the terminal widget
                 ssh_thread.ssh_client.send_command(command)
-                terminal_tab.command_input.clear()
     
     def update_connection_status(self, session_index, connected, message):
         self.hide_loading()
