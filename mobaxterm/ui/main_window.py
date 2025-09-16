@@ -32,7 +32,12 @@ class SSHThread(QThread):
         self.ssh_client.connect(
             host=self.session.host,
             port=self.session.port,
-            username=self.session.username
+            username=self.session.username,
+            auth_method=getattr(self.session, 'auth_method', 'password'),
+            key_filename=getattr(self.session, 'private_key_path', None),
+            passphrase=getattr(self.session, 'private_key_passphrase', None),
+            allow_agent=True,
+            look_for_keys=True
         )
 
 class MobaXtermClone(QMainWindow):
@@ -284,6 +289,7 @@ class MobaXtermClone(QMainWindow):
         self.sessions_tree.context_menu_requested.connect(self.handle_tree_context_menu)
         self.sessions_tree.rename_requested.connect(self.handle_rename_request)
         self.sessions_tree.session_moved.connect(self.handle_session_move)
+        self.sessions_tree.folder_moved.connect(self.handle_folder_move)
 
         
         # Load saved sessions
@@ -317,6 +323,20 @@ class MobaXtermClone(QMainWindow):
         else:
             print("Failed to update session")
 
+    def handle_folder_move(self, folder_path, target_parent):
+        """Обработка перемещения папки"""
+        # Валидация на уровне UI (дополнительно к бэкенду)
+        if target_parent and (target_parent == folder_path or target_parent.startswith(folder_path + '/')):
+            QMessageBox.warning(self, "Invalid Move", "Cannot move a folder into itself or its descendant.")
+            return
+
+        if not self.session_manager.move_folder(folder_path, target_parent):
+            QMessageBox.warning(self, "Move Failed", "Could not move folder. It may already exist at destination or the move is invalid.")
+            return
+
+        # Успех — перезагружаем дерево
+        self.load_sessions()
+
     def handle_rename_request(self, item_type, item):
         """Обработка запроса на переименование"""
         if item_type == "folder":
@@ -344,6 +364,7 @@ class MobaXtermClone(QMainWindow):
                 host=new_name,
                 port=session.port,
                 username=session.username,
+                password=session.password,
                 folder=session.folder,
                 terminal_settings=session.terminal_settings,
                 network_settings=session.network_settings,
@@ -414,60 +435,27 @@ class MobaXtermClone(QMainWindow):
         self.session_tab.setStyleSheet(self.get_tab_style(False))
         
     def load_sessions(self):
-        print("=== Loading sessions ===")
+        """Загрузка сессий с поддержкой вложенных папок"""
         self.sessions_tree.clear()
         self.folder_items.clear()
         self.session_items.clear()
         
-        # Add folders first
-        folders = self.session_manager.get_all_folders()
-        print(f"Found folders: {folders}")
+        # Создаем (и отображаем) все папки, включая вложенные
+        all_folders = self.session_manager.get_all_folders()
+        for folder_path in all_folders:
+            if folder_path:
+                self.add_folder_to_tree(folder_path)
         
-        for folder_name in folders:
-            folder_item = QTreeWidgetItem(self.sessions_tree)
-            folder_item.setText(0, f"📁 {folder_name}")
-            folder_item.setData(0, Qt.UserRole, "folder")
-            folder_item.setData(0, Qt.UserRole + 1, folder_name)
-            folder_item.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator)
-            self.folder_items[folder_name] = folder_item
-            
-            # Add sessions in this folder
-            sessions = self.session_manager.get_sessions_in_folder(folder_name)
-            print(f"Folder '{folder_name}' has {len(sessions)} sessions")
-            
-            for session in sessions:
-                session_index = self.session_manager.sessions.index(session)
-                session_item = QTreeWidgetItem(folder_item)
-                session_item.setText(0, f"🖥️  {session.host}")
-                session_item.setData(0, Qt.UserRole, "session")
-                session_item.setData(0, Qt.UserRole + 1, session_index)
-                session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
-                self.session_items[session_index] = session_item
-                print(f"  - Session {session_index}: {session.host} (folder: {session.folder})")
-        
-        # Add sessions without folders (теперь ищем по session.folder вместо индексов)
-        orphan_sessions = []
-        for session_index, session in enumerate(self.session_manager.sessions):
-            # Используем session_manager.folders вместо self.folders
-            if not session.folder or session.folder not in self.session_manager.folders or session_index not in self.session_manager.folders[session.folder]:
-                orphan_sessions.append((session_index, session))
-        
-        print(f"Orphan sessions (no folder): {[s[0] for s in orphan_sessions]}")
-        
-        for session_index, session in orphan_sessions:
-            session_item = QTreeWidgetItem(self.sessions_tree)
-            session_item.setText(0, f"🖥️  {session.host}")
-            session_item.setData(0, Qt.UserRole, "session")
-            session_item.setData(0, Qt.UserRole + 1, session_index)
-            session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
-            self.session_items[session_index] = session_item
-            print(f"  - Orphan session {session_index}: {session.host} (folder: {session.folder})")
-        
-        # Expand all folders by default
-        for folder_item in self.folder_items.values():
-            folder_item.setExpanded(True)
-        
-        print("=== Finished loading sessions ===\n")
+        # Добавляем сессии в соответствующие папки или в корень
+        for index, session in enumerate(self.session_manager.get_all_sessions()):
+            if session.folder:
+                folder_item = self.folder_items.get(session.folder)
+                if not folder_item:
+                    folder_item = self.add_folder_to_tree(session.folder)
+                parent_item = folder_item if folder_item else self.sessions_tree
+                self.add_session_to_tree(session, index, parent_item)
+            else:
+                self.add_session_to_tree(session, index, self.sessions_tree)
         
     def handle_tree_context_menu(self, action_type, item):
         if action_type == "add_folder":
@@ -478,6 +466,19 @@ class MobaXtermClone(QMainWindow):
             if item and item.data(0, Qt.UserRole) == "folder":
                 folder_name = item.data(0, Qt.UserRole + 1)
                 self.add_new_session_to_folder(folder_name)
+        elif action_type == "add_subfolder":
+            if item and item.data(0, Qt.UserRole) == "folder":
+                parent_folder = item.data(0, Qt.UserRole + 1)
+                sub_name, ok = QInputDialog.getText(
+                    self,
+                    "New Subfolder",
+                    f"Enter subfolder name under '{parent_folder}':",
+                    QLineEdit.Normal
+                )
+                if ok and sub_name:
+                    new_path = f"{parent_folder}/{sub_name}"
+                    if self.session_manager.add_folder(new_path):
+                        self.load_sessions()
         elif action_type == "delete_folder":
             if item and item.data(0, Qt.UserRole) == "folder":
                 folder_name = item.data(0, Qt.UserRole + 1)
@@ -534,15 +535,27 @@ class MobaXtermClone(QMainWindow):
         self.session_items[index] = session_item
         
     def add_folder_to_tree(self, folder_name):
-        folder_item = QTreeWidgetItem(self.sessions_tree)
-        folder_item.setText(0, f"📁 {folder_name}")
-        folder_item.setData(0, Qt.UserRole, "folder")
-        folder_item.setData(0, Qt.UserRole + 1, folder_name)
-        folder_item.setToolTip(0, f"Folder: {folder_name}")
-        folder_item.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator)
-        folder_item.setExpanded(True)
-        self.folder_items[folder_name] = folder_item
-        return folder_item
+        # Создаем вложенные элементы для пути вида "parent/child/sub"
+        parts = folder_name.split('/') if folder_name else []
+        parent_item = None
+        built_parts = []
+        for part in parts:
+            built_parts.append(part)
+            current_path = '/'.join(built_parts)
+            if current_path in self.folder_items:
+                parent_item = self.folder_items[current_path]
+                continue
+            container = parent_item if parent_item else self.sessions_tree
+            folder_item = QTreeWidgetItem(container)
+            folder_item.setText(0, f"📁 {part}")
+            folder_item.setData(0, Qt.UserRole, "folder")
+            folder_item.setData(0, Qt.UserRole + 1, current_path)
+            folder_item.setToolTip(0, f"Folder: {current_path}")
+            folder_item.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator)
+            folder_item.setExpanded(True)
+            self.folder_items[current_path] = folder_item
+            parent_item = folder_item
+        return self.folder_items.get(folder_name)
     
     def add_new_session_to_folder(self, folder_name):
         dialog = SessionDialog(self)
