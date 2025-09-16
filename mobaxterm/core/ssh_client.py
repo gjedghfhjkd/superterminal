@@ -155,7 +155,7 @@ class SSHClient(QObject):
             self.shell.send("if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off' >/dev/null 2>&1; fi\n")
             time.sleep(0.01)
             # 5) prompt and locale
-            self.shell.send("export PS1='[\\u@\\h \\w]\\$ ' >/dev/null 2>&1; printf ''\n")
+            self.shell.send("export PS1='[\\u@\\h \\w]\\$ ' >/dev/null 2>&1\n")
             time.sleep(0.01)
             self.shell.send("export LANG=C.UTF-8 LC_ALL=C.UTF-8 >/dev/null 2>&1\n")
             time.sleep(0.01)
