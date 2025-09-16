@@ -124,10 +124,15 @@ class SSHClient(QObject):
     def configure_remote_environment(self):
         """Set prompt to [user@host cwd]$ and enable sane terminal controls."""
         try:
-            # Run configuration in a single compound command to avoid multiple prompts
+            # First: turn echo OFF so next commands are not echoed by the PTY
+            cmd0 = "stty -echo 2>/dev/null\n"
+            self._suppress_bytes += cmd0.encode('utf-8')
+            self.shell.send(cmd0)
+            time.sleep(0.02)
+
+            # Then: run all settings with echo OFF, finally re-enable echo
             cmd = (
                 "OLD_PS1=\"$PS1\"; OLD_PC=\"$PROMPT_COMMAND\"; "
-                "stty -echo 2>/dev/null; "
                 "PS1=; PROMPT_COMMAND=; "
                 "stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null; "
                 "stty icanon icrnl -inlcr -igncr onlcr 2>/dev/null; "
