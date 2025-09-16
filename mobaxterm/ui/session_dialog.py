@@ -38,6 +38,7 @@ class SessionDialog(QDialog):
                 border: 1px solid #ccc;
                 border-radius: 3px;
                 background-color: white;
+                min-height: 28px;
             }
             QLineEdit:focus, QSpinBox:focus, QComboBox:focus {
                 border-color: #0078d7;
