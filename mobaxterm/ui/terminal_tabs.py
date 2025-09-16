@@ -17,6 +17,8 @@ class TerminalTab(QWidget):
         self._send_key = None  # callable that sends raw data to SSH
         self._send_queue = []  # buffer keys until sender is ready
         self.initUI()
+        # Track relative zoom steps applied to the terminal_output
+        self._zoom_steps = 0
         
     def initUI(self):
         layout = QVBoxLayout(self)
@@ -318,10 +320,30 @@ class TerminalTab(QWidget):
 
     def eventFilter(self, obj, event):
         if obj in (self.terminal_output, self.terminal_output.viewport()) and event.type() == QEvent.KeyPress:
-            if not self.input_enabled:
-                return True if self.terminal_output.isReadOnly() else False
+            # Handle zoom shortcuts regardless of input mode
             key = event.key()
             modifiers = event.modifiers()
+            if (modifiers & Qt.ControlModifier):
+                # Ctrl + : zoom in (requires Shift on many layouts)
+                if key == Qt.Key_Plus:
+                    self.terminal_output.zoomIn(1)
+                    self._zoom_steps += 1
+                    return True
+                # Ctrl - : zoom out
+                if key == Qt.Key_Minus:
+                    self.terminal_output.zoomOut(1)
+                    self._zoom_steps -= 1
+                    return True
+                # Ctrl = : reset to default zoom
+                if key == Qt.Key_Equal:
+                    if self._zoom_steps > 0:
+                        self.terminal_output.zoomOut(self._zoom_steps)
+                    elif self._zoom_steps < 0:
+                        self.terminal_output.zoomIn(-self._zoom_steps)
+                    self._zoom_steps = 0
+                    return True
+            if not self.input_enabled:
+                return True if self.terminal_output.isReadOnly() else False
             # Ctrl+C
             if (modifiers & Qt.ControlModifier) and key == Qt.Key_C:
                 self._send("\x03")  # ETX
