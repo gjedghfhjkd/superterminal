@@ -110,7 +110,7 @@ class SFTPTab(QWidget):
         self.local_tree.itemDoubleClicked.connect(self.on_local_item_double_clicked)
 
         # Wire remote events
-        self.remote_up_btn.clicked.connect(lambda: self.remote_up_dir.emit())
+        self.remote_up_btn.clicked.connect(self.on_remote_up)
         self.remote_path_edit.returnPressed.connect(self.on_remote_path_enter)
         self.remote_tree.itemDoubleClicked.connect(self.on_remote_item_double_clicked)
         # Some styles emit activated rather than doubleClicked; handle both
@@ -491,7 +491,7 @@ class SFTPTab(QWidget):
         name = data.get('name')
         is_dir = data.get('is_dir')
         if name == '..':
-            self.remote_up_dir.emit()
+            self.on_remote_up()
             return
         if is_dir:
             # Build POSIX path relative to current
@@ -500,4 +500,9 @@ class SFTPTab(QWidget):
             if not new_path.startswith('/'):
                 new_path = '/' + new_path
             self.remote_change_dir.emit(new_path)
+
+    def on_remote_up(self):
+        base = self._remote_path or '/'
+        parent = posixpath.dirname(base.rstrip('/')) or '/'
+        self.remote_change_dir.emit(parent)
 

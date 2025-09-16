@@ -132,7 +132,14 @@ class SFTPClient(QObject):
     def up_dir(self):
         if not self.current_path:
             return
-        parent = posixpath.dirname(self.current_path.rstrip('/')) or '/'
+        # If current_path is root or empty, stay at '/'
+        cur = self.current_path
+        if not cur or cur == '/':
+            self.change_dir('/')
+            return
+        parent = posixpath.dirname(cur.rstrip('/'))
+        if not parent:
+            parent = '/'
         self.change_dir(parent)
 
     # ===== Transfers =====
