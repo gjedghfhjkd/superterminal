@@ -196,52 +196,37 @@ class SessionDialog(QDialog):
         self.ssh_host_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         basic_layout.addWidget(self.ssh_host_input, 0, 1)
         
-        # Row 1: Username checkbox
-        self.ssh_username_check = QCheckBox("Specify username")
-        basic_layout.addWidget(self.ssh_username_check, 1, 1)
-        
-        # Row 2: Username label and input
+        # Row 1: Username label and input (always enabled)
         username_label = QLabel("Username:")
         username_label.setMinimumWidth(100)
-        basic_layout.addWidget(username_label, 2, 0, Qt.AlignRight)
+        basic_layout.addWidget(username_label, 1, 0, Qt.AlignRight)
         
         self.ssh_username_input = QLineEdit()
         self.ssh_username_input.setPlaceholderText("username")
-        self.ssh_username_input.setEnabled(False)
         self.ssh_username_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        basic_layout.addWidget(self.ssh_username_input, 2, 1)
+        basic_layout.addWidget(self.ssh_username_input, 1, 1)
         
-        # Row 3: Password label and input
-        password_label = QLabel("Password:")
-        password_label.setMinimumWidth(100)
-        basic_layout.addWidget(password_label, 3, 0, Qt.AlignRight)
         
-        self.ssh_password_input = QLineEdit()
-        self.ssh_password_input.setEchoMode(QLineEdit.Password)
-        self.ssh_password_input.setPlaceholderText("password")
-        self.ssh_password_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        basic_layout.addWidget(self.ssh_password_input, 3, 1)
-        
-        # Row 4: Port checkbox
+        # Row 2: Port checkbox
         self.ssh_port_check = QCheckBox("Custom port")
-        basic_layout.addWidget(self.ssh_port_check, 4, 1)
+        basic_layout.addWidget(self.ssh_port_check, 2, 1)
         
-        # Row 5: Port label and input
+        # Row 3: Port label and input
         port_label = QLabel("Port:")
         port_label.setMinimumWidth(100)
-        basic_layout.addWidget(port_label, 5, 0, Qt.AlignRight)
+        basic_layout.addWidget(port_label, 3, 0, Qt.AlignRight)
         
         self.ssh_port_input = QSpinBox()
         self.ssh_port_input.setRange(1, 65535)
         self.ssh_port_input.setValue(22)
         self.ssh_port_input.setEnabled(False)
         self.ssh_port_input.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        basic_layout.addWidget(self.ssh_port_input, 5, 1)
+        basic_layout.addWidget(self.ssh_port_input, 3, 1)
         
-        # Row 6: Folder label and combo
+        # Row 4: Folder label and combo
         folder_label = QLabel("Folder:")
         folder_label.setMinimumWidth(100)
-        basic_layout.addWidget(folder_label, 6, 0, Qt.AlignRight)
+        basic_layout.addWidget(folder_label, 4, 0, Qt.AlignRight)
         
         self.folder_combo = QComboBox()
         self.folder_combo.addItem("(No folder)", None)
@@ -253,7 +238,7 @@ class SessionDialog(QDialog):
                 self.folder_combo.addItem(folder, folder)
         
         self.folder_combo.addItem("+ Create new folder...", "new")
-        basic_layout.addWidget(self.folder_combo, 6, 1)
+        basic_layout.addWidget(self.folder_combo, 4, 1)
         
         layout.addWidget(basic_group)
         
@@ -276,10 +261,18 @@ class SessionDialog(QDialog):
         self.auth_method_combo.addItem("SSH key", "key")
         auth_layout.addWidget(self.auth_method_combo, 0, 1)
 
-        # Row 1: Private key path
-        key_path_label = QLabel("Private key:")
-        key_path_label.setMinimumWidth(100)
-        auth_layout.addWidget(key_path_label, 1, 0, Qt.AlignRight)
+        # Row 1: Password (for password auth)
+        self.auth_password_label = QLabel("Password:")
+        self.auth_password_label.setMinimumWidth(100)
+        auth_layout.addWidget(self.auth_password_label, 1, 0, Qt.AlignRight)
+        self.auth_password_input = QLineEdit()
+        self.auth_password_input.setEchoMode(QLineEdit.Password)
+        auth_layout.addWidget(self.auth_password_input, 1, 1)
+
+        # Row 2: Private key path (for key auth)
+        self.key_path_label = QLabel("Private key:")
+        self.key_path_label.setMinimumWidth(100)
+        auth_layout.addWidget(self.key_path_label, 2, 0, Qt.AlignRight)
 
         key_path_container = QWidget()
         key_path_h = QHBoxLayout(key_path_container)
@@ -291,16 +284,16 @@ class SessionDialog(QDialog):
         self.key_path_browse.setFixedWidth(90)
         key_path_h.addWidget(self.key_path_input)
         key_path_h.addWidget(self.key_path_browse)
-        auth_layout.addWidget(key_path_container, 1, 1)
+        auth_layout.addWidget(key_path_container, 2, 1)
 
-        # Row 2: Passphrase
-        passphrase_label = QLabel("Passphrase:")
-        passphrase_label.setMinimumWidth(100)
-        auth_layout.addWidget(passphrase_label, 2, 0, Qt.AlignRight)
+        # Row 3: Passphrase (for key auth)
+        self.passphrase_label = QLabel("Passphrase:")
+        self.passphrase_label.setMinimumWidth(100)
+        auth_layout.addWidget(self.passphrase_label, 3, 0, Qt.AlignRight)
 
         self.passphrase_input = QLineEdit()
         self.passphrase_input.setEchoMode(QLineEdit.Password)
-        auth_layout.addWidget(self.passphrase_input, 2, 1)
+        auth_layout.addWidget(self.passphrase_input, 3, 1)
 
         layout.addWidget(auth_group)
 
@@ -308,7 +301,6 @@ class SessionDialog(QDialog):
         layout.addStretch()
         
         # Connect signals
-        self.ssh_username_check.toggled.connect(self.toggle_username_field)
         self.ssh_port_check.toggled.connect(self.toggle_port_field)
         self.folder_combo.currentIndexChanged.connect(self.on_folder_changed)
         self.auth_method_combo.currentIndexChanged.connect(self.on_auth_method_changed)
@@ -334,11 +326,6 @@ class SessionDialog(QDialog):
                 else:
                     self.folder_combo.setCurrentIndex(0)
         
-    def toggle_username_field(self, checked):
-        self.ssh_username_input.setEnabled(checked)
-        if not checked:
-            self.ssh_username_input.clear()
-    
     def toggle_port_field(self, checked):
         self.ssh_port_input.setEnabled(checked)
         if not checked:
@@ -472,12 +459,7 @@ class SessionDialog(QDialog):
             self.ssh_host_input.setText(session.host)
             
             if session.username:
-                self.ssh_username_check.setChecked(True)
                 self.ssh_username_input.setText(session.username)
-                self.ssh_username_input.setEnabled(True)
-            
-            if session.password:
-                self.ssh_password_input.setText(session.password)
             
             if session.port != 22:
                 self.ssh_port_check.setChecked(True)
@@ -494,6 +476,9 @@ class SessionDialog(QDialog):
                 method_index = self.auth_method_combo.findData(session.auth_method)
                 if method_index >= 0:
                     self.auth_method_combo.setCurrentIndex(method_index)
+            # Populate auth fields
+            if getattr(session, 'auth_method', 'password') == 'password' and getattr(session, 'password', None):
+                self.auth_password_input.setText(session.password)
             if hasattr(session, 'private_key_path') and session.private_key_path:
                 self.key_path_input.setText(session.private_key_path)
             if hasattr(session, 'private_key_passphrase') and session.private_key_passphrase:
@@ -520,11 +505,14 @@ class SessionDialog(QDialog):
                 type='SSH',
                 host=self.ssh_host_input.text(),
                 port=self.ssh_port_input.value() if self.ssh_port_check.isChecked() else 22,
-                username=self.ssh_username_input.text() if self.ssh_username_check.isChecked() else None,
+                username=(self.ssh_username_input.text() or None),
                 auth_method=self.auth_method_combo.currentData(),
                 private_key_path=self.key_path_input.text() if self.auth_method_combo.currentData() == 'key' and self.key_path_input.text() else None,
                 private_key_passphrase=self.passphrase_input.text() if self.auth_method_combo.currentData() == 'key' and self.passphrase_input.text() else None
             )
+            # Set password only for password auth
+            if self.auth_method_combo.currentData() == 'password':
+                session.password = self.auth_password_input.text()
             session.folder = self.folder_combo.currentData()
             return session
         else:
@@ -542,6 +530,15 @@ class SessionDialog(QDialog):
     def on_auth_method_changed(self, index):
         method = self.auth_method_combo.currentData()
         is_key = method == 'key'
+        # Toggle visibility between password and key controls
+        self.auth_password_label.setVisible(not is_key)
+        self.auth_password_input.setVisible(not is_key)
+        self.key_path_label.setVisible(is_key)
+        self.key_path_input.setVisible(is_key)
+        self.key_path_browse.setVisible(is_key)
+        self.passphrase_label.setVisible(is_key)
+        self.passphrase_input.setVisible(is_key)
+        # Enable relevant fields
         self.key_path_input.setEnabled(is_key)
         self.key_path_browse.setEnabled(is_key)
         self.passphrase_input.setEnabled(is_key)
