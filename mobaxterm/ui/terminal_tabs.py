@@ -52,6 +52,7 @@ class TerminalTab(QWidget):
         # Minimal line editor state for rendering interactive line updates
         self._line_buffer = ""
         self._line_cursor = 0
+        self._in_prompt = True
         
         # Only the terminal area is shown; input happens inline
         layout.addWidget(self.terminal_output)
@@ -146,9 +147,13 @@ class TerminalTab(QWidget):
                 self._write('\n')
                 self._line_buffer = ''
                 self._line_cursor = 0
+                self._in_prompt = True
                 i += 1
                 continue
             # Printable character
+            # Detect beginning of input after prompt paint
+            if self._in_prompt and ch not in (' ', '\t'):
+                self._in_prompt = False
             self._line_buffer = (
                 self._line_buffer[:self._line_cursor] + ch + self._line_buffer[self._line_cursor:]
             )
@@ -244,6 +249,7 @@ class TerminalTab(QWidget):
                 self._send("\x1b[C")
                 return True
             if key == Qt.Key_Left:
+                # Only send one left; do not perform any local deletion
                 self._send("\x1b[D")
                 return True
             if key == Qt.Key_Home:
