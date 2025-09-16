@@ -284,6 +284,7 @@ class MobaXtermClone(QMainWindow):
         self.sessions_tree.context_menu_requested.connect(self.handle_tree_context_menu)
         self.sessions_tree.rename_requested.connect(self.handle_rename_request)
         self.sessions_tree.session_moved.connect(self.handle_session_move)
+        self.sessions_tree.folder_moved.connect(self.handle_folder_move)
 
         
         # Load saved sessions
@@ -316,6 +317,20 @@ class MobaXtermClone(QMainWindow):
             self.load_sessions()
         else:
             print("Failed to update session")
+
+    def handle_folder_move(self, folder_path, target_parent):
+        """Обработка перемещения папки"""
+        # Валидация на уровне UI (дополнительно к бэкенду)
+        if target_parent and (target_parent == folder_path or target_parent.startswith(folder_path + '/')):
+            QMessageBox.warning(self, "Invalid Move", "Cannot move a folder into itself or its descendant.")
+            return
+
+        if not self.session_manager.move_folder(folder_path, target_parent):
+            QMessageBox.warning(self, "Move Failed", "Could not move folder. It may already exist at destination or the move is invalid.")
+            return
+
+        # Успех — перезагружаем дерево
+        self.load_sessions()
 
     def handle_rename_request(self, item_type, item):
         """Обработка запроса на переименование"""
