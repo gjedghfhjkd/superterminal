@@ -109,6 +109,8 @@ class SSHClient(QObject):
         try:
             # Disable XON/XOFF so Ctrl+S/Ctrl+Q do not freeze terminal; set Ctrl-C/D
             self.shell.send("stty -ixon -ixoff intr ^C eof ^D 2>/dev/null\n")
+            # Disable bracketed paste to avoid \x1b[?2004h noise
+            self.shell.send("bind 'set enable-bracketed-paste off' 2>/dev/null\n")
             # Set a simple, portable prompt. Works in bash/sh; \u,\h,\w are bash, but many servers use bash.
             # If not bash, this will be ignored harmlessly.
             self.shell.send("export PS1='[\\u@\\h \\w]\\$ '\n")

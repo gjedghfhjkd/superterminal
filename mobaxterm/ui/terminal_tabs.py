@@ -2,6 +2,7 @@ from PyQt5.QtWidgets import (QTabWidget, QWidget, QVBoxLayout, QTextEdit,
                              QHBoxLayout, QLineEdit, QLabel, QPushButton)
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QTextCursor
+import re
 
 class TerminalTab(QWidget):
     command_submitted = pyqtSignal(str)
@@ -54,8 +55,11 @@ class TerminalTab(QWidget):
         self.terminal_output.setReadOnly(True)
         
     def append_output(self, text):
-        # Write raw text as-is to preserve remote prompt and control chars
-        self._write(text)
+        # Strip ANSI escape sequences for readability in QTextEdit
+        cleaned = self._strip_ansi(text)
+        # Normalize line endings
+        cleaned = cleaned.replace('\r\n', '\n').replace('\r', '\n')
+        self._write(cleaned)
         # Auto-scroll to bottom
         cursor = self.terminal_output.textCursor()
         cursor.movePosition(QTextCursor.End)
@@ -102,6 +106,10 @@ class TerminalTab(QWidget):
             # Ctrl+D
             if (modifiers & Qt.ControlModifier) and key == Qt.Key_D:
                 self._send("\x04")  # EOT
+                return True
+            # Ctrl+S should not freeze: send XOFF only if we really want to; otherwise ignore
+            if (modifiers & Qt.ControlModifier) and key == Qt.Key_S:
+                # ignore to prevent terminal freeze
                 return True
             # Enter / Return
             if key in (Qt.Key_Return, Qt.Key_Enter):
@@ -153,6 +161,19 @@ class TerminalTab(QWidget):
                 self._send(text)
                 return True
         return super().eventFilter(obj, event)
+
+    def _strip_ansi(self, s: str) -> str:
+        """Remove ANSI control sequences (CSI, OSC, etc.) so QTextEdit shows clean text."""
+        # OSC sequences: ESC ] ... BEL or ESC \
+        osc_pattern = re.compile(r"\x1B\][\x20-\x7E]*?(\x07|\x1B\\)")
+        # CSI sequences: ESC [ ... Cmd
+        csi_pattern = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
+        # Single-char ESC sequences
+        esc_pattern = re.compile(r"\x1B[@-Z\\-_]")
+        s = osc_pattern.sub('', s)
+        s = csi_pattern.sub('', s)
+        s = esc_pattern.sub('', s)
+        return s
 
 class TerminalTabs(QTabWidget):
     tab_close_requested = pyqtSignal(int)
