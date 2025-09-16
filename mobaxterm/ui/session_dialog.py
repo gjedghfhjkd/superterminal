@@ -438,26 +438,27 @@ class SessionDialog(QDialog):
         self.sftp_host_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         basic_layout.addWidget(self.sftp_host_input, 0, 1)
         
-        # Row 1: Username
+        # Row 1: Session name (optional, defaults to Remote host)
+        sftp_name_label = QLabel("Session name:")
+        sftp_name_label.setMinimumWidth(100)
+        basic_layout.addWidget(sftp_name_label, 1, 0, Qt.AlignRight)
+        
+        self.sftp_name_input = QLineEdit()
+        self.sftp_name_input.setPlaceholderText("defaults to Remote host")
+        self.sftp_name_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        basic_layout.addWidget(self.sftp_name_input, 1, 1)
+        
+        # Row 2: Username
         username_label = QLabel("Username:")
         username_label.setMinimumWidth(100)
-        basic_layout.addWidget(username_label, 1, 0, Qt.AlignRight)
+        basic_layout.addWidget(username_label, 2, 0, Qt.AlignRight)
         
         self.sftp_username_input = QLineEdit()
         self.sftp_username_input.setPlaceholderText("username")
         self.sftp_username_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        basic_layout.addWidget(self.sftp_username_input, 1, 1)
-        
-        # Row 2: Password
-        password_label = QLabel("Password:")
-        password_label.setMinimumWidth(100)
-        basic_layout.addWidget(password_label, 2, 0, Qt.AlignRight)
-        
-        self.sftp_password_input = QLineEdit()
-        self.sftp_password_input.setEchoMode(QLineEdit.Password)
-        self.sftp_password_input.setPlaceholderText("password")
-        self.sftp_password_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        basic_layout.addWidget(self.sftp_password_input, 2, 1)
+        # Default username to root
+        self.sftp_username_input.setText("root")
+        basic_layout.addWidget(self.sftp_username_input, 2, 1)
         
         # Row 3: Port
         port_label = QLabel("Port:")
@@ -510,6 +511,84 @@ class SessionDialog(QDialog):
         self.sftp_folder_combo.setView(sftp_view)
         
         layout.addWidget(basic_group)
+
+        # Authentication group for SFTP
+        sftp_auth_group = QGroupBox("Authentication")
+        sftp_auth_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        sftp_auth_layout = QGridLayout(sftp_auth_group)
+        sftp_auth_layout.setSpacing(8)
+        sftp_auth_layout.setContentsMargins(12, 15, 12, 12)
+        sftp_auth_layout.setColumnStretch(0, 0)
+        sftp_auth_layout.setColumnStretch(1, 1)
+
+        # Row 0: Method
+        sftp_auth_method_label = QLabel("Method:")
+        sftp_auth_method_label.setMinimumWidth(100)
+        sftp_auth_layout.addWidget(sftp_auth_method_label, 0, 0, Qt.AlignRight)
+
+        self.sftp_auth_method_combo = QComboBox()
+        self.sftp_auth_method_combo.addItem("Password", "password")
+        self.sftp_auth_method_combo.addItem("SSH key", "key")
+        sftp_auth_layout.addWidget(self.sftp_auth_method_combo, 0, 1)
+        # Ensure dropdown selection is visible for SFTP auth method combo
+        sftp_auth_view = QListView()
+        sftp_auth_view.setUniformItemSizes(True)
+        sftp_auth_view.setStyleSheet("""
+            QListView {
+                background-color: white;
+                color: #333;
+                border: 1px solid #ccc;
+                selection-background-color: #0078d7;
+                selection-color: white;
+                outline: 0;
+            }
+            QListView::item { height: 28px; padding: 6px; }
+            QListView::item:hover { background-color: #e9f3ff; color: #0a58ca; }
+            QListView::item:selected { background-color: #0078d7; color: white; }
+        """)
+        sftp_auth_palette = sftp_auth_view.palette()
+        for group in (QPalette.Active, QPalette.Inactive, QPalette.Disabled):
+            sftp_auth_palette.setColor(group, QPalette.Highlight, QColor("#0078d7"))
+            sftp_auth_palette.setColor(group, QPalette.HighlightedText, QColor("#ffffff"))
+        sftp_auth_view.setPalette(sftp_auth_palette)
+        sftp_auth_view.setItemDelegate(SolidHighlightDelegate(parent=sftp_auth_view))
+        self.sftp_auth_method_combo.setView(sftp_auth_view)
+
+        # Row 1: Password (for password auth)
+        self.sftp_auth_password_label = QLabel("Password:")
+        self.sftp_auth_password_label.setMinimumWidth(100)
+        sftp_auth_layout.addWidget(self.sftp_auth_password_label, 1, 0, Qt.AlignRight)
+        self.sftp_auth_password_input = QLineEdit()
+        self.sftp_auth_password_input.setEchoMode(QLineEdit.Password)
+        sftp_auth_layout.addWidget(self.sftp_auth_password_input, 1, 1)
+
+        # Row 2: Private key path (for key auth)
+        self.sftp_key_path_label = QLabel("Private key:")
+        self.sftp_key_path_label.setMinimumWidth(100)
+        sftp_auth_layout.addWidget(self.sftp_key_path_label, 2, 0, Qt.AlignRight)
+
+        sftp_key_path_container = QWidget()
+        sftp_key_path_h = QHBoxLayout(sftp_key_path_container)
+        sftp_key_path_h.setContentsMargins(0, 0, 0, 0)
+        sftp_key_path_h.setSpacing(6)
+        self.sftp_key_path_input = QLineEdit()
+        self.sftp_key_path_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.sftp_key_path_browse = QPushButton("Browse…")
+        self.sftp_key_path_browse.setFixedWidth(90)
+        sftp_key_path_h.addWidget(self.sftp_key_path_input)
+        sftp_key_path_h.addWidget(self.sftp_key_path_browse)
+        sftp_auth_layout.addWidget(sftp_key_path_container, 2, 1)
+
+        # Row 3: Passphrase (for key auth)
+        self.sftp_passphrase_label = QLabel("Passphrase:")
+        self.sftp_passphrase_label.setMinimumWidth(100)
+        sftp_auth_layout.addWidget(self.sftp_passphrase_label, 3, 0, Qt.AlignRight)
+
+        self.sftp_passphrase_input = QLineEdit()
+        self.sftp_passphrase_input.setEchoMode(QLineEdit.Password)
+        sftp_auth_layout.addWidget(self.sftp_passphrase_input, 3, 1)
+
+        layout.addWidget(sftp_auth_group)
         
         advanced_group = QGroupBox("Advanced SFTP settings")
         advanced_layout = QVBoxLayout(advanced_group)
@@ -523,6 +602,10 @@ class SessionDialog(QDialog):
         layout.addStretch()
         
         self.sftp_folder_combo.currentIndexChanged.connect(self.on_sftp_folder_changed)
+        self.sftp_auth_method_combo.currentIndexChanged.connect(self.on_sftp_auth_method_changed)
+        self.sftp_key_path_browse.clicked.connect(self.on_sftp_browse_key)
+        # Initialize SFTP auth controls state
+        self.on_sftp_auth_method_changed(self.sftp_auth_method_combo.currentIndex())
         
     def on_sftp_folder_changed(self, index):
         if self.sftp_folder_combo.currentData() == "new":
@@ -594,10 +677,21 @@ class SessionDialog(QDialog):
         else:
             self.sftp_btn.click()
             self.sftp_host_input.setText(session.host)
+            # Load session name (fallback to host)
+            self.sftp_name_input.setText(session.name or session.host)
             self.sftp_username_input.setText(session.username or "")
             self.sftp_port_input.setValue(session.port)
-            if session.password:
-                self.sftp_password_input.setText(session.password)
+            # Load SFTP auth
+            if hasattr(session, 'auth_method'):
+                sftp_method_index = self.sftp_auth_method_combo.findData(session.auth_method)
+                if sftp_method_index >= 0:
+                    self.sftp_auth_method_combo.setCurrentIndex(sftp_method_index)
+            if getattr(session, 'auth_method', 'password') == 'password' and getattr(session, 'password', None):
+                self.sftp_auth_password_input.setText(session.password)
+            if hasattr(session, 'private_key_path') and session.private_key_path:
+                self.sftp_key_path_input.setText(session.private_key_path)
+            if hasattr(session, 'private_key_passphrase') and session.private_key_passphrase:
+                self.sftp_passphrase_input.setText(session.private_key_passphrase)
             
             if session.folder:
                 index = self.sftp_folder_combo.findData(session.folder)
@@ -628,10 +722,15 @@ class SessionDialog(QDialog):
                 type='SFTP',
                 host=self.sftp_host_input.text(),
                 port=self.sftp_port_input.value(),
+                name=(self.sftp_name_input.text().strip() or None),
                 username=self.sftp_username_input.text(),
-                password=self.sftp_password_input.text() if hasattr(self, 'sftp_password_input') else None,
+                auth_method=self.sftp_auth_method_combo.currentData(),
+                private_key_path=self.sftp_key_path_input.text() if self.sftp_auth_method_combo.currentData() == 'key' and self.sftp_key_path_input.text() else None,
+                private_key_passphrase=self.sftp_passphrase_input.text() if self.sftp_auth_method_combo.currentData() == 'key' and self.sftp_passphrase_input.text() else None,
                 bookmark_settings=self.sftp_bookmark_check.isChecked()
             )
+            if self.sftp_auth_method_combo.currentData() == 'password':
+                session.password = self.sftp_auth_password_input.text()
             session.folder = self.sftp_folder_combo.currentData()
             return session
 
@@ -655,3 +754,24 @@ class SessionDialog(QDialog):
         file_path, _ = QFileDialog.getOpenFileName(self, "Select Private Key", "", "All Files (*)")
         if file_path:
             self.key_path_input.setText(file_path)
+
+    def on_sftp_auth_method_changed(self, index):
+        method = self.sftp_auth_method_combo.currentData()
+        is_key = method == 'key'
+        # Toggle visibility between password and key controls
+        self.sftp_auth_password_label.setVisible(not is_key)
+        self.sftp_auth_password_input.setVisible(not is_key)
+        self.sftp_key_path_label.setVisible(is_key)
+        self.sftp_key_path_input.setVisible(is_key)
+        self.sftp_key_path_browse.setVisible(is_key)
+        self.sftp_passphrase_label.setVisible(is_key)
+        self.sftp_passphrase_input.setVisible(is_key)
+        # Enable relevant fields
+        self.sftp_key_path_input.setEnabled(is_key)
+        self.sftp_key_path_browse.setEnabled(is_key)
+        self.sftp_passphrase_input.setEnabled(is_key)
+
+    def on_sftp_browse_key(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Private Key", "", "All Files (*)")
+        if file_path:
+            self.sftp_key_path_input.setText(file_path)
