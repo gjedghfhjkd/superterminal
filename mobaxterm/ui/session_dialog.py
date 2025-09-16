@@ -198,7 +198,6 @@ class SessionDialog(QDialog):
         basic_layout.setContentsMargins(12, 15, 12, 12)
         basic_layout.setColumnStretch(0, 0)
         basic_layout.setColumnStretch(1, 1)
-        basic_layout.setColumnMinimumWidth(1, 580)
         
         # Row 0: Remote host
         host_label = QLabel("Remote host:")
@@ -208,7 +207,6 @@ class SessionDialog(QDialog):
         self.ssh_host_input = QLineEdit()
         self.ssh_host_input.setPlaceholderText("hostname or IP")
         self.ssh_host_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.ssh_host_input.setMinimumWidth(580)
         basic_layout.addWidget(self.ssh_host_input, 0, 1)
         
         # Row 1: Username checkbox
@@ -224,7 +222,6 @@ class SessionDialog(QDialog):
         self.ssh_username_input.setPlaceholderText("username")
         self.ssh_username_input.setEnabled(False)
         self.ssh_username_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.ssh_username_input.setMinimumWidth(500)
         basic_layout.addWidget(self.ssh_username_input, 2, 1)
         
         # Row 3: Password label and input
@@ -236,7 +233,6 @@ class SessionDialog(QDialog):
         self.ssh_password_input.setEchoMode(QLineEdit.Password)
         self.ssh_password_input.setPlaceholderText("password")
         self.ssh_password_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.ssh_password_input.setMinimumWidth(500)
         basic_layout.addWidget(self.ssh_password_input, 3, 1)
         
         # Row 4: Port checkbox
@@ -253,7 +249,6 @@ class SessionDialog(QDialog):
         self.ssh_port_input.setValue(22)
         self.ssh_port_input.setEnabled(False)
         self.ssh_port_input.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        self.ssh_port_input.setMinimumWidth(160)
         basic_layout.addWidget(self.ssh_port_input, 5, 1)
         
         # Row 6: Folder label and combo
@@ -387,7 +382,6 @@ class SessionDialog(QDialog):
         basic_layout.setContentsMargins(12, 15, 12, 12)
         basic_layout.setColumnStretch(0, 0)
         basic_layout.setColumnStretch(1, 1)
-        basic_layout.setColumnMinimumWidth(1, 420)
         
         # Row 0: Remote host
         host_label = QLabel("Remote host:")
@@ -397,7 +391,6 @@ class SessionDialog(QDialog):
         self.sftp_host_input = QLineEdit()
         self.sftp_host_input.setPlaceholderText("hostname or IP")
         self.sftp_host_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.sftp_host_input.setMinimumWidth(420)
         basic_layout.addWidget(self.sftp_host_input, 0, 1)
         
         # Row 1: Username
@@ -408,7 +401,6 @@ class SessionDialog(QDialog):
         self.sftp_username_input = QLineEdit()
         self.sftp_username_input.setPlaceholderText("username")
         self.sftp_username_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.sftp_username_input.setMinimumWidth(380)
         basic_layout.addWidget(self.sftp_username_input, 1, 1)
         
         # Row 2: Password
@@ -420,7 +412,6 @@ class SessionDialog(QDialog):
         self.sftp_password_input.setEchoMode(QLineEdit.Password)
         self.sftp_password_input.setPlaceholderText("password")
         self.sftp_password_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.sftp_password_input.setMinimumWidth(380)
         basic_layout.addWidget(self.sftp_password_input, 2, 1)
         
         # Row 3: Port
@@ -432,7 +423,6 @@ class SessionDialog(QDialog):
         self.sftp_port_input.setRange(1, 65535)
         self.sftp_port_input.setValue(22)
         self.sftp_port_input.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        self.sftp_port_input.setMinimumWidth(140)
         basic_layout.addWidget(self.sftp_port_input, 3, 1)
         
         # Row 4: Folder
