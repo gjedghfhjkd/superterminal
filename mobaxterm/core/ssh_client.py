@@ -148,8 +148,17 @@ class SSHClient(QObject):
             time.sleep(0.01)
             self.shell.send("export PS1='[\\u@\\h \\w]\\$ ' >/dev/null 2>&1\n")
             time.sleep(0.01)
-            # 7) finally re-enable echo (do not send extra CR/LF)
+            # 7) clear current line, re-enable echo, then request exactly one new prompt
+            try:
+                # Clear any residual prompt line while echo is still off
+                self.shell.send("\x1b[2K\r")
+                time.sleep(0.005)
+            except Exception:
+                pass
             self.shell.send("stty echo 2>/dev/null\n")
+            time.sleep(0.01)
+            # Ask shell to render one new prompt
+            self.shell.send("\n")
         except Exception:
             pass
     
