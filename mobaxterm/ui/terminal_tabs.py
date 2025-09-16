@@ -226,6 +226,21 @@ class TerminalTab(QWidget):
             cursor = self.terminal_output.textCursor()
             cursor.movePosition(QTextCursor.End)
             self.terminal_output.setTextCursor(cursor)
+            # Collapse excessive blank prompt lines: if two consecutive empty
+            # lines before prompt token, trim to one. We only do a light pass.
+            try:
+                doc = self.terminal_output.document()
+                last_block = doc.lastBlock()
+                prev_block = last_block.previous()
+                prev_prev_block = prev_block.previous() if prev_block.isValid() else None
+                if prev_block.isValid() and prev_prev_block and prev_block.text().strip() == '' and prev_prev_block.text().strip() == '':
+                    # remove one blank line
+                    c = self.terminal_output.textCursor()
+                    c.movePosition(QTextCursor.End)
+                    c.movePosition(QTextCursor.PreviousBlock, QTextCursor.KeepAnchor)
+                    c.removeSelectedText()
+            except Exception:
+                pass
 
     def _write(self, text: str):
         cursor = self.terminal_output.textCursor()
