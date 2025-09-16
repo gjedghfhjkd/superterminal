@@ -2,8 +2,25 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLabel, QLineEdit, QCheckBox, QSpinBox, QGroupBox,
 
                              QDialogButtonBox, QGridLayout, QStackedWidget, QWidget, QComboBox,
-                             QFileDialog, QInputDialog, QSizePolicy)
+                             QFileDialog, QInputDialog, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QAbstractItemView, QStyleOptionViewItem)
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPalette, QColor
+
+class SolidHighlightDelegate(QStyledItemDelegate):
+    def __init__(self, highlight_color="#0078d7", text_color="#ffffff", parent=None):
+        super().__init__(parent)
+        self.highlight_color = QColor(highlight_color)
+        self.text_color = QColor(text_color)
+
+    def paint(self, painter, option, index):
+        option_clone = QStyleOptionViewItem(option)
+        painter.save()
+        if option_clone.state & QStyle.State_Selected:
+            painter.fillRect(option_clone.rect, self.highlight_color)
+            option_clone.palette.setColor(QPalette.Text, self.text_color)
+            option_clone.palette.setColor(QPalette.HighlightedText, self.text_color)
+        super().paint(painter, option_clone, index)
+        painter.restore()
 from ..models.session import Session
 
 class SessionDialog(QDialog):
@@ -259,16 +276,28 @@ class SessionDialog(QDialog):
         self.folder_combo.addItem("+ Create new folder...", "new")
         basic_layout.addWidget(self.folder_combo, 4, 1)
         # Ensure dropdown selection is visible for folder combo
-        self.folder_combo.view().setStyleSheet("""
-            QAbstractItemView {
+        folder_view = QListView()
+        folder_view.setUniformItemSizes(True)
+        folder_view.setStyleSheet("""
+            QListView {
                 background-color: white;
+                color: #333;
                 border: 1px solid #ccc;
                 selection-background-color: #0078d7;
                 selection-color: white;
+                outline: 0;
             }
-            QAbstractItemView::item { height: 28px; padding: 6px; color: #333; }
-            QAbstractItemView::item:hover { background-color: #e9f3ff; color: #0a58ca; }
+            QListView::item { height: 28px; padding: 6px; }
+            QListView::item:hover { background-color: #e9f3ff; color: #0a58ca; }
+            QListView::item:selected { background-color: #0078d7; color: white; }
         """)
+        folder_palette = folder_view.palette()
+        for group in (QPalette.Active, QPalette.Inactive, QPalette.Disabled):
+            folder_palette.setColor(group, QPalette.Highlight, QColor("#0078d7"))
+            folder_palette.setColor(group, QPalette.HighlightedText, QColor("#ffffff"))
+        folder_view.setPalette(folder_palette)
+        folder_view.setItemDelegate(SolidHighlightDelegate(parent=folder_view))
+        self.folder_combo.setView(folder_view)
         
         layout.addWidget(basic_group)
         
@@ -291,16 +320,28 @@ class SessionDialog(QDialog):
         self.auth_method_combo.addItem("SSH key", "key")
         auth_layout.addWidget(self.auth_method_combo, 0, 1)
         # Ensure dropdown selection is visible for auth method combo
-        self.auth_method_combo.view().setStyleSheet("""
-            QAbstractItemView {
+        auth_view = QListView()
+        auth_view.setUniformItemSizes(True)
+        auth_view.setStyleSheet("""
+            QListView {
                 background-color: white;
+                color: #333;
                 border: 1px solid #ccc;
                 selection-background-color: #0078d7;
                 selection-color: white;
+                outline: 0;
             }
-            QAbstractItemView::item { height: 28px; padding: 6px; color: #333; }
-            QAbstractItemView::item:hover { background-color: #e9f3ff; color: #0a58ca; }
+            QListView::item { height: 28px; padding: 6px; }
+            QListView::item:hover { background-color: #e9f3ff; color: #0a58ca; }
+            QListView::item:selected { background-color: #0078d7; color: white; }
         """)
+        auth_palette = auth_view.palette()
+        for group in (QPalette.Active, QPalette.Inactive, QPalette.Disabled):
+            auth_palette.setColor(group, QPalette.Highlight, QColor("#0078d7"))
+            auth_palette.setColor(group, QPalette.HighlightedText, QColor("#ffffff"))
+        auth_view.setPalette(auth_palette)
+        auth_view.setItemDelegate(SolidHighlightDelegate(parent=auth_view))
+        self.auth_method_combo.setView(auth_view)
 
         # Row 1: Password (for password auth)
         self.auth_password_label = QLabel("Password:")
@@ -441,6 +482,29 @@ class SessionDialog(QDialog):
         
         self.sftp_folder_combo.addItem("+ Create new folder...", "new")
         basic_layout.addWidget(self.sftp_folder_combo, 4, 1)
+        # Ensure dropdown selection is visible for sftp folder combo
+        sftp_view = QListView()
+        sftp_view.setUniformItemSizes(True)
+        sftp_view.setStyleSheet("""
+            QListView {
+                background-color: white;
+                color: #333;
+                border: 1px solid #ccc;
+                selection-background-color: #0078d7;
+                selection-color: white;
+                outline: 0;
+            }
+            QListView::item { height: 28px; padding: 6px; }
+            QListView::item:hover { background-color: #e9f3ff; color: #0a58ca; }
+            QListView::item:selected { background-color: #0078d7; color: white; }
+        """)
+        sftp_palette = sftp_view.palette()
+        for group in (QPalette.Active, QPalette.Inactive, QPalette.Disabled):
+            sftp_palette.setColor(group, QPalette.Highlight, QColor("#0078d7"))
+            sftp_palette.setColor(group, QPalette.HighlightedText, QColor("#ffffff"))
+        sftp_view.setPalette(sftp_palette)
+        sftp_view.setItemDelegate(SolidHighlightDelegate(parent=sftp_view))
+        self.sftp_folder_combo.setView(sftp_view)
         
         layout.addWidget(basic_group)
         
