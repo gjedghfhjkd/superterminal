@@ -96,18 +96,27 @@ class TerminalTab(QWidget):
                 if len(lines) < height:
                     lines += [""] * (height - len(lines))
                 content = "\n".join(lines)
-                # One-time cleanup: collapse excessive blank lines and duplicate prompts
-                if self._first_connect_cleanup:
-                    try:
-                        # Collapse 3+ consecutive blank lines to a single blank line
-                        content = re.sub(r"(\n[\t\x20]*){3,}", "\n\n", content, flags=re.M)
-                        # Remove duplicate prompt tokens on the same line
-                        content = re.sub(r"^(\[[^\n]*\]#\s)(?:\1)+", r"\1", content, flags=re.M)
-                        # Merge identical consecutive prompt lines
-                        content = re.sub(r"^(?P<p>\[[^\n]*\]#\s)\n(?P=p)", r"\g<p>", content, flags=re.M)
-                    except Exception:
-                        pass
-                    self._first_connect_cleanup = False
+                # Cleanup tail: collapse excessive blank lines and duplicate prompts
+                try:
+                    def _cleanup_tail(text: str) -> str:
+                        tail_lines = text.split('\n')
+                        # Collapse trailing blanks to at most one
+                        while len(tail_lines) >= 3 and tail_lines[-1].strip() == '' and tail_lines[-2].strip() == '':
+                            tail_lines.pop()
+                        # Deduplicate identical prompt lines at the very end
+                        prompt_re = re.compile(r"(^.+@.+:.*[#$]\s$|^\[[^\n]*\][#$]\s$)")
+                        # Keep removing duplicates among last lines
+                        changed = True
+                        while changed and len(tail_lines) >= 2:
+                            changed = False
+                            if prompt_re.search(tail_lines[-1]) and tail_lines[-1] == tail_lines[-2]:
+                                tail_lines.pop(-2)
+                                changed = True
+                        return '\n'.join(tail_lines)
+                    content = _cleanup_tail(content)
+                except Exception:
+                    pass
+                self._first_connect_cleanup = False
                 self.terminal_output.setPlainText(content)
                 # Compute caret by moving cursor to row/col (0-based)
                 row0 = max(0, min(self._pyte_screen.cursor.y, len(lines) - 1))
