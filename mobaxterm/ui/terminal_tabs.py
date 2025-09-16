@@ -66,11 +66,23 @@ class TerminalTab(QWidget):
         
     def append_output(self, text):
         # Strip ANSI/OSC sequences for readability in QTextEdit
-        cleaned = self._strip_ansi(text)
-        # Normalize line endings
-        # Convert CRLF and bare CR to LF
-        cleaned = cleaned.replace('\r\n', '\n').replace('\r', '\n')
-        self._write(cleaned)
+        s = self._strip_ansi(text)
+        # Process control chars: BEL and Backspace; normalize EOLs
+        s = s.replace('\r\n', '\n')
+        # We'll interpret bare CR as newline for simplicity
+        s = s.replace('\r', '\n')
+        # Remove BELs (terminal beeps)
+        s = s.replace('\x07', '')
+
+        # Render while handling backspaces by deleting previous chars
+        for ch in s:
+            if ch == '\x08':  # backspace
+                cursor = self.terminal_output.textCursor()
+                cursor.movePosition(QTextCursor.End)
+                cursor.deletePreviousChar()
+                self.terminal_output.setTextCursor(cursor)
+                continue
+            self._write(ch)
         # Auto-scroll to bottom
         cursor = self.terminal_output.textCursor()
         cursor.movePosition(QTextCursor.End)
@@ -136,6 +148,7 @@ class TerminalTab(QWidget):
                 return True
             # Tab completion
             if key == Qt.Key_Tab:
+                # Ask for one completion attempt
                 self._send("\t")
                 return True
             # Arrow keys and navigation as ANSI sequences
