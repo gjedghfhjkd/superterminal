@@ -90,16 +90,20 @@ class TerminalTab(QWidget):
                 self.terminal_output.setPlainText(content)
                 # Place cursor according to pyte
                 cursor = self.terminal_output.textCursor()
-                # Compute position: row/col are 1-based in pyte
-                row = max(1, min(self._pyte_screen.cursor.y, self._pyte_screen.lines))
-                col = max(1, self._pyte_screen.cursor.x)
+                # Compute position: pyte cursor is 0-based (x,y)
+                total_rows = len(self._pyte_screen.display)
+                row0 = max(0, min(self._pyte_screen.cursor.y, total_rows - 1))
+                # Clamp column to current line length
+                line_text = self._pyte_screen.display[row0] if 0 <= row0 < total_rows else ""
+                max_col = len(line_text)
+                col0 = max(0, min(self._pyte_screen.cursor.x, max_col))
                 # Move to row
                 cursor.movePosition(QTextCursor.Start)
-                for _ in range(row - 1):
+                for _ in range(row0):
                     cursor.movePosition(QTextCursor.Down)
                 # Move to column
                 cursor.movePosition(QTextCursor.StartOfLine)
-                for _ in range(col - 1):
+                for _ in range(col0):
                     cursor.movePosition(QTextCursor.Right)
                 self.terminal_output.setTextCursor(cursor)
                 return
