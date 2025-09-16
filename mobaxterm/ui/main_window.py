@@ -717,6 +717,9 @@ class MobaXtermClone(QMainWindow):
 
             # Provide terminal with a way to send raw keys to this SSH thread
             terminal_tab.set_key_sender(lambda data, t=ssh_thread: t.send_raw(data))
+
+            # If the user starts typing immediately, ensure input is enabled
+            terminal_tab.enable_input()
     
     def execute_command(self, session_index, command: str):
         if session_index in self.ssh_threads and command is not None:

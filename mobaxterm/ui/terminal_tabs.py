@@ -9,6 +9,7 @@ class TerminalTab(QWidget):
         super().__init__(parent)
         self.session = session
         self._send_key = None  # callable that sends raw data to SSH
+        self._send_queue = []  # buffer keys until sender is ready
         self.initUI()
         
     def initUI(self):
@@ -43,8 +44,8 @@ class TerminalTab(QWidget):
         
     def enable_input(self):
         self.input_enabled = True
-        # Keep read-only and forward keys to remote. Remote will echo.
-        self.terminal_output.setReadOnly(True)
+        # Allow widget to receive key events; we'll block local echo via eventFilter
+        self.terminal_output.setReadOnly(False)
         self.terminal_output.setFocus()
         self.current_input = ""
         
@@ -69,6 +70,12 @@ class TerminalTab(QWidget):
     def set_key_sender(self, sender_callable):
         """Provide a callable that will be used to send raw key data to SSH."""
         self._send_key = sender_callable
+        # Flush any queued input collected before sender was ready
+        if self._send_queue:
+            try:
+                self._send_key(''.join(self._send_queue))
+            finally:
+                self._send_queue.clear()
 
     def _send(self, data: str):
         if self._send_key is not None and data is not None:
@@ -77,6 +84,10 @@ class TerminalTab(QWidget):
             except Exception:
                 # Silently ignore send errors in UI layer
                 pass
+        else:
+            # Queue input until transport is ready
+            if data:
+                self._send_queue.append(data)
 
     def eventFilter(self, obj, event):
         if obj is self.terminal_output and event.type() == QEvent.KeyPress:
@@ -104,8 +115,37 @@ class TerminalTab(QWidget):
             if key == Qt.Key_Tab:
                 self._send("\t")
                 return True
-            # Ignore navigation keys locally; remote shell will handle with PTY
-            if key in (Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down, Qt.Key_Home, Qt.Key_End, Qt.Key_PageUp, Qt.Key_PageDown):
+            # Arrow keys and navigation as ANSI sequences
+            if key == Qt.Key_Up:
+                self._send("\x1b[A")
+                return True
+            if key == Qt.Key_Down:
+                self._send("\x1b[B")
+                return True
+            if key == Qt.Key_Right:
+                self._send("\x1b[C")
+                return True
+            if key == Qt.Key_Left:
+                self._send("\x1b[D")
+                return True
+            if key == Qt.Key_Home:
+                self._send("\x1b[H")
+                return True
+            if key == Qt.Key_End:
+                self._send("\x1b[F")
+                return True
+            if key == Qt.Key_PageUp:
+                self._send("\x1b[5~")
+                return True
+            if key == Qt.Key_PageDown:
+                self._send("\x1b[6~")
+                return True
+            if key == Qt.Key_Delete:
+                self._send("\x1b[3~")
+                return True
+            # Ctrl+L clear screen
+            if (modifiers & Qt.ControlModifier) and key == Qt.Key_L:
+                self._send("\x0c")
                 return True
             # Printable characters
             text = event.text()

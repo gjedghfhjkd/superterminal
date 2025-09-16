@@ -46,7 +46,7 @@ class SSHClient(QObject):
             self.is_connected = True
             # Allocate interactive PTY shell with colors
             self.shell = self.client.invoke_shell(term='xterm-256color')
-            self.shell.settimeout(0.1)
+            self.shell.settimeout(0.0)
             
             # Start reading thread
             self.read_thread = threading.Thread(target=self.read_output)
@@ -78,15 +78,15 @@ class SSHClient(QObject):
         while self.is_connected:
             try:
                 if self.shell and self.shell.recv_ready():
-                    data_bytes = self.shell.recv(4096)
+                    data_bytes = self.shell.recv(32768)
                     if not data_bytes:
-                        time.sleep(0.05)
+                        time.sleep(0.02)
                         continue
                     data = data_bytes.decode('utf-8', errors='ignore')
                     if data:
                         self.output_received.emit(data)
                 else:
-                    time.sleep(0.05)
+                    time.sleep(0.02)
             except Exception:
                 time.sleep(0.1)
     
