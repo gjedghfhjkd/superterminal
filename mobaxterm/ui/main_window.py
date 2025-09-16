@@ -764,13 +764,7 @@ class MobaXtermClone(QMainWindow):
                 self.status_label.setText("Disconnected")
             
         self.connection_info.setText(message)
-        
-        # Добавляем сообщение в соответствующую вкладку
-        for i in range(self.terminal_tabs.count()):
-            tab = self.terminal_tabs.widget(i)
-            if hasattr(tab, 'session_index') and tab.session_index == session_index:
-                tab.append_output(message)
-                break
+        # Не печатаем статусные сообщения в терминал, только в статус-бар
     
     def close_terminal_tab(self, index):
         tab = self.terminal_tabs.widget(index)

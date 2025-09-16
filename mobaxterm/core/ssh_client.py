@@ -144,7 +144,7 @@ class SSHClient(QObject):
             self.shell.send(cmd1)
             time.sleep(0.01)
             # 2) keep PS1 empty to avoid prompt prints during setup
-            cmd2 = "PS1=\n"
+            cmd2 = ":; PS1=\n"
             self._suppress_bytes += cmd2.encode('utf-8')
             self.shell.send(cmd2)
             time.sleep(0.01)
