@@ -32,6 +32,8 @@ class TerminalTab(QWidget):
         """)
         self.terminal_output.setPlainText("")
         self.terminal_output.installEventFilter(self)
+        # Some key events are delivered to the viewport; filter there too
+        self.terminal_output.viewport().installEventFilter(self)
         self.terminal_output.setCursorWidth(2)
         self.terminal_output.setReadOnly(True)
         
@@ -94,7 +96,7 @@ class TerminalTab(QWidget):
                 self._send_queue.append(data)
 
     def eventFilter(self, obj, event):
-        if obj is self.terminal_output and event.type() == QEvent.KeyPress:
+        if obj in (self.terminal_output, getattr(self.terminal_output, 'viewport', lambda: None)()) and event.type() == QEvent.KeyPress:
             if not self.input_enabled:
                 return True if self.terminal_output.isReadOnly() else False
             key = event.key()
@@ -113,7 +115,8 @@ class TerminalTab(QWidget):
                 return True
             # Enter / Return
             if key in (Qt.Key_Return, Qt.Key_Enter):
-                self._send("\r")
+                # Send CRLF to be safe with various ttys
+                self._send("\r\n")
                 return True
             # Backspace
             if key == Qt.Key_Backspace:
