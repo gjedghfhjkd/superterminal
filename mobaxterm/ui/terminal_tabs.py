@@ -67,6 +67,8 @@ class TerminalTab(QWidget):
             # Create a generous screen; resize is TODO
             self._pyte_screen = pyte.Screen(160, 40)
             self._pyte_stream = pyte.Stream(self._pyte_screen)
+        # One-time cleanup right after first connect render
+        self._first_connect_cleanup = True
         
         # Only the terminal area is shown; input happens inline
         layout.addWidget(self.terminal_output)
@@ -94,6 +96,18 @@ class TerminalTab(QWidget):
                 if len(lines) < height:
                     lines += [""] * (height - len(lines))
                 content = "\n".join(lines)
+                # One-time cleanup: collapse excessive blank lines and duplicate prompts
+                if self._first_connect_cleanup:
+                    try:
+                        # Collapse 3+ consecutive blank lines to a single blank line
+                        content = re.sub(r"(\n[\t\x20]*){3,}", "\n\n", content, flags=re.M)
+                        # Remove duplicate prompt tokens on the same line
+                        content = re.sub(r"^(\[[^\n]*\]#\s)(?:\1)+", r"\1", content, flags=re.M)
+                        # Merge identical consecutive prompt lines
+                        content = re.sub(r"^(?P<p>\[[^\n]*\]#\s)\n(?P=p)", r"\g<p>", content, flags=re.M)
+                    except Exception:
+                        pass
+                    self._first_connect_cleanup = False
                 self.terminal_output.setPlainText(content)
                 # Compute caret by moving cursor to row/col (0-based)
                 row0 = max(0, min(self._pyte_screen.cursor.y, len(lines) - 1))
