@@ -8,6 +8,7 @@ class TerminalTab(QWidget):
     def __init__(self, session, parent=None):
         super().__init__(parent)
         self.session = session
+        self._send_key = None  # callable that sends raw data to SSH
         self.initUI()
         
     def initUI(self):
@@ -42,17 +43,18 @@ class TerminalTab(QWidget):
         
     def enable_input(self):
         self.input_enabled = True
-        self.terminal_output.setReadOnly(False)
+        # Keep read-only and forward keys to remote. Remote will echo.
+        self.terminal_output.setReadOnly(True)
         self.terminal_output.setFocus()
         self.current_input = ""
-        self._write(self.prompt_text)
         
     def disable_input(self):
         self.input_enabled = False
         self.terminal_output.setReadOnly(True)
         
     def append_output(self, text):
-        self.terminal_output.append(text)
+        # Write raw text as-is to preserve remote prompt and control chars
+        self._write(text)
         # Auto-scroll to bottom
         cursor = self.terminal_output.textCursor()
         cursor.movePosition(QTextCursor.End)
@@ -64,35 +66,51 @@ class TerminalTab(QWidget):
         cursor.insertText(text)
         self.terminal_output.setTextCursor(cursor)
 
+    def set_key_sender(self, sender_callable):
+        """Provide a callable that will be used to send raw key data to SSH."""
+        self._send_key = sender_callable
+
+    def _send(self, data: str):
+        if self._send_key is not None and data is not None:
+            try:
+                self._send_key(data)
+            except Exception:
+                # Silently ignore send errors in UI layer
+                pass
+
     def eventFilter(self, obj, event):
         if obj is self.terminal_output and event.type() == QEvent.KeyPress:
             if not self.input_enabled:
                 return True if self.terminal_output.isReadOnly() else False
             key = event.key()
-            # Handle Enter
+            modifiers = event.modifiers()
+            # Ctrl+C
+            if (modifiers & Qt.ControlModifier) and key == Qt.Key_C:
+                self._send("\x03")  # ETX
+                return True
+            # Ctrl+D
+            if (modifiers & Qt.ControlModifier) and key == Qt.Key_D:
+                self._send("\x04")  # EOT
+                return True
+            # Enter / Return
             if key in (Qt.Key_Return, Qt.Key_Enter):
-                self._write("\n")
-                command = self.current_input
-                self.current_input = ""
-                self.command_submitted.emit(command)
+                self._send("\r")
                 return True
-            # Handle Backspace
+            # Backspace
             if key == Qt.Key_Backspace:
-                if len(self.current_input) > 0:
-                    self.current_input = self.current_input[:-1]
-                    cursor = self.terminal_output.textCursor()
-                    cursor.movePosition(QTextCursor.End)
-                    cursor.deletePreviousChar()
-                    self.terminal_output.setTextCursor(cursor)
+                self._send("\x7f")  # DEL
                 return True
-            # Block navigation/editing keys to keep cursor at end
-            if key in (Qt.Key_Left, Qt.Key_Up, Qt.Key_Down, Qt.Key_Home, Qt.Key_PageUp, Qt.Key_PageDown):
+            # Tab completion
+            if key == Qt.Key_Tab:
+                self._send("\t")
                 return True
-            # Printable text
+            # Ignore navigation keys locally; remote shell will handle with PTY
+            if key in (Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down, Qt.Key_Home, Qt.Key_End, Qt.Key_PageUp, Qt.Key_PageDown):
+                return True
+            # Printable characters
             text = event.text()
             if text:
-                self.current_input += text
-                self._write(text)
+                self._send(text)
                 return True
         return super().eventFilter(obj, event)
 

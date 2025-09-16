@@ -44,7 +44,8 @@ class SSHClient(QObject):
             self.client.connect(**connect_kwargs)
             
             self.is_connected = True
-            self.shell = self.client.invoke_shell()
+            # Allocate interactive PTY shell with colors
+            self.shell = self.client.invoke_shell(term='xterm-256color')
             self.shell.settimeout(0.1)
             
             # Start reading thread
@@ -54,6 +55,9 @@ class SSHClient(QObject):
             
             self.connection_status.emit(True, f"✅ Connected to {host}:{port}")
             self.output_received.emit(f"Welcome to {host}\n")
+
+            # Configure remote environment: prompt and terminal behavior
+            self.configure_remote_environment()
             
         except paramiko.AuthenticationException:
             error_msg = "❌ Authentication failed. Please check credentials."
@@ -71,23 +75,19 @@ class SSHClient(QObject):
             self.output_received.emit(error_msg)
     
     def read_output(self):
-        buffer = ""
         while self.is_connected:
             try:
                 if self.shell and self.shell.recv_ready():
-                    data = self.shell.recv(1024).decode('utf-8', errors='ignore')
+                    data_bytes = self.shell.recv(4096)
+                    if not data_bytes:
+                        time.sleep(0.05)
+                        continue
+                    data = data_bytes.decode('utf-8', errors='ignore')
                     if data:
-                        buffer += data
-                        if '\n' in buffer or '\r' in buffer:
-                            lines = buffer.splitlines(True)
-                            for line in lines[:-1]:
-                                self.output_received.emit(line.strip())
-                            buffer = lines[-1] if lines else ""
-                    else:
-                        time.sleep(0.1)
+                        self.output_received.emit(data)
                 else:
-                    time.sleep(0.1)
-            except:
+                    time.sleep(0.05)
+            except Exception:
                 time.sleep(0.1)
     
     def send_command(self, command):
@@ -96,6 +96,24 @@ class SSHClient(QObject):
                 self.shell.send(command + '\n')
             except Exception as e:
                 self.output_received.emit(f"Error sending command: {str(e)}")
+
+    def send_raw(self, data: str):
+        if self.is_connected and self.shell and data is not None:
+            try:
+                self.shell.send(data)
+            except Exception as e:
+                self.output_received.emit(f"Error sending input: {str(e)}")
+
+    def configure_remote_environment(self):
+        """Set prompt to [user@host cwd]$ and enable sane terminal controls."""
+        try:
+            # Disable XON/XOFF so Ctrl+S/Ctrl+Q do not freeze terminal; set Ctrl-C/D
+            self.shell.send("stty -ixon -ixoff intr ^C eof ^D 2>/dev/null\n")
+            # Set a simple, portable prompt. Works in bash/sh; \u,\h,\w are bash, but many servers use bash.
+            # If not bash, this will be ignored harmlessly.
+            self.shell.send("export PS1='[\\u@\\h \\w]\\$ '\n")
+        except Exception:
+            pass
     
     def disconnect(self):
         self.is_connected = False
