@@ -623,11 +623,8 @@ class MobaXtermClone(QMainWindow):
             
             # Удаляем саму папку
             if self.session_manager.delete_folder(folder_name):
-                # Удаляем из дерева
-                if folder_name in self.folder_items:
-                    folder_item = self.folder_items[folder_name]
-                    self.sessions_tree.takeTopLevelItem(self.sessions_tree.indexOfTopLevelItem(folder_item))
-                    del self.folder_items[folder_name]
+                # Перезагружаем дерево, чтобы отразить изменения немедленно
+                self.load_sessions()
     
     def delete_session_with_confirmation(self, session_index, session_name):
         reply = QMessageBox.question(
