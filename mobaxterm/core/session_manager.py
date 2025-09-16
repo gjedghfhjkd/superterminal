@@ -253,6 +253,27 @@ class SessionManager:
         
         self.save_sessions()
         return True
+    def move_folder(self, folder_path: str, target_parent: Optional[str]) -> bool:
+        """Переместить папку внутрь другой папки (или в корень).
+
+        folder_path: полный путь перемещаемой папки (например, "A/B")
+        target_parent: путь к папке-назначению (например, "C/D") или None/"" для корня
+        """
+        if folder_path not in self.folders:
+            return False
+
+        # Нельзя перемещать папку в саму себя или в её потомка
+        if target_parent and (target_parent == folder_path or target_parent.startswith(folder_path + '/')):
+            return False
+
+        base_name = folder_path.split('/')[-1]
+        new_path = f"{target_parent}/{base_name}" if target_parent else base_name
+
+        if new_path == folder_path:
+            return False
+
+        # Используем уже существующую логику переименования, которая обновляет все дочерние пути и сессии
+        return self.rename_folder(folder_path, new_path)
     def confirm_delete_session(self, parent, session_name: str) -> bool:
         reply = QMessageBox.question(
             parent, 

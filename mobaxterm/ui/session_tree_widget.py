@@ -8,6 +8,7 @@ class SessionTreeWidget(QTreeWidget):
     session_double_clicked = pyqtSignal(object)
     rename_requested = pyqtSignal(str, object)
     session_moved = pyqtSignal(int, str, str)  # session_index, target_folder, current_folder
+    folder_moved = pyqtSignal(str, object)  # folder_path, target_parent (str or None)
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -162,8 +163,27 @@ class SessionTreeWidget(QTreeWidget):
 
     def handle_folder_drop(self, folder_name, target_item):
         """Обработка drop папки"""
-        # Для простоты не будем поддерживать перетаскивание папок
-        pass
+        # Определяем родителя по месту броска
+        target_parent = None
+        if target_item:
+            target_type = target_item.data(0, Qt.UserRole)
+            if target_type == "folder":
+                target_parent = target_item.data(0, Qt.UserRole + 1)
+            elif target_type == "session":
+                parent = target_item.parent()
+                if parent and parent.data(0, Qt.UserRole) == "folder":
+                    target_parent = parent.data(0, Qt.UserRole + 1)
+
+        # Текущий родитель перемещаемой папки
+        parts = folder_name.split('/')
+        current_parent = '/'.join(parts[:-1]) if len(parts) > 1 else None
+
+        # Если родитель не меняется — ничего не делаем
+        if (current_parent or None) == (target_parent or None):
+            return
+
+        # Эмитим сигнал перемещения
+        self.folder_moved.emit(folder_name, target_parent)
     
     def keyPressEvent(self, event: QKeyEvent):
         """Обработка нажатий клавиш"""
