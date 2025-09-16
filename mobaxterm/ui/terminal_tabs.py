@@ -2,6 +2,10 @@ from PyQt5.QtWidgets import (QTabWidget, QWidget, QVBoxLayout, QTextEdit,
                              QHBoxLayout, QLineEdit, QLabel, QPushButton)
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QTextCursor
+try:
+    import pyte
+except Exception:
+    pyte = None
 import re
 
 class TerminalTab(QWidget):
@@ -49,10 +53,18 @@ class TerminalTab(QWidget):
         self.prompt_text = "$ "
         # Local echo is off by default; remote shell echoes characters
         self.local_echo_enabled = False
-        # Minimal line editor state for rendering interactive line updates
+        # Minimal line editor state (fallback only)
         self._line_buffer = ""
         self._line_cursor = 0
         self._in_prompt = True
+
+        # pyte screen/stream if available
+        self._pyte_screen = None
+        self._pyte_stream = None
+        if pyte is not None:
+            # Create a generous screen; resize is TODO
+            self._pyte_screen = pyte.Screen(160, 40)
+            self._pyte_stream = pyte.Stream(self._pyte_screen)
         
         # Only the terminal area is shown; input happens inline
         layout.addWidget(self.terminal_output)
@@ -69,7 +81,33 @@ class TerminalTab(QWidget):
         self.terminal_output.setReadOnly(True)
         
     def append_output(self, text):
-        # Minimal parser to handle interactive line editing sequences from bash/readline
+        # Preferred path: use pyte when available for correct terminal emulation
+        if self._pyte_stream is not None:
+            try:
+                self._pyte_stream.feed(text)
+                # Render entire screen to the QTextEdit
+                content = "\n".join(self._pyte_screen.display)
+                self.terminal_output.setPlainText(content)
+                # Place cursor according to pyte
+                cursor = self.terminal_output.textCursor()
+                # Compute position: row/col are 1-based in pyte
+                row = max(1, min(self._pyte_screen.cursor.y, self._pyte_screen.lines))
+                col = max(1, self._pyte_screen.cursor.x)
+                # Move to row
+                cursor.movePosition(QTextCursor.Start)
+                for _ in range(row - 1):
+                    cursor.movePosition(QTextCursor.Down)
+                # Move to column
+                cursor.movePosition(QTextCursor.StartOfLine)
+                for _ in range(col - 1):
+                    cursor.movePosition(QTextCursor.Right)
+                self.terminal_output.setTextCursor(cursor)
+                return
+            except Exception:
+                # Fallback to minimal logic below
+                pass
+
+        # Fallback: minimal parser for line editing sequences
         i = 0
         while i < len(text):
             ch = text[i]
