@@ -20,6 +20,11 @@ class CloseButton(QPushButton):
                 background-color: #ff4757; /* red square appears on hover */
                 color: white; /* cross becomes prominent */
                 border-radius: 3px;
+                border: 1px solid rgba(255, 71, 87, 0.65); /* subtle red highlight */
+            }
+            CloseButton:pressed {
+                background-color: #e03a49;
+                border: 1px solid rgba(224, 58, 73, 0.75);
             }
         """)
         self.setText("×")
