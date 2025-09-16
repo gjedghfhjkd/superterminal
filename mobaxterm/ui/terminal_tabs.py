@@ -99,9 +99,8 @@ class TerminalTab(QWidget):
                 col0 = max(0, min(self._pyte_screen.cursor.x, len(line_text)))
                 cursor = self.terminal_output.textCursor()
                 cursor.movePosition(QTextCursor.Start)
-                # Move an extra line down to compensate initial off-by-one
-                # (moving down at the last line is a no-op in QTextCursor)
-                for _ in range(row0 + 1):
+                # Move to the correct row (0-based)
+                for _ in range(row0):
                     cursor.movePosition(QTextCursor.Down)
                 cursor.movePosition(QTextCursor.StartOfLine)
                 for _ in range(col0):
