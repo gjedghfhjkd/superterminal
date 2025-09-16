@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
-                             QLabel, QLineEdit, QComboBox, QTreeWidget, QTreeWidgetItem)
+                             QLabel, QLineEdit, QComboBox, QTreeWidget, QTreeWidgetItem, QListView)
+from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtCore import Qt
 
 class NestedFolderDialog(QDialog):
@@ -13,6 +14,26 @@ class NestedFolderDialog(QDialog):
         
     def initUI(self):
         layout = QVBoxLayout(self)
+        # Improve dropdown selection contrast inside this dialog
+        self.setStyleSheet("""
+            QComboBox QAbstractItemView {
+                background-color: white;
+                border: 1px solid #ccc;
+            }
+            QComboBox QAbstractItemView::item {
+                height: 28px;
+                padding: 6px;
+                color: #333;
+            }
+            QComboBox QAbstractItemView::item:hover {
+                background-color: #e9f3ff;
+                color: #0a58ca;
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background-color: #0078d7;
+                color: white;
+            }
+        """)
         
         # Parent folder selection
         parent_label = QLabel("Parent folder:")
@@ -20,6 +41,28 @@ class NestedFolderDialog(QDialog):
         self.parent_combo.addItem("(Root)", "")
         for folder in self.existing_folders:
             self.parent_combo.addItem(folder, folder)
+        # Ensure dropdown selection is visible for parent folder combo
+        parent_view = QListView()
+        parent_view.setUniformItemSizes(True)
+        parent_view.setStyleSheet("""
+            QListView {
+                background-color: white;
+                color: #333;
+                border: 1px solid #ccc;
+                selection-background-color: #0078d7;
+                selection-color: white;
+                outline: 0;
+            }
+            QListView::item { height: 28px; padding: 6px; }
+            QListView::item:hover { background-color: #e9f3ff; color: #0a58ca; }
+            QListView::item:selected { background-color: #0078d7; color: white; }
+        """)
+        parent_palette = parent_view.palette()
+        for group in (QPalette.Active, QPalette.Inactive, QPalette.Disabled):
+            parent_palette.setColor(group, QPalette.Highlight, QColor("#0078d7"))
+            parent_palette.setColor(group, QPalette.HighlightedText, QColor("#ffffff"))
+        parent_view.setPalette(parent_palette)
+        self.parent_combo.setView(parent_view)
         
         # Folder name
         name_label = QLabel("Folder name:")
