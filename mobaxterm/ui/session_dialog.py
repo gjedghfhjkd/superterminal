@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QLineEdit, QCheckBox, QSpinBox, QGroupBox,
+
                              QDialogButtonBox, QGridLayout, QStackedWidget, QWidget, QComboBox,
                              QFileDialog, QInputDialog)
 from PyQt5.QtCore import Qt
@@ -220,25 +221,35 @@ class SessionDialog(QDialog):
         self.ssh_username_input.setEnabled(False)
         basic_layout.addWidget(self.ssh_username_input, 2, 1)
         
-        # Row 3: Port checkbox
-        self.ssh_port_check = QCheckBox("Custom port")
-        basic_layout.addWidget(self.ssh_port_check, 3, 0, 1, 2)
+        # Row 3: Password label and input
+        password_label = QLabel("Password:")
+        password_label.setMinimumWidth(100)
+        basic_layout.addWidget(password_label, 3, 0, Qt.AlignRight)
         
-        # Row 4: Port label and input
+        self.ssh_password_input = QLineEdit()
+        self.ssh_password_input.setEchoMode(QLineEdit.Password)
+        self.ssh_password_input.setPlaceholderText("password")
+        basic_layout.addWidget(self.ssh_password_input, 3, 1)
+        
+        # Row 4: Port checkbox
+        self.ssh_port_check = QCheckBox("Custom port")
+        basic_layout.addWidget(self.ssh_port_check, 4, 0, 1, 2)
+        
+        # Row 5: Port label and input
         port_label = QLabel("Port:")
         port_label.setMinimumWidth(100)
-        basic_layout.addWidget(port_label, 4, 0, Qt.AlignRight)
+        basic_layout.addWidget(port_label, 5, 0, Qt.AlignRight)
         
         self.ssh_port_input = QSpinBox()
         self.ssh_port_input.setRange(1, 65535)
         self.ssh_port_input.setValue(22)
         self.ssh_port_input.setEnabled(False)
-        basic_layout.addWidget(self.ssh_port_input, 4, 1)
+        basic_layout.addWidget(self.ssh_port_input, 5, 1)
         
-        # Row 5: Folder label and combo
+        # Row 6: Folder label and combo
         folder_label = QLabel("Folder:")
         folder_label.setMinimumWidth(100)
-        basic_layout.addWidget(folder_label, 5, 0, Qt.AlignRight)
+        basic_layout.addWidget(folder_label, 6, 0, Qt.AlignRight)
         
         self.folder_combo = QComboBox()
         self.folder_combo.addItem("(No folder)", None)
@@ -250,7 +261,7 @@ class SessionDialog(QDialog):
                 self.folder_combo.addItem(folder, folder)
         
         self.folder_combo.addItem("+ Create new folder...", "new")
-        basic_layout.addWidget(self.folder_combo, 5, 1)
+        basic_layout.addWidget(self.folder_combo, 6, 1)
         
         layout.addWidget(basic_group)
         
@@ -383,20 +394,30 @@ class SessionDialog(QDialog):
         self.sftp_username_input.setPlaceholderText("username")
         basic_layout.addWidget(self.sftp_username_input, 1, 1)
         
-        # Row 2: Port
+        # Row 2: Password
+        password_label = QLabel("Password:")
+        password_label.setMinimumWidth(100)
+        basic_layout.addWidget(password_label, 2, 0, Qt.AlignRight)
+        
+        self.sftp_password_input = QLineEdit()
+        self.sftp_password_input.setEchoMode(QLineEdit.Password)
+        self.sftp_password_input.setPlaceholderText("password")
+        basic_layout.addWidget(self.sftp_password_input, 2, 1)
+        
+        # Row 3: Port
         port_label = QLabel("Port:")
         port_label.setMinimumWidth(100)
-        basic_layout.addWidget(port_label, 2, 0, Qt.AlignRight)
+        basic_layout.addWidget(port_label, 3, 0, Qt.AlignRight)
         
         self.sftp_port_input = QSpinBox()
         self.sftp_port_input.setRange(1, 65535)
         self.sftp_port_input.setValue(22)
-        basic_layout.addWidget(self.sftp_port_input, 2, 1)
+        basic_layout.addWidget(self.sftp_port_input, 3, 1)
         
-        # Row 3: Folder
+        # Row 4: Folder
         folder_label = QLabel("Folder:")
         folder_label.setMinimumWidth(100)
-        basic_layout.addWidget(folder_label, 3, 0, Qt.AlignRight)
+        basic_layout.addWidget(folder_label, 4, 0, Qt.AlignRight)
         
         self.sftp_folder_combo = QComboBox()
         self.sftp_folder_combo.addItem("(No folder)", None)
@@ -407,7 +428,7 @@ class SessionDialog(QDialog):
                 self.sftp_folder_combo.addItem(folder, folder)
         
         self.sftp_folder_combo.addItem("+ Create new folder...", "new")
-        basic_layout.addWidget(self.sftp_folder_combo, 3, 1)
+        basic_layout.addWidget(self.sftp_folder_combo, 4, 1)
         
         layout.addWidget(basic_group)
         
@@ -473,6 +494,9 @@ class SessionDialog(QDialog):
                 self.ssh_username_input.setText(session.username)
                 self.ssh_username_input.setEnabled(True)
             
+            if session.password:
+                self.ssh_password_input.setText(session.password)
+            
             if session.port != 22:
                 self.ssh_port_check.setChecked(True)
                 self.ssh_port_input.setValue(session.port)
@@ -501,6 +525,8 @@ class SessionDialog(QDialog):
             self.sftp_host_input.setText(session.host)
             self.sftp_username_input.setText(session.username or "")
             self.sftp_port_input.setValue(session.port)
+            if session.password:
+                self.sftp_password_input.setText(session.password)
             
             if session.folder:
                 index = self.sftp_folder_combo.findData(session.folder)
@@ -531,6 +557,7 @@ class SessionDialog(QDialog):
                 host=self.sftp_host_input.text(),
                 port=self.sftp_port_input.value(),
                 username=self.sftp_username_input.text(),
+                password=self.sftp_password_input.text() if hasattr(self, 'sftp_password_input') else None,
                 bookmark_settings=self.sftp_bookmark_check.isChecked()
             )
             session.folder = self.sftp_folder_combo.currentData()

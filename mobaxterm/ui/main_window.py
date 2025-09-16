@@ -364,6 +364,7 @@ class MobaXtermClone(QMainWindow):
                 host=new_name,
                 port=session.port,
                 username=session.username,
+                password=session.password,
                 folder=session.folder,
                 terminal_settings=session.terminal_settings,
                 network_settings=session.network_settings,

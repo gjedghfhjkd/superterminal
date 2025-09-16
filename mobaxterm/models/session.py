@@ -8,7 +8,6 @@ class Session:
     host: str
     port: int
     username: Optional[str] = None
-    # Authentication fields
     auth_method: str = "password"  # 'password' | 'key'
     private_key_path: Optional[str] = None
     private_key_passphrase: Optional[str] = None
@@ -33,6 +32,7 @@ class Session:
             'host': self.host,
             'port': self.port,
             'username': self.username,
+
             'auth_method': self.auth_method,
             'private_key_path': self.private_key_path,
             'private_key_passphrase': self.private_key_passphrase,
