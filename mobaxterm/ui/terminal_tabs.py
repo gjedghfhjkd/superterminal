@@ -106,6 +106,13 @@ class TerminalTab(QWidget):
                             elif cmd == 'C':  # cursor right
                                 self._line_cursor = min(len(self._line_buffer), self._line_cursor + 1)
                                 self._render_current_line()
+                            elif cmd == 'G':  # CHA – cursor horizontal absolute
+                                try:
+                                    col = int(params) if params.isdigit() else 1
+                                except Exception:
+                                    col = 1
+                                self._line_cursor = max(0, min(len(self._line_buffer), col - 1))
+                                self._render_current_line()
                             elif cmd == 'K':  # erase to end of line
                                 self._line_buffer = self._line_buffer[:self._line_cursor]
                                 self._render_current_line()
@@ -160,10 +167,12 @@ class TerminalTab(QWidget):
             self._line_cursor += 1
             self._render_current_line()
             i += 1
-        # Auto-scroll to bottom
-        cursor = self.terminal_output.textCursor()
-        cursor.movePosition(QTextCursor.End)
-        self.terminal_output.setTextCursor(cursor)
+        # Auto-scroll to bottom only when a newline is printed; otherwise
+        # keep caret where server editing logic placed it
+        if '\n' in text:
+            cursor = self.terminal_output.textCursor()
+            cursor.movePosition(QTextCursor.End)
+            self.terminal_output.setTextCursor(cursor)
 
     def _write(self, text: str):
         cursor = self.terminal_output.textCursor()
