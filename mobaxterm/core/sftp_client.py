@@ -96,9 +96,24 @@ class SFTPClient(QObject):
             else:
                 candidate = os.path.normpath(new_path)
 
-            norm = self.sftp.normalize(candidate)
-            # Test access by listing
-            _ = self.sftp.listdir(norm)
+            # Some SFTP servers don't support normalize for relative, build absolute
+            try:
+                norm = self.sftp.normalize(candidate)
+            except Exception:
+                norm = candidate
+            # Ensure it's a directory
+            try:
+                st = self.sftp.stat(norm)
+                if not stat.S_ISDIR(getattr(st, 'st_mode', 0)):
+                    # If it's a file, use its directory
+                    norm = os.path.dirname(norm) or '/'
+            except Exception:
+                # Fallback: try listdir to confirm
+                try:
+                    _ = self.sftp.listdir(norm)
+                except Exception as e:
+                    self.connection_status.emit(True, f"⚠️ Cannot change directory: {str(e)}")
+                    return
             self.current_path = norm
             self.list_dir(norm)
         except Exception as e:

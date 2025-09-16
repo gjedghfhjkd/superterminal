@@ -97,6 +97,31 @@ class SFTPThread(QThread):
         except Exception:
             pass
 
+    # Wrapper slots to forward calls via signals (queued to this thread)
+    def on_change_dir(self, path: str):
+        try:
+            self.change_dir.emit(path)
+        except Exception:
+            pass
+
+    def on_up_dir(self):
+        try:
+            self.up_dir.emit()
+        except Exception:
+            pass
+
+    def on_upload(self, local_paths: list, remote_dir: str):
+        try:
+            self.upload_files.emit(local_paths, remote_dir)
+        except Exception:
+            pass
+
+    def on_download(self, remote_paths: list, local_dir: str):
+        try:
+            self.download_files.emit(remote_paths, local_dir)
+        except Exception:
+            pass
+
 class MobaXtermClone(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -777,11 +802,11 @@ class MobaXtermClone(QMainWindow):
 
             # Start SFTP thread
             sftp_thread = SFTPThread(session)
-            # Wire UI -> thread navigation
-            sftp_tab.remote_change_dir.connect(sftp_thread.change_dir.emit)
-            sftp_tab.remote_up_dir.connect(sftp_thread.up_dir.emit)
-            sftp_tab.request_upload.connect(sftp_thread.upload_files.emit)
-            sftp_tab.request_download.connect(sftp_thread.download_files.emit)
+            # Wire UI -> thread navigation via wrapper slots to ensure queued delivery
+            sftp_tab.remote_change_dir.connect(sftp_thread.on_change_dir)
+            sftp_tab.remote_up_dir.connect(sftp_thread.on_up_dir)
+            sftp_tab.request_upload.connect(sftp_thread.on_upload)
+            sftp_tab.request_download.connect(sftp_thread.on_download)
             # Wire thread -> UI
             sftp_thread.remote_listing.connect(sftp_tab.set_remote_listing)
             sftp_thread.connection_status.connect(

@@ -300,6 +300,11 @@ class SFTPTab(QWidget):
             it.setData(0, Qt.UserRole, e)
             self.remote_tree.addTopLevelItem(it)
         self.remote_tree.sortItems(0, Qt.AscendingOrder)
+        # Ensure double-click selects rows not icons
+        try:
+            self.remote_tree.setAllColumnsShowFocus(True)
+        except Exception:
+            pass
 
     def on_remote_path_enter(self):
         path = self.remote_path_edit.text().strip()
