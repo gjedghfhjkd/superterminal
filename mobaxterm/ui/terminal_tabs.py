@@ -86,25 +86,26 @@ class TerminalTab(QWidget):
             try:
                 self._pyte_stream.feed(text)
                 # Render entire screen to the QTextEdit
-                content = "\n".join(self._pyte_screen.display)
+                # Ensure number of lines equals screen height for consistent positioning
+                lines = list(self._pyte_screen.display)
+                height = getattr(self._pyte_screen, 'lines', len(lines))
+                if len(lines) < height:
+                    lines += [""] * (height - len(lines))
+                content = "\n".join(lines)
                 self.terminal_output.setPlainText(content)
-                # Place cursor according to pyte
+                # Compute absolute document offset for caret
+                row0 = max(0, min(self._pyte_screen.cursor.y, len(lines) - 1))
+                line_text = lines[row0] if 0 <= row0 < len(lines) else ""
+                col0 = max(0, min(self._pyte_screen.cursor.x, len(line_text)))
+                # Sum lengths of previous lines plus newlines
+                offset = 0
+                for i in range(row0):
+                    offset += len(lines[i]) + 1  # +1 for \n
+                offset += col0
+                doc = self.terminal_output.document()
+                offset = max(0, min(offset, doc.characterCount() - 1))
                 cursor = self.terminal_output.textCursor()
-                # Compute position: pyte cursor is 0-based (x,y)
-                total_rows = len(self._pyte_screen.display)
-                row0 = max(0, min(self._pyte_screen.cursor.y, total_rows - 1))
-                # Clamp column to current line length
-                line_text = self._pyte_screen.display[row0] if 0 <= row0 < total_rows else ""
-                max_col = len(line_text)
-                col0 = max(0, min(self._pyte_screen.cursor.x, max_col))
-                # Move to row
-                cursor.movePosition(QTextCursor.Start)
-                for _ in range(row0):
-                    cursor.movePosition(QTextCursor.Down)
-                # Move to column
-                cursor.movePosition(QTextCursor.StartOfLine)
-                for _ in range(col0):
-                    cursor.movePosition(QTextCursor.Right)
+                cursor.setPosition(offset)
                 self.terminal_output.setTextCursor(cursor)
                 return
             except Exception:
