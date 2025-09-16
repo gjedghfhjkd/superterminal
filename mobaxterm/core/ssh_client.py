@@ -111,7 +111,8 @@ class SSHClient(QObject):
         """Set prompt to [user@host cwd]$ and enable sane terminal controls."""
         try:
             # Stepwise to let -echo take effect before further commands are echoed
-            self.shell.send("stty -echo 2>/dev/null\n")
+            # Turn off echo and hide prompt while configuring; clear last echoed line
+            self.shell.send("stty -echo 2>/dev/null; PS1=; printf '\033[1A\r\033[K'\n")
             time.sleep(0.05)
             self.shell.send("stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null\n")
             time.sleep(0.02)
