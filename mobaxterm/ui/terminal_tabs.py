@@ -35,6 +35,12 @@ class TerminalTab(QWidget):
         # Some key events are delivered to the viewport; filter there too
         self.terminal_output.viewport().installEventFilter(self)
         self.terminal_output.setCursorWidth(2)
+        self.terminal_output.setFocusPolicy(Qt.StrongFocus)
+        try:
+            # Keep Tab inside the widget, not as focus-change
+            self.terminal_output.setTabChangesFocus(False)
+        except Exception:
+            pass
         self.terminal_output.setReadOnly(True)
         
         # State for inline input handling
@@ -49,8 +55,8 @@ class TerminalTab(QWidget):
         
     def enable_input(self):
         self.input_enabled = True
-        # Allow widget to receive key events; we'll block local echo via eventFilter
-        self.terminal_output.setReadOnly(False)
+        # Keep read-only to avoid local edits; eventFilter handles keys
+        self.terminal_output.setReadOnly(True)
         self.terminal_output.setFocus()
         self.current_input = ""
         
@@ -59,8 +65,7 @@ class TerminalTab(QWidget):
         self.terminal_output.setReadOnly(True)
         
     def append_output(self, text):
-        # Strip ANSI escape sequences for readability in QTextEdit, but
-        # keep a minimal subset for CR handling
+        # Strip ANSI/OSC sequences for readability in QTextEdit
         cleaned = self._strip_ansi(text)
         # Normalize line endings
         # Convert CRLF and bare CR to LF
@@ -124,13 +129,8 @@ class TerminalTab(QWidget):
                 return True
             # Backspace
             if key == Qt.Key_Backspace:
-                # Local erase for UI feedback
-                if self.local_echo_enabled:
-                    cursor = self.terminal_output.textCursor()
-                    cursor.movePosition(QTextCursor.End)
-                    cursor.deletePreviousChar()
-                    self.terminal_output.setTextCursor(cursor)
-                self._send("\x7f")  # DEL
+                # Send Backspace as DEL; many shells map it correctly
+                self._send("\x7f")
                 return True
             # Tab completion
             if key == Qt.Key_Tab:
