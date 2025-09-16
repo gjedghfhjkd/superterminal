@@ -60,8 +60,7 @@ class SSHClient(QObject):
             # Emit status to UI only (do not write to terminal widget)
             self.connection_status.emit(True, f"✅ Connected to {host}:{port}")
 
-            # Give the server a brief moment to print MOTD/Last login, then configure
-            time.sleep(0.3)
+            # Configure immediately to avoid extra prompts
             self.configure_remote_environment()
             
         except paramiko.AuthenticationException:
@@ -125,7 +124,7 @@ class SSHClient(QObject):
         """Set prompt to [user@host cwd]$ and enable sane terminal controls."""
         try:
             # First: turn echo OFF so next commands are not echoed by the PTY
-            cmd0 = "stty -echo 2>/dev/null\n"
+            cmd0 = "stty -echo 2>/dev/null\r"
             self._suppress_bytes += cmd0.encode('utf-8')
             self.shell.send(cmd0)
             time.sleep(0.02)
@@ -137,7 +136,7 @@ class SSHClient(QObject):
                 "stty icanon icrnl -inlcr -igncr onlcr 2>/dev/null; "
                 "if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off' >/dev/null 2>&1; fi; "
                 "export LANG=C.UTF-8 LC_ALL=C.UTF-8 >/dev/null 2>&1; "
-                "stty echo 2>/dev/null\n"
+                "stty echo 2>/dev/null\r"
             )
             self.shell.send(cmd)
         except Exception:
