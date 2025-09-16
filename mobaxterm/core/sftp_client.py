@@ -110,6 +110,112 @@ class SFTPClient(QObject):
         parent = os.path.dirname(self.current_path.rstrip('/')) or '/'
         self.change_dir(parent)
 
+    # ===== Transfers =====
+    def upload_files(self, local_paths, remote_dir):
+        if not self.is_connected or self.sftp is None:
+            return
+        try:
+            remote_dir = self.sftp.normalize(remote_dir or self.current_path or '/')
+        except Exception:
+            remote_dir = self.current_path or '/'
+        uploaded = 0
+        failed = 0
+        for lp in local_paths or []:
+            try:
+                if os.path.isdir(lp):
+                    self._upload_dir_recursive(lp, os.path.join(remote_dir, os.path.basename(lp)))
+                else:
+                    target = os.path.join(remote_dir, os.path.basename(lp)).replace('\\', '/')
+                    self._ensure_remote_dir(remote_dir)
+                    self.sftp.put(lp, target)
+                uploaded += 1
+            except Exception as e:
+                failed += 1
+                self.connection_status.emit(True, f"⚠️ Upload failed for {os.path.basename(lp)}: {str(e)}")
+        # Refresh listing
+        self.list_dir(remote_dir)
+        if failed == 0:
+            self.connection_status.emit(True, f"✅ Uploaded {uploaded} item(s) to {remote_dir}")
+        else:
+            self.connection_status.emit(True, f"⛔ Uploaded {uploaded}, failed {failed} to {remote_dir}")
+
+    def _ensure_remote_dir(self, path):
+        # Create remote directories recursively
+        parts = []
+        p = path
+        while p not in ('', '/', None):
+            parts.append(p)
+            p = os.path.dirname(p.rstrip('/'))
+        for dirp in reversed(parts):
+            try:
+                self.sftp.listdir(dirp)
+            except Exception:
+                try:
+                    self.sftp.mkdir(dirp)
+                except Exception:
+                    pass
+
+    def _upload_dir_recursive(self, local_dir, remote_dir):
+        self._ensure_remote_dir(remote_dir)
+        for root, dirs, files in os.walk(local_dir):
+            rel = os.path.relpath(root, local_dir)
+            target_root = remote_dir if rel == '.' else os.path.join(remote_dir, rel).replace('\\', '/')
+            self._ensure_remote_dir(target_root)
+            for d in dirs:
+                self._ensure_remote_dir(os.path.join(target_root, d).replace('\\', '/'))
+            for f in files:
+                lp = os.path.join(root, f)
+                rp = os.path.join(target_root, f).replace('\\', '/')
+                self.sftp.put(lp, rp)
+
+    def download_files(self, remote_paths, local_dir):
+        if not self.is_connected or self.sftp is None:
+            return
+        try:
+            if not os.path.isdir(local_dir):
+                os.makedirs(local_dir, exist_ok=True)
+        except Exception:
+            pass
+        downloaded = 0
+        failed = 0
+        for rp in remote_paths or []:
+            try:
+                # Determine if remote is dir
+                try:
+                    st = self.sftp.stat(rp)
+                    is_dir = stat.S_ISDIR(getattr(st, 'st_mode', 0))
+                except IOError:
+                    is_dir = False
+                if is_dir:
+                    self._download_dir_recursive(rp, os.path.join(local_dir, os.path.basename(rp)))
+                else:
+                    lp = os.path.join(local_dir, os.path.basename(rp))
+                    self.sftp.get(rp, lp)
+                downloaded += 1
+            except Exception as e:
+                failed += 1
+                self.connection_status.emit(True, f"⚠️ Download failed for {os.path.basename(rp)}: {str(e)}")
+        # Refresh listing on current dir
+        self.list_dir(self.current_path)
+        if failed == 0:
+            self.connection_status.emit(True, f"✅ Downloaded {downloaded} item(s) to {local_dir}")
+        else:
+            self.connection_status.emit(True, f"⛔ Downloaded {downloaded}, failed {failed} to {local_dir}")
+
+    def _download_dir_recursive(self, remote_dir, local_dir):
+        try:
+            os.makedirs(local_dir, exist_ok=True)
+        except Exception:
+            pass
+        for entry in self.sftp.listdir_attr(remote_dir):
+            name = getattr(entry, 'filename', '')
+            rp = remote_dir.rstrip('/') + '/' + name
+            lp = os.path.join(local_dir, name)
+            if stat.S_ISDIR(entry.st_mode):
+                self._download_dir_recursive(rp, lp)
+            else:
+                self.sftp.get(rp, lp)
+
     def disconnect(self):
         try:
             if self.sftp:

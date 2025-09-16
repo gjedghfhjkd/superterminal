@@ -59,6 +59,8 @@ class SFTPThread(QThread):
     remote_listing = pyqtSignal(str, list)
     change_dir = pyqtSignal(str)
     up_dir = pyqtSignal()
+    upload_files = pyqtSignal(list, str)
+    download_files = pyqtSignal(list, str)
 
     def __init__(self, session):
         super().__init__()
@@ -72,6 +74,8 @@ class SFTPThread(QThread):
         # UI -> thread operations
         self.change_dir.connect(self.client.change_dir)
         self.up_dir.connect(self.client.up_dir)
+        self.upload_files.connect(self.client.upload_files)
+        self.download_files.connect(self.client.download_files)
         # Connect now
         self.client.connect(
             host=self.session.host,
@@ -415,7 +419,8 @@ class MobaXtermClone(QMainWindow):
             session.name = new_name
             if self.session_manager.update_session(session_index, session):
                 # Обновляем отображение: показываем Session Name, tooltip оставляем с host:port
-                item.setText(0, f"🖥️  {session.name}")
+                icon = "🖥️" if session.type == 'SSH' else "🔗"
+                item.setText(0, f"{icon}  {session.name}")
                 item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
     
     def rename_folder(self, old_folder_name, item):
@@ -571,7 +576,8 @@ class MobaXtermClone(QMainWindow):
     def add_session_to_tree(self, session, index, parent_item):
         session_item = QTreeWidgetItem(parent_item)
         display_name = getattr(session, 'name', None) or session.host
-        session_item.setText(0, f"🖥️  {display_name}")
+        icon = "🖥️" if session.type == 'SSH' else "🔗"
+        session_item.setText(0, f"{icon}  {display_name}")
         session_item.setData(0, Qt.UserRole, "session")
         session_item.setData(0, Qt.UserRole + 1, index)
         session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
@@ -615,7 +621,8 @@ class MobaXtermClone(QMainWindow):
             
             session_item = QTreeWidgetItem(folder_item)
             display_name = getattr(session, 'name', None) or session.host
-            session_item.setText(0, f"🖥️  {display_name}")
+            icon = "🖥️" if session.type == 'SSH' else "🔗"
+            session_item.setText(0, f"{icon}  {display_name}")
             session_item.setData(0, Qt.UserRole, "session")
             session_item.setData(0, Qt.UserRole + 1, session_index)
             session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
@@ -773,6 +780,8 @@ class MobaXtermClone(QMainWindow):
             # Wire UI -> thread navigation
             sftp_tab.remote_change_dir.connect(sftp_thread.change_dir.emit)
             sftp_tab.remote_up_dir.connect(sftp_thread.up_dir.emit)
+            sftp_tab.request_upload.connect(sftp_thread.upload_files.emit)
+            sftp_tab.request_download.connect(sftp_thread.download_files.emit)
             # Wire thread -> UI
             sftp_thread.remote_listing.connect(sftp_tab.set_remote_listing)
             sftp_thread.connection_status.connect(

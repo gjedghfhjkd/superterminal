@@ -2,7 +2,8 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QLineEdit, QPushButton, QTreeWidget, QTreeWidgetItem, QLabel
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QMimeData
+from PyQt5.QtGui import QDrag
 import os
 import time
 
@@ -11,6 +12,8 @@ class SFTPTab(QWidget):
     # UI -> Thread
     remote_change_dir = pyqtSignal(str)
     remote_up_dir = pyqtSignal()
+    request_upload = pyqtSignal(list, str)  # local_paths, remote_dir
+    request_download = pyqtSignal(list, str)  # remote_paths, local_dir
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
@@ -48,6 +51,10 @@ class SFTPTab(QWidget):
         self.local_tree.setHeaderLabels(["Name", "Size", "Modified"])
         self.local_tree.setColumnWidth(0, 280)
         self.local_tree.setAlternatingRowColors(True)
+        self.local_tree.setSelectionMode(QTreeWidget.ExtendedSelection)
+        self.local_tree.setDragEnabled(True)
+        self.local_tree.setAcceptDrops(True)
+        self.local_tree.setDragDropMode(QTreeWidget.DragDrop)
 
         left_layout.addWidget(left_top)
         left_layout.addWidget(self.local_tree)
@@ -73,6 +80,10 @@ class SFTPTab(QWidget):
         self.remote_tree.setHeaderLabels(["Name", "Size", "Modified"])
         self.remote_tree.setColumnWidth(0, 280)
         self.remote_tree.setAlternatingRowColors(True)
+        self.remote_tree.setSelectionMode(QTreeWidget.ExtendedSelection)
+        self.remote_tree.setDragEnabled(True)
+        self.remote_tree.setAcceptDrops(True)
+        self.remote_tree.setDragDropMode(QTreeWidget.DragDrop)
 
         right_layout.addWidget(right_top)
         right_layout.addWidget(self.remote_tree)
@@ -92,6 +103,16 @@ class SFTPTab(QWidget):
         self.remote_up_btn.clicked.connect(lambda: self.remote_up_dir.emit())
         self.remote_path_edit.returnPressed.connect(self.on_remote_path_enter)
         self.remote_tree.itemDoubleClicked.connect(self.on_remote_item_double_clicked)
+
+        # DnD handlers
+        self.local_tree.startDrag = self._start_drag_local
+        self.remote_tree.startDrag = self._start_drag_remote
+        self.remote_tree.dragEnterEvent = self._drag_enter_remote
+        self.remote_tree.dragMoveEvent = self._drag_enter_remote
+        self.remote_tree.dropEvent = self._drop_on_remote
+        self.local_tree.dragEnterEvent = self._drag_enter_local
+        self.local_tree.dragMoveEvent = self._drag_enter_local
+        self.local_tree.dropEvent = self._drop_on_local
 
         # Initial local listing
         self._populate_local()
@@ -152,6 +173,90 @@ class SFTPTab(QWidget):
             it.setData(0, Qt.UserRole, e)
             self.local_tree.addTopLevelItem(it)
         self.local_tree.sortItems(0, Qt.AscendingOrder)
+
+    # ===== Drag and Drop =====
+    def _collect_selected_local_paths(self):
+        paths = []
+        for it in self.local_tree.selectedItems():
+            data = it.data(0, Qt.UserRole)
+            if not data:
+                continue
+            name = data.get('name')
+            if name == '..':
+                continue
+            paths.append(os.path.join(self._local_path, name))
+        return paths
+
+    def _collect_selected_remote_paths(self):
+        paths = []
+        for it in self.remote_tree.selectedItems():
+            data = it.data(0, Qt.UserRole)
+            if not data:
+                continue
+            name = data.get('name')
+            if name == '..':
+                continue
+            # Build absolute remote path
+            if self._remote_path.endswith('/'):
+                rp = self._remote_path + name
+            else:
+                rp = self._remote_path + '/' + name
+            paths.append(rp)
+        return paths
+
+    def _start_drag_local(self, supported_actions):
+        paths = self._collect_selected_local_paths()
+        if not paths:
+            return
+        mime = QMimeData()
+        mime.setData('application/x-sftp-local-paths', '\n'.join(paths).encode('utf-8'))
+        drag = QDrag(self.local_tree)
+        drag.setMimeData(mime)
+        drag.exec_(Qt.CopyAction)
+
+    def _start_drag_remote(self, supported_actions):
+        paths = self._collect_selected_remote_paths()
+        if not paths:
+            return
+        mime = QMimeData()
+        mime.setData('application/x-sftp-remote-paths', '\n'.join(paths).encode('utf-8'))
+        drag = QDrag(self.remote_tree)
+        drag.setMimeData(mime)
+        drag.exec_(Qt.CopyAction)
+
+    def _drag_enter_remote(self, event):
+        md = event.mimeData()
+        if md.hasFormat('application/x-sftp-local-paths'):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def _drop_on_remote(self, event):
+        md = event.mimeData()
+        if md.hasFormat('application/x-sftp-local-paths'):
+            data = bytes(md.data('application/x-sftp-local-paths')).decode('utf-8')
+            local_paths = [p for p in data.split('\n') if p]
+            self.request_upload.emit(local_paths, self._remote_path)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def _drag_enter_local(self, event):
+        md = event.mimeData()
+        if md.hasFormat('application/x-sftp-remote-paths'):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def _drop_on_local(self, event):
+        md = event.mimeData()
+        if md.hasFormat('application/x-sftp-remote-paths'):
+            data = bytes(md.data('application/x-sftp-remote-paths')).decode('utf-8')
+            remote_paths = [p for p in data.split('\n') if p]
+            self.request_download.emit(remote_paths, self._local_path)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
 
     def on_local_up(self):
         parent = os.path.dirname(self._local_path.rstrip(os.sep)) or os.sep
