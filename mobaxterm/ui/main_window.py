@@ -419,19 +419,22 @@ class MobaXtermClone(QMainWindow):
         self.folder_items.clear()
         self.session_items.clear()
         
-        # Создаем древовидную структуру папок
-        folder_tree = {}
+        # Создаем (и отображаем) все папки, включая вложенные
         all_folders = self.session_manager.get_all_folders()
-        
-        # Строим дерево папок
         for folder_path in all_folders:
-            parts = folder_path.split('/')
-            current_level = folder_tree
-            
-            for part in parts:
-                if part not in current_level:
-                    current_level[part] = {}
-                current_level = current_level[part]
+            if folder_path:
+                self.add_folder_to_tree(folder_path)
+        
+        # Добавляем сессии в соответствующие папки или в корень
+        for index, session in enumerate(self.session_manager.get_all_sessions()):
+            if session.folder:
+                folder_item = self.folder_items.get(session.folder)
+                if not folder_item:
+                    folder_item = self.add_folder_to_tree(session.folder)
+                parent_item = folder_item if folder_item else self.sessions_tree
+                self.add_session_to_tree(session, index, parent_item)
+            else:
+                self.add_session_to_tree(session, index, self.sessions_tree)
         
     def handle_tree_context_menu(self, action_type, item):
         if action_type == "add_folder":
@@ -442,6 +445,19 @@ class MobaXtermClone(QMainWindow):
             if item and item.data(0, Qt.UserRole) == "folder":
                 folder_name = item.data(0, Qt.UserRole + 1)
                 self.add_new_session_to_folder(folder_name)
+        elif action_type == "add_subfolder":
+            if item and item.data(0, Qt.UserRole) == "folder":
+                parent_folder = item.data(0, Qt.UserRole + 1)
+                sub_name, ok = QInputDialog.getText(
+                    self,
+                    "New Subfolder",
+                    f"Enter subfolder name under '{parent_folder}':",
+                    QLineEdit.Normal
+                )
+                if ok and sub_name:
+                    new_path = f"{parent_folder}/{sub_name}"
+                    if self.session_manager.add_folder(new_path):
+                        self.load_sessions()
         elif action_type == "delete_folder":
             if item and item.data(0, Qt.UserRole) == "folder":
                 folder_name = item.data(0, Qt.UserRole + 1)
@@ -498,15 +514,27 @@ class MobaXtermClone(QMainWindow):
         self.session_items[index] = session_item
         
     def add_folder_to_tree(self, folder_name):
-        folder_item = QTreeWidgetItem(self.sessions_tree)
-        folder_item.setText(0, f"📁 {folder_name}")
-        folder_item.setData(0, Qt.UserRole, "folder")
-        folder_item.setData(0, Qt.UserRole + 1, folder_name)
-        folder_item.setToolTip(0, f"Folder: {folder_name}")
-        folder_item.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator)
-        folder_item.setExpanded(True)
-        self.folder_items[folder_name] = folder_item
-        return folder_item
+        # Создаем вложенные элементы для пути вида "parent/child/sub"
+        parts = folder_name.split('/') if folder_name else []
+        parent_item = None
+        built_parts = []
+        for part in parts:
+            built_parts.append(part)
+            current_path = '/'.join(built_parts)
+            if current_path in self.folder_items:
+                parent_item = self.folder_items[current_path]
+                continue
+            container = parent_item if parent_item else self.sessions_tree
+            folder_item = QTreeWidgetItem(container)
+            folder_item.setText(0, f"📁 {part}")
+            folder_item.setData(0, Qt.UserRole, "folder")
+            folder_item.setData(0, Qt.UserRole + 1, current_path)
+            folder_item.setToolTip(0, f"Folder: {current_path}")
+            folder_item.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator)
+            folder_item.setExpanded(True)
+            self.folder_items[current_path] = folder_item
+            parent_item = folder_item
+        return self.folder_items.get(folder_name)
     
     def add_new_session_to_folder(self, folder_name):
         dialog = SessionDialog(self)
