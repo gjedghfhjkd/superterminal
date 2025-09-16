@@ -11,17 +11,20 @@ class CloseButton(QPushButton):
             CloseButton {
                 background-color: transparent;
                 border: none;
-                border-radius: 8px;
-                color: #666;
+                border-radius: 3px;
+                color: rgba(0, 0, 0, 0.35); /* faint cross by default */
                 font-size: 12px;
                 font-weight: bold;
             }
             CloseButton:hover {
-                background-color: #ff4757;
-                color: white;
+                background-color: #ff4757; /* red square appears on hover */
+                color: white; /* cross becomes prominent */
+                border-radius: 3px;
             }
         """)
         self.setText("×")
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip("Close")
 
 class CustomTabWidget(QTabWidget):
     tab_close_requested = pyqtSignal(int)
