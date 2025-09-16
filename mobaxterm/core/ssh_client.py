@@ -110,14 +110,20 @@ class SSHClient(QObject):
     def configure_remote_environment(self):
         """Set prompt to [user@host cwd]$ and enable sane terminal controls."""
         try:
-            self.shell.send(
-                "stty -echo 2>/dev/null; "
-                "stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null; "
-                "stty echo icanon icrnl -inlcr -igncr onlcr 2>/dev/null; "
-                "if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off'; fi 2>/dev/null; "
-                "export PS1='[\\u@\\h \\w]\\$ '; export LANG=C.UTF-8 LC_ALL=C.UTF-8 2>/dev/null; "
-                "stty echo 2>/dev/null\n"
-            )
+            # Stepwise to let -echo take effect before further commands are echoed
+            self.shell.send("stty -echo 2>/dev/null\n")
+            time.sleep(0.05)
+            self.shell.send("stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null\n")
+            time.sleep(0.02)
+            self.shell.send("stty echo icanon icrnl -inlcr -igncr onlcr 2>/dev/null\n")
+            time.sleep(0.02)
+            self.shell.send("if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off'; fi 2>/dev/null\n")
+            time.sleep(0.02)
+            self.shell.send("export PS1='[\\u@\\h \\w]\\$ '\n")
+            time.sleep(0.02)
+            self.shell.send("export LANG=C.UTF-8 LC_ALL=C.UTF-8 2>/dev/null\n")
+            time.sleep(0.02)
+            self.shell.send("stty echo 2>/dev/null\n")
         except Exception:
             pass
     
