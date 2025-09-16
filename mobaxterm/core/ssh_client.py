@@ -133,6 +133,11 @@ class SSHClient(QObject):
             cmd_ps1_empty = ":; PS1=\n"
             self._suppress_bytes += cmd_ps1_empty.encode('utf-8')
             self.shell.send(cmd_ps1_empty)
+            # Clear the currently printed default prompt line
+            try:
+                self.shell.send("\r\x1b[K")
+            except Exception:
+                pass
             time.sleep(0.01)
             # 3) keyboard/erase and flow control (with echo still OFF)
             self.shell.send("stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null\n")
@@ -148,8 +153,14 @@ class SSHClient(QObject):
             time.sleep(0.01)
             self.shell.send("export PS1='[\\u@\\h \\w]\\$ ' >/dev/null 2>&1\n")
             time.sleep(0.01)
-            # 7) finally re-enable echo
+            # 7) finally re-enable echo and force redraw of prompt once
             self.shell.send("stty echo 2>/dev/null\n")
+            time.sleep(0.01)
+            try:
+                # Newline to make bash print the prompt with new PS1
+                self.shell.send("\r\n")
+            except Exception:
+                pass
         except Exception:
             pass
     
