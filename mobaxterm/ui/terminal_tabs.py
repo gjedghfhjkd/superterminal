@@ -2,12 +2,19 @@ from PyQt5.QtWidgets import (QTabWidget, QWidget, QVBoxLayout, QTextEdit,
                              QHBoxLayout, QLineEdit, QLabel, QPushButton)
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QTextCursor
+try:
+    import pyte
+except Exception:
+    pyte = None
+import re
 
 class TerminalTab(QWidget):
     command_submitted = pyqtSignal(str)
     def __init__(self, session, parent=None):
         super().__init__(parent)
         self.session = session
+        self._send_key = None  # callable that sends raw data to SSH
+        self._send_queue = []  # buffer keys until sender is ready
         self.initUI()
         
     def initUI(self):
@@ -28,35 +35,237 @@ class TerminalTab(QWidget):
             }
         """)
         self.terminal_output.setPlainText("")
+        # Disable line wrap to keep rows aligned with emulator screen
+        self.terminal_output.setLineWrapMode(QTextEdit.NoWrap)
         self.terminal_output.installEventFilter(self)
+        # Some key events are delivered to the viewport; filter there too
+        self.terminal_output.viewport().installEventFilter(self)
         self.terminal_output.setCursorWidth(2)
+        self.terminal_output.setFocusPolicy(Qt.StrongFocus)
+        try:
+            # Keep Tab inside the widget, not as focus-change
+            self.terminal_output.setTabChangesFocus(False)
+        except Exception:
+            pass
         self.terminal_output.setReadOnly(True)
         
         # State for inline input handling
         self.input_enabled = False
         self.current_input = ""
         self.prompt_text = "$ "
+        # Local echo is off by default; remote shell echoes characters
+        self.local_echo_enabled = False
+        # Minimal line editor state (fallback only)
+        self._line_buffer = ""
+        self._line_cursor = 0
+        self._in_prompt = True
+
+        # pyte screen/stream if available
+        self._pyte_screen = None
+        self._pyte_stream = None
+        if pyte is not None:
+            # Create a generous screen; resize is TODO
+            self._pyte_screen = pyte.Screen(160, 40)
+            self._pyte_stream = pyte.Stream(self._pyte_screen)
+        # One-time cleanup right after first connect render
+        self._first_connect_cleanup = True
         
         # Only the terminal area is shown; input happens inline
         layout.addWidget(self.terminal_output)
         
     def enable_input(self):
         self.input_enabled = True
+        # Make editable so caret blinks; eventFilter prevents local edits
         self.terminal_output.setReadOnly(False)
         self.terminal_output.setFocus()
         self.current_input = ""
-        self._write(self.prompt_text)
         
     def disable_input(self):
         self.input_enabled = False
         self.terminal_output.setReadOnly(True)
         
     def append_output(self, text):
-        self.terminal_output.append(text)
-        # Auto-scroll to bottom
-        cursor = self.terminal_output.textCursor()
-        cursor.movePosition(QTextCursor.End)
-        self.terminal_output.setTextCursor(cursor)
+        # Preferred path: use pyte when available for correct terminal emulation
+        if self._pyte_stream is not None:
+            try:
+                self._pyte_stream.feed(text)
+                # Render entire screen to the QTextEdit
+                # Ensure number of lines equals screen height for consistent positioning
+                lines = list(self._pyte_screen.display)
+                height = getattr(self._pyte_screen, 'lines', len(lines))
+                if len(lines) < height:
+                    lines += [""] * (height - len(lines))
+                content = "\n".join(lines)
+                # Cleanup tail: collapse excessive blank lines and duplicate prompts
+                try:
+                    def _cleanup_tail(text: str) -> str:
+                        tail_lines = text.split('\n')
+                        # Collapse trailing blanks to at most one
+                        while len(tail_lines) >= 3 and tail_lines[-1].strip() == '' and tail_lines[-2].strip() == '':
+                            tail_lines.pop()
+                        # Deduplicate identical prompt lines at the very end
+                        prompt_re = re.compile(r"(^.+@.+:.*[#$]\s*$|^\[[^\n]*\][#$]\s*$)")
+                        # Keep removing duplicates among last lines
+                        changed = True
+                        while changed and len(tail_lines) >= 2:
+                            changed = False
+                            if prompt_re.search(tail_lines[-1]) and tail_lines[-1] == tail_lines[-2]:
+                                tail_lines.pop(-2)
+                                changed = True
+                        return '\n'.join(tail_lines)
+                    content = _cleanup_tail(content)
+                except Exception:
+                    pass
+                self._first_connect_cleanup = False
+                self.terminal_output.setPlainText(content)
+                # Compute caret by moving cursor to row/col (0-based)
+                row0 = max(0, min(self._pyte_screen.cursor.y, len(lines) - 1))
+                line_text = lines[row0] if 0 <= row0 < len(lines) else ""
+                col0 = max(0, min(self._pyte_screen.cursor.x, len(line_text)))
+                cursor = self.terminal_output.textCursor()
+                cursor.movePosition(QTextCursor.Start)
+                # Move to the correct row (0-based)
+                for _ in range(row0):
+                    cursor.movePosition(QTextCursor.Down)
+                cursor.movePosition(QTextCursor.StartOfLine)
+                for _ in range(col0):
+                    cursor.movePosition(QTextCursor.Right)
+                self.terminal_output.setTextCursor(cursor)
+                return
+            except Exception:
+                # Fallback to minimal logic below
+                pass
+
+        # Fallback: minimal parser for line editing sequences
+        i = 0
+        while i < len(text):
+            ch = text[i]
+            # Handle ESC sequences
+            if ch == '\x1b':
+                if i + 1 < len(text):
+                    nxt = text[i + 1]
+                    # OSC: ESC ] ... (BEL or ESC \) — skip
+                    if nxt == ']':
+                        i += 2
+                        while i < len(text) and text[i] not in ('\x07',):
+                            # handle ESC \
+                            if text[i] == '\x1b' and i + 1 < len(text) and text[i+1] == '\\':
+                                i += 2
+                                break
+                            i += 1
+                        # skip terminator
+                        i += 1
+                        continue
+                    # CSI: ESC [ ...
+                    if nxt == '[':
+                        i += 2
+                        # collect parameters
+                        params = ''
+                        while i < len(text) and not ('@' <= text[i] <= '~'):
+                            params += text[i]
+                            i += 1
+                        if i < len(text):
+                            cmd = text[i]
+                            # Handle a few basics
+                            if cmd == 'D':  # cursor left
+                                self._line_cursor = max(0, self._line_cursor - 1)
+                                self._render_current_line()
+                            elif cmd == 'C':  # cursor right
+                                self._line_cursor = min(len(self._line_buffer), self._line_cursor + 1)
+                                self._render_current_line()
+                            elif cmd == 'G':  # CHA – cursor horizontal absolute
+                                try:
+                                    col = int(params) if params.isdigit() else 1
+                                except Exception:
+                                    col = 1
+                                self._line_cursor = max(0, min(len(self._line_buffer), col - 1))
+                                self._render_current_line()
+                            elif cmd == 'K':  # erase in line (default: to end)
+                                # Default to end-of-line when params empty
+                                mode = params if params else '0'
+                                if mode == '0':
+                                    self._line_buffer = self._line_buffer[:self._line_cursor]
+                                elif mode == '1':
+                                    self._line_buffer = self._line_buffer[self._line_cursor:]
+                                    self._line_cursor = 0
+                                elif mode == '2':
+                                    self._line_buffer = ''
+                                    self._line_cursor = 0
+                                self._render_current_line()
+                            # ignore others
+                            i += 1
+                            continue
+                # Unrecognized ESC, skip
+                i += 1
+                continue
+            # BEL - ignore
+            if ch == '\x07':
+                i += 1
+                continue
+            # Backspace moves caret left
+            if ch == '\x08':
+                if self._line_cursor > 0:
+                    self._line_cursor -= 1
+                    self._render_current_line()
+                i += 1
+                continue
+            # DEL treated like backspace erase
+            if ch == '\x7f':
+                if self._line_cursor > 0:
+                    self._line_buffer = self._line_buffer[:self._line_cursor-1] + self._line_buffer[self._line_cursor:]
+                    self._line_cursor -= 1
+                    self._render_current_line()
+                i += 1
+                continue
+            # CR / LF handling
+            if ch == '\r':
+                # Move to line start
+                self._line_cursor = 0
+                self._render_current_line()
+                i += 1
+                continue
+            if ch == '\n':
+                # Flush current line and newline
+                self._replace_current_line(self._line_buffer)
+                self._write('\n')
+                self._line_buffer = ''
+                self._line_cursor = 0
+                self._in_prompt = True
+                i += 1
+                continue
+            # Printable character
+            # Detect beginning of input after prompt paint
+            if self._in_prompt and ch not in (' ', '\t'):
+                self._in_prompt = False
+            self._line_buffer = (
+                self._line_buffer[:self._line_cursor] + ch + self._line_buffer[self._line_cursor:]
+            )
+            self._line_cursor += 1
+            self._render_current_line()
+            i += 1
+        # Auto-scroll to bottom only when a newline is printed; otherwise
+        # keep caret where server editing logic placed it
+        if '\n' in text:
+            cursor = self.terminal_output.textCursor()
+            cursor.movePosition(QTextCursor.End)
+            self.terminal_output.setTextCursor(cursor)
+            # Aggressively collapse trailing empty lines to a single one
+            try:
+                doc = self.terminal_output.document()
+                # Count trailing blank blocks
+                blanks = 0
+                blk = doc.lastBlock()
+                while blk.isValid() and blk.text().strip() == '':
+                    blanks += 1
+                    blk = blk.previous()
+                if blanks > 1:
+                    c = self.terminal_output.textCursor()
+                    c.movePosition(QTextCursor.End)
+                    for _ in range(blanks - 1):
+                        c.movePosition(QTextCursor.PreviousBlock, QTextCursor.KeepAnchor)
+                    c.removeSelectedText()
+            except Exception:
+                pass
 
     def _write(self, text: str):
         cursor = self.terminal_output.textCursor()
@@ -64,37 +273,135 @@ class TerminalTab(QWidget):
         cursor.insertText(text)
         self.terminal_output.setTextCursor(cursor)
 
+    def _replace_current_line(self, text: str):
+        cursor = self.terminal_output.textCursor()
+        # Remember start of the current block
+        cursor.movePosition(QTextCursor.End)
+        cursor.movePosition(QTextCursor.StartOfBlock)
+        block_start_pos = cursor.position()
+        # Replace entire line content
+        cursor.movePosition(QTextCursor.End)
+        cursor.movePosition(QTextCursor.StartOfBlock, QTextCursor.KeepAnchor)
+        cursor.insertText(text)
+        self.terminal_output.setTextCursor(cursor)
+        # Position caret within the line according to _line_cursor
+        caret_pos = block_start_pos + min(max(self._line_cursor, 0), len(text))
+        cursor = self.terminal_output.textCursor()
+        cursor.setPosition(caret_pos)
+        self.terminal_output.setTextCursor(cursor)
+
+    def _render_current_line(self):
+        self._replace_current_line(self._line_buffer)
+
+    def set_key_sender(self, sender_callable):
+        """Provide a callable that will be used to send raw key data to SSH."""
+        self._send_key = sender_callable
+        # Flush any queued input collected before sender was ready
+        if self._send_queue:
+            try:
+                self._send_key(''.join(self._send_queue))
+            finally:
+                self._send_queue.clear()
+
+    def _send(self, data: str):
+        if self._send_key is not None and data is not None:
+            try:
+                self._send_key(data)
+            except Exception:
+                # Silently ignore send errors in UI layer
+                pass
+        else:
+            # Queue input until transport is ready
+            if data:
+                self._send_queue.append(data)
+
     def eventFilter(self, obj, event):
-        if obj is self.terminal_output and event.type() == QEvent.KeyPress:
+        if obj in (self.terminal_output, self.terminal_output.viewport()) and event.type() == QEvent.KeyPress:
             if not self.input_enabled:
                 return True if self.terminal_output.isReadOnly() else False
             key = event.key()
-            # Handle Enter
+            modifiers = event.modifiers()
+            # Ctrl+C
+            if (modifiers & Qt.ControlModifier) and key == Qt.Key_C:
+                self._send("\x03")  # ETX
+                return True
+            # Ctrl+D
+            if (modifiers & Qt.ControlModifier) and key == Qt.Key_D:
+                self._send("\x04")  # EOT
+                return True
+            # Ctrl+S should not freeze: send XOFF only if we really want to; otherwise ignore
+            if (modifiers & Qt.ControlModifier) and key == Qt.Key_S:
+                # ignore to prevent terminal freeze
+                return True
+            # Enter / Return
             if key in (Qt.Key_Return, Qt.Key_Enter):
-                self._write("\n")
-                command = self.current_input
-                self.current_input = ""
-                self.command_submitted.emit(command)
+                # Most PTYs expect CR; bash will map CR to NL via icrnl
+                self._send("\r")
                 return True
-            # Handle Backspace
+            # Backspace
             if key == Qt.Key_Backspace:
-                if len(self.current_input) > 0:
-                    self.current_input = self.current_input[:-1]
-                    cursor = self.terminal_output.textCursor()
-                    cursor.movePosition(QTextCursor.End)
-                    cursor.deletePreviousChar()
-                    self.terminal_output.setTextCursor(cursor)
+                # Send only DEL (erase = ^? per stty -a)
+                self._send("\x7f")
                 return True
-            # Block navigation/editing keys to keep cursor at end
-            if key in (Qt.Key_Left, Qt.Key_Up, Qt.Key_Down, Qt.Key_Home, Qt.Key_PageUp, Qt.Key_PageDown):
+            # Tab completion
+            if key == Qt.Key_Tab:
+                # Ask for one completion attempt
+                self._send("\t")
                 return True
-            # Printable text
+            # Arrow keys and navigation as ANSI sequences
+            if key == Qt.Key_Up:
+                self._send("\x1b[A")
+                return True
+            if key == Qt.Key_Down:
+                self._send("\x1b[B")
+                return True
+            if key == Qt.Key_Right:
+                self._send("\x1b[C")
+                return True
+            if key == Qt.Key_Left:
+                # Only send one left; do not perform any local deletion
+                self._send("\x1b[D")
+                return True
+            if key == Qt.Key_Home:
+                self._send("\x1b[H")
+                return True
+            if key == Qt.Key_End:
+                self._send("\x1b[F")
+                return True
+            if key == Qt.Key_PageUp:
+                self._send("\x1b[5~")
+                return True
+            if key == Qt.Key_PageDown:
+                self._send("\x1b[6~")
+                return True
+            if key == Qt.Key_Delete:
+                self._send("\x1b[3~")
+                return True
+            # Ctrl+L clear screen
+            if (modifiers & Qt.ControlModifier) and key == Qt.Key_L:
+                self._send("\x0c")
+                return True
+            # Printable characters
             text = event.text()
             if text:
-                self.current_input += text
-                self._write(text)
+                if self.local_echo_enabled:
+                    self._write(text)
+                self._send(text)
                 return True
         return super().eventFilter(obj, event)
+
+    def _strip_ansi(self, s: str) -> str:
+        """Remove ANSI control sequences (CSI, OSC, etc.) so QTextEdit shows clean text."""
+        # OSC sequences: ESC ] ... BEL or ESC \
+        osc_pattern = re.compile(r"\x1B\][\x20-\x7E]*?(\x07|\x1B\\)")
+        # CSI sequences: ESC [ ... Cmd
+        csi_pattern = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
+        # Single-char ESC sequences
+        esc_pattern = re.compile(r"\x1B[@-Z\\-_]")
+        s = osc_pattern.sub('', s)
+        s = csi_pattern.sub('', s)
+        s = esc_pattern.sub('', s)
+        return s
 
 class TerminalTabs(QTabWidget):
     tab_close_requested = pyqtSignal(int)

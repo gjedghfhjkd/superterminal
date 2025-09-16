@@ -19,16 +19,26 @@ import sys
 class SSHThread(QThread):
     output_received = pyqtSignal(str)
     connection_status = pyqtSignal(bool, str)
+    input_to_send = pyqtSignal(str)
     
     def __init__(self, session, terminal_tab):
         super().__init__()
         self.session = session
         self.terminal_tab = terminal_tab
-        self.ssh_client = SSHClient()
-        
+        self.ssh_client = None
+    
+    def send_raw(self, data: str):
+        # This method can be called from UI thread; it emits a signal that
+        # will be delivered to the SSH client within this QThread context.
+        self.input_to_send.emit(data)
+
     def run(self):
+        self.ssh_client = SSHClient()
+        # Route output to UI
         self.ssh_client.output_received.connect(self.terminal_tab.append_output)
         self.ssh_client.connection_status.connect(self.connection_status.emit)
+        # Deliver input in thread context
+        self.input_to_send.connect(self.ssh_client.send_raw)
         self.ssh_client.connect(
             host=self.session.host,
             port=self.session.port,
@@ -39,6 +49,8 @@ class SSHThread(QThread):
             allow_agent=True,
             look_for_keys=True
         )
+        # Start event loop so queued signals (input_to_send) are processed in this thread
+        self.exec_()
 
 class MobaXtermClone(QMainWindow):
     def __init__(self):
@@ -704,6 +716,12 @@ class MobaXtermClone(QMainWindow):
             ssh_thread.start()
             
             self.ssh_threads[session_index] = ssh_thread
+
+            # Provide terminal with a way to send raw keys to this SSH thread
+            terminal_tab.set_key_sender(lambda data, t=ssh_thread: t.send_raw(data))
+
+            # If the user starts typing immediately, ensure input is enabled
+            terminal_tab.enable_input()
     
     def execute_command(self, session_index, command: str):
         if session_index in self.ssh_threads and command is not None:
@@ -746,13 +764,7 @@ class MobaXtermClone(QMainWindow):
                 self.status_label.setText("Disconnected")
             
         self.connection_info.setText(message)
-        
-        # Добавляем сообщение в соответствующую вкладку
-        for i in range(self.terminal_tabs.count()):
-            tab = self.terminal_tabs.widget(i)
-            if hasattr(tab, 'session_index') and tab.session_index == session_index:
-                tab.append_output(message)
-                break
+        # Не печатаем статусные сообщения в терминал, только в статус-бар
     
     def close_terminal_tab(self, index):
         tab = self.terminal_tabs.widget(index)
