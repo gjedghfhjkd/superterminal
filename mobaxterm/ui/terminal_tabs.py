@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (QTabWidget, QWidget, QVBoxLayout, QTextEdit, 
-                             QHBoxLayout, QLineEdit, QLabel, QPushButton, QTabBar)
+                             QHBoxLayout, QLineEdit, QLabel, QPushButton, QTabBar, QShortcut)
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent
-from PyQt5.QtGui import QFont, QTextCursor
+from PyQt5.QtGui import QFont, QTextCursor, QKeySequence
 from .custom_tab_widget import CloseButton
 try:
     import pyte
@@ -17,6 +17,8 @@ class TerminalTab(QWidget):
         self._send_key = None  # callable that sends raw data to SSH
         self._send_queue = []  # buffer keys until sender is ready
         self.initUI()
+        # Track relative zoom steps applied to the terminal_output
+        self._zoom_steps = 0
         
     def initUI(self):
         layout = QVBoxLayout(self)
@@ -29,12 +31,19 @@ class TerminalTab(QWidget):
             QTextEdit {
                 background-color: black;
                 color: #00ff00;
-                font-family: 'Consolas', 'Courier New', monospace;
-                font-size: 14px;
                 border: none;
                 padding: 5px;
             }
         """)
+        # Set default monospace font via QFont so we can control zoom reliably
+        default_font = QFont('Consolas')
+        default_font.setStyleHint(QFont.Monospace)
+        default_font.setFixedPitch(True)
+        default_font.setPointSize(14)
+        self.terminal_output.setFont(default_font)
+        self.terminal_output.document().setDefaultFont(default_font)
+        self._default_font = QFont(self.terminal_output.font())
+        self._base_point_size = self._default_font.pointSize()
         self.terminal_output.setPlainText("")
         # Disable line wrap to keep rows aligned with emulator screen
         self.terminal_output.setLineWrapMode(QTextEdit.NoWrap)
@@ -73,6 +82,30 @@ class TerminalTab(QWidget):
         
         # Only the terminal area is shown; input happens inline
         layout.addWidget(self.terminal_output)
+        
+        # Shortcuts for zoom controls: Ctrl++, Ctrl+-, Ctrl+= (reset)
+        try:
+            # Standard platform zoom shortcuts
+            sc_in_std = QShortcut(QKeySequence.ZoomIn, self)
+            sc_in_std.setContext(Qt.WidgetWithChildrenShortcut)
+            sc_in_std.activated.connect(self._apply_zoom_in)
+            sc_out_std = QShortcut(QKeySequence.ZoomOut, self)
+            sc_out_std.setContext(Qt.WidgetWithChildrenShortcut)
+            sc_out_std.activated.connect(self._apply_zoom_out)
+            for seq in ("Ctrl++", "Ctrl+Plus"):
+                sc = QShortcut(QKeySequence(seq), self)
+                sc.setContext(Qt.WidgetWithChildrenShortcut)
+                sc.activated.connect(self._apply_zoom_in)
+            for seq in ("Ctrl+-", "Ctrl+Minus"):
+                sc = QShortcut(QKeySequence(seq), self)
+                sc.setContext(Qt.WidgetWithChildrenShortcut)
+                sc.activated.connect(self._apply_zoom_out)
+            for seq in ("Ctrl+=", "Ctrl+Equal", "Ctrl+0"):
+                sc = QShortcut(QKeySequence(seq), self)
+                sc.setContext(Qt.WidgetWithChildrenShortcut)
+                sc.activated.connect(self._apply_zoom_reset)
+        except Exception:
+            pass
         
     def enable_input(self):
         self.input_enabled = True
@@ -294,6 +327,30 @@ class TerminalTab(QWidget):
     def _render_current_line(self):
         self._replace_current_line(self._line_buffer)
 
+    def _apply_zoom_in(self):
+        try:
+            self.terminal_output.zoomIn(1)
+            self._zoom_steps += 1
+        except Exception:
+            pass
+
+    def _apply_zoom_out(self):
+        try:
+            self.terminal_output.zoomOut(1)
+            self._zoom_steps -= 1
+        except Exception:
+            pass
+
+    def _apply_zoom_reset(self):
+        try:
+            if self._zoom_steps > 0:
+                self.terminal_output.zoomOut(self._zoom_steps)
+            elif self._zoom_steps < 0:
+                self.terminal_output.zoomIn(-self._zoom_steps)
+            self._zoom_steps = 0
+        except Exception:
+            pass
+
     def set_key_sender(self, sender_callable):
         """Provide a callable that will be used to send raw key data to SSH."""
         self._send_key = sender_callable
@@ -318,10 +375,30 @@ class TerminalTab(QWidget):
 
     def eventFilter(self, obj, event):
         if obj in (self.terminal_output, self.terminal_output.viewport()) and event.type() == QEvent.KeyPress:
-            if not self.input_enabled:
-                return True if self.terminal_output.isReadOnly() else False
+            # Handle zoom shortcuts regardless of input mode
             key = event.key()
             modifiers = event.modifiers()
+            if (modifiers & Qt.ControlModifier):
+                # Ctrl + : zoom in (requires Shift on many layouts)
+                if key == Qt.Key_Plus:
+                    self.terminal_output.zoomIn(1)
+                    self._zoom_steps += 1
+                    return True
+                # Ctrl - : zoom out
+                if key == Qt.Key_Minus:
+                    self.terminal_output.zoomOut(1)
+                    self._zoom_steps -= 1
+                    return True
+                # Ctrl = : reset to default zoom
+                if key == Qt.Key_Equal or key == Qt.Key_0:
+                    if self._zoom_steps > 0:
+                        self.terminal_output.zoomOut(self._zoom_steps)
+                    elif self._zoom_steps < 0:
+                        self.terminal_output.zoomIn(-self._zoom_steps)
+                    self._zoom_steps = 0
+                    return True
+            if not self.input_enabled:
+                return True if self.terminal_output.isReadOnly() else False
             # Ctrl+C
             if (modifiers & Qt.ControlModifier) and key == Qt.Key_C:
                 self._send("\x03")  # ETX
