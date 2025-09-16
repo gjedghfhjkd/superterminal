@@ -19,7 +19,7 @@ class SSHClient(QObject):
         
     def connect(self, host, port=22, username=None, password=None, auth_method='password', key_filename=None, passphrase=None, allow_agent=True, look_for_keys=False):
         try:
-            self.output_received.emit("🔗 Connecting to server...")
+            # Show connecting status only in UI status label, not in terminal
             
             self.client = paramiko.SSHClient()
             self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -151,13 +151,13 @@ class SSHClient(QObject):
             # 3) line discipline (not echoed when echo off)
             self.shell.send("stty echo icanon icrnl -inlcr -igncr onlcr 2>/dev/null\n")
             time.sleep(0.01)
-            # 4) bash tweak
-            self.shell.send("if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off'; fi 2>/dev/null\n")
+            # 4) bash tweak (suppress echo if bash)
+            self.shell.send("if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off' >/dev/null 2>&1; fi\n")
             time.sleep(0.01)
             # 5) prompt and locale
-            self.shell.send("export PS1='[\\u@\\h \\w]\\$ '\n")
+            self.shell.send("export PS1='[\\u@\\h \\w]\\$ ' >/dev/null 2>&1; printf ''\n")
             time.sleep(0.01)
-            self.shell.send("export LANG=C.UTF-8 LC_ALL=C.UTF-8 2>/dev/null\n")
+            self.shell.send("export LANG=C.UTF-8 LC_ALL=C.UTF-8 >/dev/null 2>&1\n")
             time.sleep(0.01)
             # 6) re-enable echo
             self.shell.send("stty echo 2>/dev/null\n")
