@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (QTabWidget, QWidget, QHBoxLayout, QLabel, 
-                             QPushButton, QStyle, QStyleOptionTab)
+                             QPushButton, QStyle, QStyleOptionTab, QGraphicsDropShadowEffect)
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QPainter
+from PyQt5.QtGui import QPainter, QColor
 
 class CloseButton(QPushButton):
     def __init__(self, parent=None):
@@ -25,6 +25,31 @@ class CloseButton(QPushButton):
         self.setText("×")
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip("Close")
+        # Prepare subtle red glow effect (disabled by default)
+        self._shadow = QGraphicsDropShadowEffect(self)
+        self._shadow.setBlurRadius(0)
+        self._shadow.setColor(QColor(255, 71, 87, 0))
+        self._shadow.setOffset(0, 0)
+        self.setGraphicsEffect(self._shadow)
+
+    def enterEvent(self, event):
+        # On hover: show a faint red glow around the square
+        try:
+            self._shadow.setBlurRadius(12)
+            self._shadow.setColor(QColor(255, 71, 87, 140))
+            self._shadow.setOffset(0, 0)
+        except Exception:
+            pass
+        return super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        # Remove glow when mouse leaves
+        try:
+            self._shadow.setBlurRadius(0)
+            self._shadow.setColor(QColor(255, 71, 87, 0))
+        except Exception:
+            pass
+        return super().leaveEvent(event)
 
 class CustomTabWidget(QTabWidget):
     tab_close_requested = pyqtSignal(int)
