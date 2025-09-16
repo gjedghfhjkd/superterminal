@@ -17,14 +17,15 @@ class CloseButton(QPushButton):
                 font-weight: bold;
             }
             CloseButton:hover {
-                background-color: #ff4757; /* red square appears on hover */
-                color: white; /* cross becomes prominent */
+                background-color: rgba(255, 71, 87, 0.15); /* soft red square on hover */
+                color: #ff4757; /* cross becomes red */
                 border-radius: 3px;
-                border: 1px solid rgba(255, 71, 87, 0.65); /* subtle red highlight */
+                border: 1px solid rgba(255, 71, 87, 0.65); /* red outline */
             }
             CloseButton:pressed {
-                background-color: #e03a49;
-                border: 1px solid rgba(224, 58, 73, 0.75);
+                background-color: #ff4757; /* solid red when pressed */
+                color: white; /* white cross for contrast when pressed */
+                border: 1px solid rgba(224, 58, 73, 0.85);
             }
         """)
         self.setText("×")
