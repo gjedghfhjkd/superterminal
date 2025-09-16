@@ -41,7 +41,8 @@ class TerminalTab(QWidget):
         self.input_enabled = False
         self.current_input = ""
         self.prompt_text = "$ "
-        self.local_echo_enabled = True
+        # Local echo is off by default; remote shell echoes characters
+        self.local_echo_enabled = False
         
         # Only the terminal area is shown; input happens inline
         layout.addWidget(self.terminal_output)
@@ -118,11 +119,8 @@ class TerminalTab(QWidget):
                 return True
             # Enter / Return
             if key in (Qt.Key_Return, Qt.Key_Enter):
-                if self.local_echo_enabled:
-                    self._write("\n")
-                # Send both CR and LF to maximize compatibility
+                # Most PTYs expect CR; bash will map CR to NL via icrnl
                 self._send("\r")
-                self._send("\n")
                 return True
             # Backspace
             if key == Qt.Key_Backspace:

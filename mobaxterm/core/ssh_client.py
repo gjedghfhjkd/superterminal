@@ -118,6 +118,8 @@ class SSHClient(QObject):
         try:
             # Disable XON/XOFF so Ctrl+S/Ctrl+Q do not freeze terminal; set Ctrl-C/D
             self.shell.send("stty -ixon -ixoff intr ^C eof ^D 2>/dev/null\n")
+            # Ensure canonical mode with echo and CR to NL mapping
+            self.shell.send("stty echo icanon icrnl -inlcr -igncr onlcr 2>/dev/null\n")
             # Disable bracketed paste to avoid \x1b[?2004h noise
             # Use bash builtins when available; ignore errors on other shells
             self.shell.send("if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off'; fi 2>/dev/null\n")
