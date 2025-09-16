@@ -16,6 +16,8 @@ class SSHClient(QObject):
         # Buffer of bytes we expect to be echoed; we will strip this prefix
         # from the next incoming recv() chunks to avoid printing our setup commands
         self._suppress_bytes = b""
+        # Time-based textual suppression right after connect to hide setup lines
+        self._suppress_text_until = 0.0
         
     def connect(self, host, port=22, username=None, password=None, auth_method='password', key_filename=None, passphrase=None, allow_agent=True, look_for_keys=False):
         try:
@@ -61,6 +63,7 @@ class SSHClient(QObject):
             self.connection_status.emit(True, f"✅ Connected to {host}:{port}")
 
             # Configure immediately to avoid extra prompts
+            self._suppress_text_until = time.time() + 0.5
             self.configure_remote_environment()
             
         except paramiko.AuthenticationException:
@@ -100,6 +103,11 @@ class SSHClient(QObject):
                     except UnicodeDecodeError:
                         data = data_bytes.decode('utf-8', errors='ignore')
                     if data:
+                        # Suppress known setup lines and collapse excess blank lines
+                        if time.time() < self._suppress_text_until:
+                            lines = [ln for ln in data.splitlines(True)
+                                     if not (ln.startswith('stty ') or ln.startswith(':; PS1') or ln.startswith('export LANG') or ln.startswith('if [ -n "$BASH_VERSION"') or ln.strip() == '')]
+                            data = ''.join(lines)
                         self.output_received.emit(data)
                 else:
                     time.sleep(0.02)
