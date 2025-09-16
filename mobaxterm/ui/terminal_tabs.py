@@ -55,8 +55,8 @@ class TerminalTab(QWidget):
         
     def enable_input(self):
         self.input_enabled = True
-        # Keep read-only to avoid local edits; eventFilter handles keys
-        self.terminal_output.setReadOnly(True)
+        # Make editable so caret blinks; eventFilter prevents local edits
+        self.terminal_output.setReadOnly(False)
         self.terminal_output.setFocus()
         self.current_input = ""
         
@@ -105,7 +105,7 @@ class TerminalTab(QWidget):
                 self._send_queue.append(data)
 
     def eventFilter(self, obj, event):
-        if obj in (self.terminal_output, getattr(self.terminal_output, 'viewport', lambda: None)()) and event.type() == QEvent.KeyPress:
+        if obj in (self.terminal_output, self.terminal_output.viewport()) and event.type() == QEvent.KeyPress:
             if not self.input_enabled:
                 return True if self.terminal_output.isReadOnly() else False
             key = event.key()
@@ -131,6 +131,8 @@ class TerminalTab(QWidget):
             if key == Qt.Key_Backspace:
                 # Send Backspace as DEL; many shells map it correctly
                 self._send("\x7f")
+                # Also send Ctrl+H as compatibility fallback
+                self._send("\x08")
                 return True
             # Tab completion
             if key == Qt.Key_Tab:
