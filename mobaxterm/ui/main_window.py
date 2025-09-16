@@ -61,6 +61,8 @@ class SFTPThread(QThread):
     up_dir = pyqtSignal()
     upload_files = pyqtSignal(list, str)
     download_files = pyqtSignal(list, str)
+    delete_paths = pyqtSignal(list)
+    rename_path = pyqtSignal(str, str)
 
     def __init__(self, session):
         super().__init__()
@@ -76,6 +78,8 @@ class SFTPThread(QThread):
         self.up_dir.connect(self.client.up_dir)
         self.upload_files.connect(self.client.upload_files)
         self.download_files.connect(self.client.download_files)
+        self.delete_paths.connect(self.client.delete_paths)
+        self.rename_path.connect(self.client.rename_path)
         # Connect now
         self.client.connect(
             host=self.session.host,
@@ -119,6 +123,18 @@ class SFTPThread(QThread):
     def on_download(self, remote_paths: list, local_dir: str):
         try:
             self.download_files.emit(remote_paths, local_dir)
+        except Exception:
+            pass
+
+    def on_delete(self, remote_paths: list):
+        try:
+            self.delete_paths.emit(remote_paths)
+        except Exception:
+            pass
+
+    def on_rename(self, old_path: str, new_basename: str):
+        try:
+            self.rename_path.emit(old_path, new_basename)
         except Exception:
             pass
 
@@ -807,6 +823,8 @@ class MobaXtermClone(QMainWindow):
             sftp_tab.remote_up_dir.connect(sftp_thread.on_up_dir)
             sftp_tab.request_upload.connect(sftp_thread.on_upload)
             sftp_tab.request_download.connect(sftp_thread.on_download)
+            sftp_tab.request_remote_delete.connect(sftp_thread.on_delete)
+            sftp_tab.request_remote_rename.connect(sftp_thread.on_rename)
             # Wire thread -> UI
             sftp_thread.remote_listing.connect(sftp_tab.set_remote_listing)
             sftp_thread.connection_status.connect(
