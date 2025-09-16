@@ -151,8 +151,7 @@ class SSHClient(QObject):
                 pass
             self.shell.send("stty echo 2>/dev/null\n")
             time.sleep(0.01)
-            # Ask shell to render one new prompt
-            self.shell.send("\n")
+            # Do not send extra newline; the shell will already be at prompt
         except Exception:
             pass
     
