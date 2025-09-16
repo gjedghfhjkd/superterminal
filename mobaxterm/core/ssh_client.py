@@ -124,34 +124,19 @@ class SSHClient(QObject):
     def configure_remote_environment(self):
         """Set prompt to [user@host cwd]$ and enable sane terminal controls."""
         try:
-            # 1) turn echo OFF first (this line itself may echo; suppress it)
-            cmd0 = "stty -echo 2>/dev/null\n"
-            self._suppress_bytes += cmd0.encode('utf-8')
-            self.shell.send(cmd0)
-            time.sleep(0.01)
-            # 2) keep shell quiet; do not modify PS1 to avoid prompt redraws
-            # 3) keyboard/erase and flow control (with echo still OFF)
-            self.shell.send("stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null\n")
-            time.sleep(0.01)
-            # 4) line discipline (keep echo OFF here explicitly)
-            self.shell.send("stty -echo icanon icrnl -inlcr -igncr onlcr 2>/dev/null\n")
-            time.sleep(0.01)
-            # 5) bash tweak (no output)
-            self.shell.send("if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off' >/dev/null 2>&1; fi\n")
-            time.sleep(0.01)
-            # 6) locale only (no output). Do not change PS1 to avoid extra prompt lines
-            self.shell.send("export LANG=C.UTF-8 LC_ALL=C.UTF-8 >/dev/null 2>&1\n")
-            time.sleep(0.01)
-            # 7) clear current line, re-enable echo, then request exactly one new prompt
-            try:
-                # Clear any residual prompt line while echo is still off
-                self.shell.send("\x1b[2K\r")
-                time.sleep(0.005)
-            except Exception:
-                pass
-            self.shell.send("stty echo 2>/dev/null\n")
-            time.sleep(0.01)
-            # Do not send extra newline; the shell will already be at prompt
+            # Run configuration in a single compound command to avoid multiple prompts
+            cmd = (
+                'OLD_PS1="$PS1"; OLD_PC="$PROMPT_COMMAND"; '
+                'stty -echo 2>/dev/null; '
+                'PS1=; PROMPT_COMMAND=; '
+                'stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null; '
+                'stty icanon icrnl -inlcr -igncr onlcr 2>/dev/null; '
+                'if [ -n "$BASH_VERSION" ]; then bind '\''set enable-bracketed-paste off'\'' >/dev/null 2>&1; fi; '
+                'export LANG=C.UTF-8 LC_ALL=C.UTF-8 >/dev/null 2>&1; '
+                'stty echo 2>/dev/null; '
+                'PS1="$OLD_PS1"; PROMPT_COMMAND="$OLD_PC"\n'
+            )
+            self.shell.send(cmd)
         except Exception:
             pass
     
