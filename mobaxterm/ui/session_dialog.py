@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLabel, QLineEdit, QCheckBox, QSpinBox, QGroupBox,
 
                              QDialogButtonBox, QGridLayout, QStackedWidget, QWidget, QComboBox,
-                             QFileDialog, QInputDialog)
+                             QFileDialog, QInputDialog, QSizePolicy)
 from PyQt5.QtCore import Qt
 from ..models.session import Session
 
@@ -206,6 +206,8 @@ class SessionDialog(QDialog):
         
         self.ssh_host_input = QLineEdit()
         self.ssh_host_input.setPlaceholderText("hostname or IP")
+        self.ssh_host_input.setMinimumContentsLength(28)
+        self.ssh_host_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.ssh_host_input.setMinimumWidth(420)
         basic_layout.addWidget(self.ssh_host_input, 0, 1)
         
@@ -221,6 +223,8 @@ class SessionDialog(QDialog):
         self.ssh_username_input = QLineEdit()
         self.ssh_username_input.setPlaceholderText("username")
         self.ssh_username_input.setEnabled(False)
+        self.ssh_username_input.setMinimumContentsLength(22)
+        self.ssh_username_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.ssh_username_input.setMinimumWidth(380)
         basic_layout.addWidget(self.ssh_username_input, 2, 1)
         
@@ -232,6 +236,8 @@ class SessionDialog(QDialog):
         self.ssh_password_input = QLineEdit()
         self.ssh_password_input.setEchoMode(QLineEdit.Password)
         self.ssh_password_input.setPlaceholderText("password")
+        self.ssh_password_input.setMinimumContentsLength(22)
+        self.ssh_password_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.ssh_password_input.setMinimumWidth(380)
         basic_layout.addWidget(self.ssh_password_input, 3, 1)
         
@@ -248,6 +254,8 @@ class SessionDialog(QDialog):
         self.ssh_port_input.setRange(1, 65535)
         self.ssh_port_input.setValue(22)
         self.ssh_port_input.setEnabled(False)
+        self.ssh_port_input.setMinimumContentsLength(6)
+        self.ssh_port_input.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.ssh_port_input.setMinimumWidth(140)
         basic_layout.addWidget(self.ssh_port_input, 5, 1)
         
@@ -298,6 +306,8 @@ class SessionDialog(QDialog):
         key_path_h.setContentsMargins(0, 0, 0, 0)
         key_path_h.setSpacing(6)
         self.key_path_input = QLineEdit()
+        self.key_path_input.setMinimumContentsLength(30)
+        self.key_path_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.key_path_browse = QPushButton("Browse…")
         self.key_path_browse.setFixedWidth(90)
         key_path_h.addWidget(self.key_path_input)
@@ -389,6 +399,8 @@ class SessionDialog(QDialog):
         
         self.sftp_host_input = QLineEdit()
         self.sftp_host_input.setPlaceholderText("hostname or IP")
+        self.sftp_host_input.setMinimumContentsLength(28)
+        self.sftp_host_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.sftp_host_input.setMinimumWidth(420)
         basic_layout.addWidget(self.sftp_host_input, 0, 1)
         
@@ -399,6 +411,8 @@ class SessionDialog(QDialog):
         
         self.sftp_username_input = QLineEdit()
         self.sftp_username_input.setPlaceholderText("username")
+        self.sftp_username_input.setMinimumContentsLength(22)
+        self.sftp_username_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.sftp_username_input.setMinimumWidth(380)
         basic_layout.addWidget(self.sftp_username_input, 1, 1)
         
@@ -410,6 +424,8 @@ class SessionDialog(QDialog):
         self.sftp_password_input = QLineEdit()
         self.sftp_password_input.setEchoMode(QLineEdit.Password)
         self.sftp_password_input.setPlaceholderText("password")
+        self.sftp_password_input.setMinimumContentsLength(22)
+        self.sftp_password_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.sftp_password_input.setMinimumWidth(380)
         basic_layout.addWidget(self.sftp_password_input, 2, 1)
         
@@ -421,6 +437,8 @@ class SessionDialog(QDialog):
         self.sftp_port_input = QSpinBox()
         self.sftp_port_input.setRange(1, 65535)
         self.sftp_port_input.setValue(22)
+        self.sftp_port_input.setMinimumContentsLength(6)
+        self.sftp_port_input.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.sftp_port_input.setMinimumWidth(140)
         basic_layout.addWidget(self.sftp_port_input, 3, 1)
         
