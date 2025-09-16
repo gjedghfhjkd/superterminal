@@ -360,33 +360,22 @@ class MobaXtermClone(QMainWindow):
             if session:
                 self.rename_session(session_index, session, item)
     def rename_session(self, session_index, session, item):
-        """Переименование сессии"""
+        """Переименование сессии (меняет только Session Name, не Remote host)"""
+        current_display_name = session.name or session.host
         new_name, ok = QInputDialog.getText(
             self,
             "Rename Session",
             "Enter new session name:",
             QLineEdit.Normal,
-            session.host  # Используем текущее имя хоста как значение по умолчанию
+            current_display_name
         )
         
-        if ok and new_name and new_name != session.host:
-            # Создаем копию сессии с новым именем
-            updated_session = Session(
-                type=session.type,
-                host=new_name,
-                port=session.port,
-                username=session.username,
-                password=session.password,
-                folder=session.folder,
-                terminal_settings=session.terminal_settings,
-                network_settings=session.network_settings,
-                bookmark_settings=session.bookmark_settings
-            )
-            
-            if self.session_manager.update_session(session_index, updated_session):
-                # Обновляем отображение
-                item.setText(0, f"🖥️  {new_name}")
-                item.setToolTip(0, f"{session.type} - {new_name}:{session.port}")
+        if ok and new_name and new_name != current_display_name:
+            session.name = new_name
+            if self.session_manager.update_session(session_index, session):
+                # Обновляем отображение: показываем Session Name, tooltip оставляем с host:port
+                item.setText(0, f"🖥️  {session.name}")
+                item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
     
     def rename_folder(self, old_folder_name, item):
         """Переименование папки"""
@@ -540,7 +529,8 @@ class MobaXtermClone(QMainWindow):
     
     def add_session_to_tree(self, session, index, parent_item):
         session_item = QTreeWidgetItem(parent_item)
-        session_item.setText(0, f"🖥️  {session.host}")
+        display_name = getattr(session, 'name', None) or session.host
+        session_item.setText(0, f"🖥️  {display_name}")
         session_item.setData(0, Qt.UserRole, "session")
         session_item.setData(0, Qt.UserRole + 1, index)
         session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
@@ -583,7 +573,8 @@ class MobaXtermClone(QMainWindow):
                 folder_item = self.add_folder_to_tree(folder_name)
             
             session_item = QTreeWidgetItem(folder_item)
-            session_item.setText(0, f"🖥️  {session.host}")
+            display_name = getattr(session, 'name', None) or session.host
+            session_item.setText(0, f"🖥️  {display_name}")
             session_item.setData(0, Qt.UserRole, "session")
             session_item.setData(0, Qt.UserRole + 1, session_index)
             session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")

@@ -454,7 +454,8 @@ class TerminalTabs(QTabWidget):
         
     def add_terminal_tab(self, session):
         tab = TerminalTab(session)
-        tab_index = self.addTab(tab, f"🖥️ {session.host}")
+        display_name = getattr(session, 'name', None) or session.host
+        tab_index = self.addTab(tab, f"🖥️ {display_name}")
         self.setCurrentIndex(tab_index)
         return tab
         

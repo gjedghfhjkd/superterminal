@@ -30,7 +30,7 @@ class SessionManager:
         """Обновить сессию по индексу"""
         if 0 <= index < len(self.sessions):
             old_session = self.sessions[index]
-            print(f"Updating session {index}: {old_session.host} -> {updated_session.host}")
+            print(f"Updating session {index}: host {old_session.host} -> {updated_session.host}, name {getattr(old_session,'name',None)} -> {getattr(updated_session,'name',None)}")
             print(f"Old folder: {old_session.folder}, New folder: {updated_session.folder}")
             
             # Удаляем сессию из старой папки (если была)
