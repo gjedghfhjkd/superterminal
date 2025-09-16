@@ -1,7 +1,8 @@
 from PyQt5.QtWidgets import (QTabWidget, QWidget, QVBoxLayout, QTextEdit, 
-                             QHBoxLayout, QLineEdit, QLabel, QPushButton)
+                             QHBoxLayout, QLineEdit, QLabel, QPushButton, QTabBar)
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QTextCursor
+from .custom_tab_widget import CloseButton
 try:
     import pyte
 except Exception:
@@ -435,18 +436,9 @@ class TerminalTabs(QTabWidget):
             QTabBar::tab:hover:!selected {
                 background: #e9ecef;
             }
-            QTabBar::close-button {
-                image: url(none);
-                subcontrol-position: right;
-                padding: 4px;
-            }
-            QTabBar::close-button:hover {
-                background: #ff4757;
-                border-radius: 8px;
-            }
         """)
-        
-        self.setTabsClosable(True)
+        # We'll render our own close buttons so we keep native ones hidden
+        self.setTabsClosable(False)
         self.tabCloseRequested.connect(self.on_tab_close)
         
     def on_tab_close(self, index):
@@ -457,6 +449,8 @@ class TerminalTabs(QTabWidget):
         display_name = getattr(session, 'name', None) or session.host
         tab_index = self.addTab(tab, f"🖥️ {display_name}")
         self.setCurrentIndex(tab_index)
+        # Add faint cross button that becomes prominent on hover with red square
+        self._add_close_button_to_tab(tab_index)
         return tab
         
     def get_current_terminal(self):
@@ -464,3 +458,20 @@ class TerminalTabs(QTabWidget):
         if isinstance(current_widget, TerminalTab):
             return current_widget
         return None
+
+    def _add_close_button_to_tab(self, index: int):
+        btn = CloseButton(self)
+        btn.clicked.connect(self._on_close_button_clicked)
+        # Place the button on the right side of the tab
+        self.tabBar().setTabButton(index, QTabBar.RightSide, btn)
+
+    def _on_close_button_clicked(self):
+        sender = self.sender()
+        if not sender:
+            return
+        # Determine which tab owns this button
+        bar = self.tabBar()
+        for i in range(self.count()):
+            if bar.tabButton(i, QTabBar.RightSide) is sender:
+                self.on_tab_close(i)
+                return
