@@ -77,7 +77,15 @@ class SFTPClient(QObject):
         target = path or self.current_path or '/'
         try:
             attrs = self.sftp.listdir_attr(target)
-            entries = [self._format_entry(a) for a in attrs]
+            # Filter out entries that look like nested paths (contain '/' or '\\')
+            filtered_attrs = []
+            for a in attrs:
+                name = getattr(a, 'filename', '') or ''
+                if ('/' in name) or ('\\' in name):
+                    # Skip names that include path separators; they should appear only inside their parent dir
+                    continue
+                filtered_attrs.append(a)
+            entries = [self._format_entry(a) for a in filtered_attrs]
             # Sort: dirs first, then files; both alphabetically
             entries.sort(key=lambda e: (0 if e['is_dir'] else 1, e['name'].lower()))
             self.remote_listing.emit(target, entries)
@@ -124,7 +132,7 @@ class SFTPClient(QObject):
     def up_dir(self):
         if not self.current_path:
             return
-        parent = os.path.dirname(self.current_path.rstrip('/')) or '/'
+        parent = posixpath.dirname(self.current_path.rstrip('/')) or '/'
         self.change_dir(parent)
 
     # ===== Transfers =====
@@ -140,10 +148,12 @@ class SFTPClient(QObject):
         for lp in local_paths or []:
             try:
                 if os.path.isdir(lp):
-                    self._upload_dir_recursive(lp, os.path.join(remote_dir, os.path.basename(lp)))
+                    dir_name = os.path.basename(lp.rstrip(os.sep))
+                    target_dir = posixpath.normpath(posixpath.join(remote_dir, dir_name))
+                    self._upload_dir_recursive(lp, target_dir)
                 else:
-                    target = os.path.join(remote_dir, os.path.basename(lp)).replace('\\', '/')
-                    self._ensure_remote_dir(remote_dir)
+                    target = posixpath.normpath(posixpath.join(remote_dir, os.path.basename(lp)))
+                    self._ensure_remote_dir(posixpath.dirname(target) or '/')
                     self.sftp.put(lp, target)
                 uploaded += 1
             except Exception as e:
@@ -162,7 +172,7 @@ class SFTPClient(QObject):
         p = path
         while p not in ('', '/', None):
             parts.append(p)
-            p = os.path.dirname(p.rstrip('/'))
+            p = posixpath.dirname(p.rstrip('/'))
         for dirp in reversed(parts):
             try:
                 self.sftp.listdir(dirp)
@@ -176,13 +186,13 @@ class SFTPClient(QObject):
         self._ensure_remote_dir(remote_dir)
         for root, dirs, files in os.walk(local_dir):
             rel = os.path.relpath(root, local_dir)
-            target_root = remote_dir if rel == '.' else os.path.join(remote_dir, rel).replace('\\', '/')
+            target_root = remote_dir if rel == '.' else posixpath.normpath(posixpath.join(remote_dir, rel))
             self._ensure_remote_dir(target_root)
             for d in dirs:
-                self._ensure_remote_dir(os.path.join(target_root, d).replace('\\', '/'))
+                self._ensure_remote_dir(posixpath.normpath(posixpath.join(target_root, d)))
             for f in files:
                 lp = os.path.join(root, f)
-                rp = os.path.join(target_root, f).replace('\\', '/')
+                rp = posixpath.normpath(posixpath.join(target_root, f))
                 self.sftp.put(lp, rp)
 
     def download_files(self, remote_paths, local_dir):
@@ -226,7 +236,7 @@ class SFTPClient(QObject):
             pass
         for entry in self.sftp.listdir_attr(remote_dir):
             name = getattr(entry, 'filename', '')
-            rp = remote_dir.rstrip('/') + '/' + name
+            rp = posixpath.normpath(posixpath.join(remote_dir, name))
             lp = os.path.join(local_dir, name)
             if stat.S_ISDIR(entry.st_mode):
                 self._download_dir_recursive(rp, lp)
@@ -260,7 +270,7 @@ class SFTPClient(QObject):
         try:
             for entry in self.sftp.listdir_attr(remote_dir):
                 name = getattr(entry, 'filename', '')
-                rp = remote_dir.rstrip('/') + '/' + name
+                rp = posixpath.normpath(posixpath.join(remote_dir, name))
                 if stat.S_ISDIR(entry.st_mode):
                     self._rmdir_recursive(rp)
                 else:
