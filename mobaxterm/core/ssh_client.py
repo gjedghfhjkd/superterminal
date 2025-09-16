@@ -129,11 +129,7 @@ class SSHClient(QObject):
             self._suppress_bytes += cmd0.encode('utf-8')
             self.shell.send(cmd0)
             time.sleep(0.01)
-            # 2) keep PS1 empty to avoid prompt prints during setup (suppress)
-            cmd_ps1_empty = ":; PS1=\n"
-            self._suppress_bytes += cmd_ps1_empty.encode('utf-8')
-            self.shell.send(cmd_ps1_empty)
-            time.sleep(0.01)
+            # 2) keep shell quiet; do not modify PS1 to avoid prompt redraws
             # 3) keyboard/erase and flow control (with echo still OFF)
             self.shell.send("stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null\n")
             time.sleep(0.01)
@@ -143,10 +139,8 @@ class SSHClient(QObject):
             # 5) bash tweak (no output)
             self.shell.send("if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off' >/dev/null 2>&1; fi\n")
             time.sleep(0.01)
-            # 6) locale and prompt (no output)
+            # 6) locale only (no output). Do not change PS1 to avoid extra prompt lines
             self.shell.send("export LANG=C.UTF-8 LC_ALL=C.UTF-8 >/dev/null 2>&1\n")
-            time.sleep(0.01)
-            self.shell.send("export PS1='[\\u@\\h \\w]\\$ ' >/dev/null 2>&1\n")
             time.sleep(0.01)
             # 7) clear current line, re-enable echo, then request exactly one new prompt
             try:
