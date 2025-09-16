@@ -173,9 +173,19 @@ class TerminalTab(QWidget):
 
     def _replace_current_line(self, text: str):
         cursor = self.terminal_output.textCursor()
+        # Remember start of the current block
+        cursor.movePosition(QTextCursor.End)
+        cursor.movePosition(QTextCursor.StartOfBlock)
+        block_start_pos = cursor.position()
+        # Replace entire line content
         cursor.movePosition(QTextCursor.End)
         cursor.movePosition(QTextCursor.StartOfBlock, QTextCursor.KeepAnchor)
         cursor.insertText(text)
+        self.terminal_output.setTextCursor(cursor)
+        # Position caret within the line according to _line_cursor
+        caret_pos = block_start_pos + min(max(self._line_cursor, 0), len(text))
+        cursor = self.terminal_output.textCursor()
+        cursor.setPosition(caret_pos)
         self.terminal_output.setTextCursor(cursor)
 
     def _render_current_line(self):
@@ -228,10 +238,8 @@ class TerminalTab(QWidget):
                 return True
             # Backspace
             if key == Qt.Key_Backspace:
-                # Send Backspace as DEL; many shells map it correctly
+                # Send only DEL (erase = ^? per stty -a)
                 self._send("\x7f")
-                # Also send Ctrl+H as compatibility fallback
-                self._send("\x08")
                 return True
             # Tab completion
             if key == Qt.Key_Tab:
