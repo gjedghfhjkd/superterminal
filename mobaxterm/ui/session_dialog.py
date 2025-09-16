@@ -135,21 +135,7 @@ class SessionDialog(QDialog):
         
         main_layout.addWidget(self.stacked_widget)
         
-        # Session type label
-        self.session_label = QLabel("Secure Shell (SSH) session")
-        self.session_label.setStyleSheet("""
-            QLabel {
-                font-weight: bold;
-                color: #0078d7;
-                font-size: 13px;
-                padding: 8px;
-                background-color: #f0f8ff;
-                border-radius: 4px;
-                border: 1px solid #cce5ff;
-            }
-        """)
-        self.session_label.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(self.session_label)
+        # Removed bottom session type label per requirements
         
         # Buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -318,21 +304,7 @@ class SessionDialog(QDialog):
 
         layout.addWidget(auth_group)
 
-        # Advanced SSH settings group
-        advanced_group = QGroupBox("Advanced SSH settings")
-        advanced_layout = QVBoxLayout(advanced_group)
-        advanced_layout.setSpacing(8)
-        advanced_layout.setContentsMargins(12, 15, 12, 12)
-        
-        self.ssh_terminal_check = QCheckBox("Terminal settings")
-        self.ssh_network_check = QCheckBox("Network settings")
-        self.ssh_bookmark_check = QCheckBox("Bookmark settings")
-        
-        advanced_layout.addWidget(self.ssh_terminal_check)
-        advanced_layout.addWidget(self.ssh_network_check)
-        advanced_layout.addWidget(self.ssh_bookmark_check)
-        
-        layout.addWidget(advanced_group)
+        # Removed Advanced SSH settings group per requirements
         layout.addStretch()
         
         # Connect signals
@@ -483,7 +455,6 @@ class SessionDialog(QDialog):
         self.sftp_btn.setStyleSheet(self.get_tab_style(False))
         
         self.stacked_widget.setCurrentIndex(0)
-        self.session_label.setText("Secure Shell (SSH) session")
         
     def switch_to_sftp(self):
         self.current_tab = "SFTP"
@@ -494,7 +465,6 @@ class SessionDialog(QDialog):
         self.ssh_btn.setStyleSheet(self.get_tab_style(False))
         
         self.stacked_widget.setCurrentIndex(1)
-        self.session_label.setText("SFTP session")
         
     def load_session_data(self, session: Session):
         if session.type == 'SSH':
@@ -519,9 +489,6 @@ class SessionDialog(QDialog):
                 if index >= 0:
                     self.folder_combo.setCurrentIndex(index)
             
-            self.ssh_terminal_check.setChecked(session.terminal_settings)
-            self.ssh_network_check.setChecked(session.network_settings)
-            self.ssh_bookmark_check.setChecked(session.bookmark_settings)
             # Load auth
             if hasattr(session, 'auth_method'):
                 method_index = self.auth_method_combo.findData(session.auth_method)
@@ -556,10 +523,7 @@ class SessionDialog(QDialog):
                 username=self.ssh_username_input.text() if self.ssh_username_check.isChecked() else None,
                 auth_method=self.auth_method_combo.currentData(),
                 private_key_path=self.key_path_input.text() if self.auth_method_combo.currentData() == 'key' and self.key_path_input.text() else None,
-                private_key_passphrase=self.passphrase_input.text() if self.auth_method_combo.currentData() == 'key' and self.passphrase_input.text() else None,
-                terminal_settings=self.ssh_terminal_check.isChecked(),
-                network_settings=self.ssh_network_check.isChecked(),
-                bookmark_settings=self.ssh_bookmark_check.isChecked()
+                private_key_passphrase=self.passphrase_input.text() if self.auth_method_combo.currentData() == 'key' and self.passphrase_input.text() else None
             )
             session.folder = self.folder_combo.currentData()
             return session
