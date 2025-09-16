@@ -103,11 +103,20 @@ class SSHClient(QObject):
                     except UnicodeDecodeError:
                         data = data_bytes.decode('utf-8', errors='ignore')
                     if data:
-                        # Suppress known setup lines and collapse excess blank lines
+                        # Suppress known setup lines very early after connect
                         if time.time() < self._suppress_text_until:
-                            lines = [ln for ln in data.splitlines(True)
-                                     if not (ln.startswith('stty ') or ln.startswith(':; PS1') or ln.startswith('export LANG') or ln.startswith('if [ -n "$BASH_VERSION"') or ln.strip() == '')]
-                            data = ''.join(lines)
+                            filtered_lines = []
+                            for ln in data.splitlines(True):
+                                s = ln.strip()
+                                if not s:
+                                    # Keep at most a single blank in this window
+                                    if filtered_lines and filtered_lines[-1].strip() == '':
+                                        continue
+                                # Drop any stty/PS1/LANG/bash-bind lines regardless of prompt prefix
+                                if ('stty ' in s) or s.startswith('PS1=') or s.startswith('export LANG') or s.startswith('export LC_ALL') or s.startswith("if [ -n \"$BASH_VERSION\""):
+                                    continue
+                                filtered_lines.append(ln)
+                            data = ''.join(filtered_lines)
                         self.output_received.emit(data)
                 else:
                     time.sleep(0.02)
