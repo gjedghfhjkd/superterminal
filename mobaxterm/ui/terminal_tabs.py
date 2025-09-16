@@ -35,6 +35,8 @@ class TerminalTab(QWidget):
             }
         """)
         self.terminal_output.setPlainText("")
+        # Disable line wrap to keep rows aligned with emulator screen
+        self.terminal_output.setLineWrapMode(QTextEdit.NoWrap)
         self.terminal_output.installEventFilter(self)
         # Some key events are delivered to the viewport; filter there too
         self.terminal_output.viewport().installEventFilter(self)
