@@ -438,31 +438,43 @@ class SessionDialog(QDialog):
         self.sftp_host_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         basic_layout.addWidget(self.sftp_host_input, 0, 1)
         
-        # Row 1: Username
+        # Row 1: Session name (optional, defaults to Remote host)
+        sftp_name_label = QLabel("Session name:")
+        sftp_name_label.setMinimumWidth(100)
+        basic_layout.addWidget(sftp_name_label, 1, 0, Qt.AlignRight)
+        
+        self.sftp_name_input = QLineEdit()
+        self.sftp_name_input.setPlaceholderText("defaults to Remote host")
+        self.sftp_name_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        basic_layout.addWidget(self.sftp_name_input, 1, 1)
+        
+        # Row 2: Username
         username_label = QLabel("Username:")
         username_label.setMinimumWidth(100)
-        basic_layout.addWidget(username_label, 1, 0, Qt.AlignRight)
+        basic_layout.addWidget(username_label, 2, 0, Qt.AlignRight)
         
         self.sftp_username_input = QLineEdit()
         self.sftp_username_input.setPlaceholderText("username")
         self.sftp_username_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        basic_layout.addWidget(self.sftp_username_input, 1, 1)
+        # Default username to root
+        self.sftp_username_input.setText("root")
+        basic_layout.addWidget(self.sftp_username_input, 2, 1)
         
-        # Row 2: Port
+        # Row 3: Port
         port_label = QLabel("Port:")
         port_label.setMinimumWidth(100)
-        basic_layout.addWidget(port_label, 2, 0, Qt.AlignRight)
+        basic_layout.addWidget(port_label, 3, 0, Qt.AlignRight)
         
         self.sftp_port_input = QSpinBox()
         self.sftp_port_input.setRange(1, 65535)
         self.sftp_port_input.setValue(22)
         self.sftp_port_input.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        basic_layout.addWidget(self.sftp_port_input, 2, 1)
+        basic_layout.addWidget(self.sftp_port_input, 3, 1)
         
-        # Row 3: Folder
+        # Row 4: Folder
         folder_label = QLabel("Folder:")
         folder_label.setMinimumWidth(100)
-        basic_layout.addWidget(folder_label, 3, 0, Qt.AlignRight)
+        basic_layout.addWidget(folder_label, 4, 0, Qt.AlignRight)
         
         self.sftp_folder_combo = QComboBox()
         self.sftp_folder_combo.addItem("(No folder)", None)
@@ -473,7 +485,7 @@ class SessionDialog(QDialog):
                 self.sftp_folder_combo.addItem(folder, folder)
         
         self.sftp_folder_combo.addItem("+ Create new folder...", "new")
-        basic_layout.addWidget(self.sftp_folder_combo, 3, 1)
+        basic_layout.addWidget(self.sftp_folder_combo, 4, 1)
         # Ensure dropdown selection is visible for sftp folder combo
         sftp_view = QListView()
         sftp_view.setUniformItemSizes(True)
@@ -665,6 +677,8 @@ class SessionDialog(QDialog):
         else:
             self.sftp_btn.click()
             self.sftp_host_input.setText(session.host)
+            # Load session name (fallback to host)
+            self.sftp_name_input.setText(session.name or session.host)
             self.sftp_username_input.setText(session.username or "")
             self.sftp_port_input.setValue(session.port)
             # Load SFTP auth
@@ -708,6 +722,7 @@ class SessionDialog(QDialog):
                 type='SFTP',
                 host=self.sftp_host_input.text(),
                 port=self.sftp_port_input.value(),
+                name=(self.sftp_name_input.text().strip() or None),
                 username=self.sftp_username_input.text(),
                 auth_method=self.sftp_auth_method_combo.currentData(),
                 private_key_path=self.sftp_key_path_input.text() if self.sftp_auth_method_combo.currentData() == 'key' and self.sftp_key_path_input.text() else None,
