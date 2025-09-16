@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
-    QLineEdit, QPushButton, QTreeWidget, QTreeWidgetItem, QLabel
+    QLineEdit, QPushButton, QTreeWidget, QTreeWidgetItem, QLabel, QMenu, QAction, QInputDialog
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QMimeData
 from PyQt5.QtGui import QDrag
@@ -15,6 +15,8 @@ class SFTPTab(QWidget):
     remote_up_dir = pyqtSignal()
     request_upload = pyqtSignal(list, str)  # local_paths, remote_dir
     request_download = pyqtSignal(list, str)  # remote_paths, local_dir
+    request_remote_delete = pyqtSignal(list)
+    request_remote_rename = pyqtSignal(str, str)
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
@@ -127,6 +129,16 @@ class SFTPTab(QWidget):
         self.local_tree.dragMoveEvent = self._drag_enter_local
         self.local_tree.dropEvent = self._drop_on_local
 
+        # Context menus
+        self.local_tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.local_tree.customContextMenuRequested.connect(self.on_local_context_menu)
+        self.remote_tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.remote_tree.customContextMenuRequested.connect(self.on_remote_context_menu)
+
+        # Keyboard shortcuts
+        self.local_tree.keyPressEvent = self._local_key_press
+        self.remote_tree.keyPressEvent = self._remote_key_press
+
         # Initial local listing
         self._populate_local()
 
@@ -216,6 +228,111 @@ class SFTPTab(QWidget):
                 rp = self._remote_path + '/' + name
             paths.append(rp)
         return paths
+
+    # ===== Context menus and keyboard =====
+    def on_local_context_menu(self, pos):
+        menu = QMenu(self.local_tree)
+        delete_action = QAction("🗑️ Delete", self.local_tree)
+        rename_action = QAction("✏️ Rename", self.local_tree)
+        delete_action.triggered.connect(self.on_local_delete)
+        rename_action.triggered.connect(self.on_local_rename)
+        menu.addAction(rename_action)
+        menu.addAction(delete_action)
+        menu.exec_(self.local_tree.viewport().mapToGlobal(pos))
+
+    def on_remote_context_menu(self, pos):
+        menu = QMenu(self.remote_tree)
+        delete_action = QAction("🗑️ Delete", self.remote_tree)
+        rename_action = QAction("✏️ Rename", self.remote_tree)
+        delete_action.triggered.connect(self.on_remote_delete)
+        rename_action.triggered.connect(self.on_remote_rename)
+        menu.addAction(rename_action)
+        menu.addAction(delete_action)
+        menu.exec_(self.remote_tree.viewport().mapToGlobal(pos))
+
+    def _local_key_press(self, event):
+        if event.key() == Qt.Key_Delete:
+            self.on_local_delete()
+            return
+        if event.key() == Qt.Key_F2:
+            self.on_local_rename()
+            return
+        return QTreeWidget.keyPressEvent(self.local_tree, event)
+
+    def _remote_key_press(self, event):
+        if event.key() == Qt.Key_Delete:
+            self.on_remote_delete()
+            return
+        if event.key() == Qt.Key_F2:
+            self.on_remote_rename()
+            return
+        return QTreeWidget.keyPressEvent(self.remote_tree, event)
+
+    def on_local_delete(self):
+        # Delete selected local files/folders
+        import shutil
+        items = self.local_tree.selectedItems()
+        if not items:
+            return
+        for it in items:
+            data = it.data(0, Qt.UserRole)
+            if not data:
+                continue
+            name = data.get('name')
+            if name == '..':
+                continue
+            p = os.path.join(self._local_path, name)
+            try:
+                if os.path.isdir(p):
+                    shutil.rmtree(p)
+                else:
+                    os.remove(p)
+            except Exception:
+                pass
+        self._populate_local()
+
+    def on_local_rename(self):
+        items = self.local_tree.selectedItems()
+        if not items:
+            return
+        it = items[0]
+        data = it.data(0, Qt.UserRole)
+        if not data:
+            return
+        old_name = data.get('name')
+        if old_name in (None, '..'):
+            return
+        new_name, ok = QInputDialog.getText(self, "Rename", "Enter new name:")
+        if ok and new_name and new_name != old_name:
+            old_path = os.path.join(self._local_path, old_name)
+            new_path = os.path.join(self._local_path, new_name)
+            try:
+                os.rename(old_path, new_path)
+            except Exception:
+                pass
+            self._populate_local()
+
+    def on_remote_delete(self):
+        paths = self._collect_selected_remote_paths()
+        if paths:
+            self.request_remote_delete.emit(paths)
+
+    def on_remote_rename(self):
+        items = self.remote_tree.selectedItems()
+        if not items:
+            return
+        it = items[0]
+        data = it.data(0, Qt.UserRole)
+        if not data:
+            return
+        old_name = data.get('name')
+        if old_name in (None, '..'):
+            return
+        base = self._remote_path or '/'
+        old_path = posixpath.normpath(posixpath.join(base, old_name))
+        new_name, ok = QInputDialog.getText(self, "Rename", "Enter new name:")
+        if ok and new_name and new_name != old_name:
+            self.request_remote_rename.emit(old_path, new_name)
 
     def _start_drag_local(self, supported_actions):
         paths = self._collect_selected_local_paths()

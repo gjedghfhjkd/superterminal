@@ -233,6 +233,54 @@ class SFTPClient(QObject):
             else:
                 self.sftp.get(rp, lp)
 
+    # ===== Delete and rename =====
+    def delete_paths(self, remote_paths: list):
+        if not self.is_connected or self.sftp is None:
+            return
+        deleted = 0
+        failed = 0
+        for rp in remote_paths or []:
+            try:
+                st = self.sftp.stat(rp)
+                if stat.S_ISDIR(getattr(st, 'st_mode', 0)):
+                    self._rmdir_recursive(rp)
+                else:
+                    self.sftp.remove(rp)
+                deleted += 1
+            except Exception as e:
+                failed += 1
+                self.connection_status.emit(True, f"⚠️ Delete failed for {rp}: {str(e)}")
+        self.list_dir(self.current_path)
+        if failed == 0:
+            self.connection_status.emit(True, f"✅ Deleted {deleted} item(s)")
+        else:
+            self.connection_status.emit(True, f"⛔ Deleted {deleted}, failed {failed}")
+
+    def _rmdir_recursive(self, remote_dir: str):
+        try:
+            for entry in self.sftp.listdir_attr(remote_dir):
+                name = getattr(entry, 'filename', '')
+                rp = remote_dir.rstrip('/') + '/' + name
+                if stat.S_ISDIR(entry.st_mode):
+                    self._rmdir_recursive(rp)
+                else:
+                    self.sftp.remove(rp)
+            self.sftp.rmdir(remote_dir)
+        except Exception as e:
+            raise e
+
+    def rename_path(self, old_path: str, new_basename: str):
+        if not self.is_connected or self.sftp is None or not old_path or not new_basename:
+            return
+        try:
+            dst_dir = posixpath.dirname(old_path.rstrip('/')) or '/'
+            new_path = posixpath.normpath(posixpath.join(dst_dir, new_basename))
+            self.sftp.rename(old_path, new_path)
+            self.list_dir(self.current_path)
+            self.connection_status.emit(True, f"✅ Renamed to {new_basename}")
+        except Exception as e:
+            self.connection_status.emit(True, f"⚠️ Rename failed: {str(e)}")
+
     def disconnect(self):
         try:
             if self.sftp:
