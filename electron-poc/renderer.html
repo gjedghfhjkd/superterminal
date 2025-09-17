@@ -343,33 +343,32 @@
               if (n.type === 'folder') { n.expanded = !n.expanded; renderTree(); return }
               if (n.type === 'session') {
                 try {
-                  const id = n.id
                   const s = n.session
                   if ((s.type||'SSH').toUpperCase() === 'SFTP') {
-                    // Open SFTP view and connect
-                    const cfg = Object.assign({}, s, { id })
+                    // Always create a new SFTP connection/tab
+                    const rid = genId('sftp')
+                    const cfg = Object.assign({}, s, { id: rid })
                     await window.api.sftpConnect(cfg)
-                    // Create SFTP tab (visual consistency)
-                    createSftpTab(id, `${s.type || 'SFTP'} ${s.name||s.host} (${s.username})`)
-                    activateTab(id)
-                    showSftpView()
-                    await initSftpSplitIfNeeded(id)
+                    const title = `${s.type || 'SFTP'} ${s.name||s.host} (${s.username})`
+                    createSftpTab(rid, title)
+                    activateTab(rid)
+                    await initSftpSplitIfNeeded(rid)
                     await navigateRemote('/')
                   } else {
+                    // Always create a new SSH terminal/tab
+                    const rid = genId('ssh')
                     const title = `${s.type || 'SSH'} ${s.name||s.host} (${s.username})`
-                    if (!terminals.has(id)) {
-                      createTerminalFor(id, title)
-                      const cfg = Object.assign({}, s, { id })
-                      await window.api.sshConnect(cfg)
-                      await window.api.sshOpenPtyId(id)
-                      try { await window.api.sftpConnect(cfg) } catch {}
-                      const rec = terminals.get(id)
-                      try { rec.fit.fit() } catch {}
-                      try { window.api.sshResizeId(id, rec.term.cols, rec.term.rows) } catch {}
-                      rec.term.write('\r\n[Connected]\r\n')
-                    }
+                    createTerminalFor(rid, title)
+                    const cfg = Object.assign({}, s, { id: rid })
+                    await window.api.sshConnect(cfg)
+                    await window.api.sshOpenPtyId(rid)
+                    try { await window.api.sftpConnect(cfg) } catch {}
+                    const rec = terminals.get(rid)
+                    try { rec.fit.fit() } catch {}
+                    try { window.api.sshResizeId(rid, rec.term.cols, rec.term.rows) } catch {}
+                    rec.term.write('\r\n[Connected]\r\n')
                     showSshView()
-                    activateTab(id)
+                    activateTab(rid)
                   }
                 } catch (e) { alert('Connect error: ' + (e?.message||e)) }
               }
