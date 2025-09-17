@@ -271,23 +271,44 @@
         const srcInfo = findNodeById(sessionTree, sourceId, null)
         if (!srcInfo) return
         const srcNode = srcInfo.node
-        // Determine drop target container
+
+        // Determine drop target container and insertion index
         let container = null
+        let insertIndex = null
+
         if (targetNode.type === 'folder') {
-          if (targetNode.id !== '__root__' && isDescendant(srcNode, targetNode.id)) return // prevent cycling
+          // Prevent moving a folder into its descendant
+          if (targetNode.id !== '__root__' && isDescendant(srcNode, targetNode.id)) return
           targetNode.expanded = true
           container = targetNode.id === '__root__' ? sessionTree : (targetNode.children || (targetNode.children = []))
+          insertIndex = container.length // append to end of folder/root
         } else {
-          // drop onto item -> insert after in the same parent
+          // Dropping onto an item -> insert after the target item within its parent container
           const tgtInfo = findNodeById(sessionTree, targetNode.id, null)
           if (!tgtInfo) return
           container = tgtInfo.parent ? tgtInfo.parent.children : sessionTree
+          insertIndex = (tgtInfo.index ?? 0) + 1
         }
-        // remove from current
+
+        // If moving within the same container and the source was before the insert position,
+        // removing the source will shift the target index by -1. Adjust for that.
+        const movingWithinSameContainer = (srcInfo.parent ? srcInfo.parent.children : sessionTree) === container
+        const originalSourceIndex = srcInfo.index
+
+        // Remove from current location
         if (!srcInfo.parent) sessionTree.splice(srcInfo.index, 1)
         else srcInfo.parent.children.splice(srcInfo.index, 1)
-        // insert at end of container
-        container.push(srcNode)
+
+        if (movingWithinSameContainer && originalSourceIndex < insertIndex) {
+          insertIndex = Math.max(0, insertIndex - 1)
+        }
+
+        // Clamp insert index
+        if (insertIndex < 0 || insertIndex > container.length) insertIndex = container.length
+
+        // Insert at calculated position
+        container.splice(insertIndex, 0, srcNode)
+
         await window.api.sessionsSaveTree(sessionTree)
         renderTree()
       }
