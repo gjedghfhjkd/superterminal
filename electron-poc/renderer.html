@@ -189,7 +189,12 @@
             row.appendChild(icon)
             const label = document.createElement('div')
             label.className = 'label'
-            label.textContent = n.name || (n.type==='session' ? `${n.session?.username||'user'}@${n.session?.host||'host'}:${n.session?.port||22}` : 'Folder')
+            if (n.type === 'session') {
+              const human = `${(n.session?.name||n.name||n.session?.host||'Session')} (${n.session?.username||'user'})`
+              label.textContent = n.name || human
+            } else {
+              label.textContent = n.name || 'Folder'
+            }
             row.appendChild(label)
             container.appendChild(row)
 
@@ -200,7 +205,7 @@
                 try {
                   const id = n.id
                   const s = n.session
-                  const title = `${s.type || 'SSH'} ${s.username}@${s.host}:${s.port}`
+                  const title = `${s.type || 'SSH'} ${s.name||s.host} (${s.username})`
                   if (!terminals.has(id)) {
                     createTerminalFor(id, title)
                     const cfg = Object.assign({}, s, { id })
@@ -311,8 +316,7 @@
           const res = await window.api.openSessionWindow('SSH')
           const s = res && res.session
           if (!s) return
-          const name = `${s.username||'user'}@${s.host||'host'}:${s.port||22}`
-          const node = { id: genId('sess'), type:'session', name, session: s }
+          const node = { id: genId('sess'), type:'session', name: `${s.name||s.host} (${s.username})`, session: s }
           if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
           else targetNode.children.push(node)
           await window.api.sessionsSaveTree(sessionTree)

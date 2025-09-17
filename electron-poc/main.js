@@ -52,7 +52,7 @@ ipcMain.handle('sessions-load', async () => {
   let tree
   if (Array.isArray(data)) {
     const looksLikeTree = data.some(e => e && typeof e === 'object' && 'type' in e)
-    tree = looksLikeTree ? data : data.map((s, i) => ({ id: String(i), type:'session', name: `${s.username||'user'}@${s.host||'host'}:${s.port||22}`, session: s }))
+    tree = looksLikeTree ? data : data.map((s, i) => ({ id: String(i), type:'session', name: `${s.name||s.host||'Session'} (${s.username||'user'})`, session: s }))
   } else {
     tree = data
   }

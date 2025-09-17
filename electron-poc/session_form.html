@@ -18,6 +18,8 @@
     <h3>Create Session</h3>
     <div class="wrap">
     <!-- Type removed per requirement; default to SSH -->
+    <label>Name</label>
+    <input id="name" placeholder="Optional name (defaults to host)" />
     <label>Host</label>
     <input id="host" value="localhost" />
     <label>Port</label>
@@ -66,6 +68,7 @@
       document.getElementById('btn-save').onclick = async () => {
         const sess = {
           type: 'SSH',
+          name: (document.getElementById('name').value || document.getElementById('host').value || '').trim(),
           host: document.getElementById('host').value,
           port: Number(document.getElementById('port').value),
           username: document.getElementById('user').value,
