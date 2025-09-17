@@ -10,7 +10,6 @@ from .session_dialog import SessionDialog
 from .session_tree_widget import SessionTreeWidget
 from .terminal_tabs import TerminalTabs
 from .moba_terminal import MobaTerminal
-from .terminal_js import TerminalJS
 from ..core.session_manager import SessionManager
 from ..core.ssh2 import SSH2
 from ..core.sftp_client import SFTPClient
