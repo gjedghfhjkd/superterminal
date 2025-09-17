@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QTabWidget, QWidget, QVBoxLayout, QTextEdit, 
                              QHBoxLayout, QLineEdit, QLabel, QPushButton, QTabBar, QShortcut, QMenu, QAction, QApplication)
-from PyQt5.QtCore import Qt, pyqtSignal, QEvent
+from PyQt5.QtCore import Qt, pyqtSignal, QEvent, QTimer
 from PyQt5.QtGui import QFont, QTextCursor, QKeySequence, QColor, QTextCharFormat
 from .custom_tab_widget import CloseButton
 try:
