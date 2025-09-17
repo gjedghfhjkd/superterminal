@@ -39,8 +39,8 @@ class TunnelingDialog(QDialog):
 		layout.addWidget(header)
 
 		# Table of forwards
-		self.table = QTableWidget(0, 8)
-		self.table.setHorizontalHeaderLabels(["Name", "Type", "Start/Stop", "Session", "Bind Host", "Bind Port", "Target Host", "Target Port"])
+		self.table = QTableWidget(0, 6)
+		self.table.setHorizontalHeaderLabels(["Name", "Type", "Start/Stop", "Session", "Bind Host: Port", "Target Server: Port"])
 		self.table.horizontalHeader().setStretchLastSection(True)
 		layout.addWidget(self.table)
 
@@ -74,25 +74,15 @@ class TunnelingDialog(QDialog):
 			self.cmb_session.addItem(f"{name}", i)
 		row_layout.addWidget(self.cmb_session)
 
-		self.ed_bind_host = QLineEdit("127.0.0.1")
-		self.ed_bind_host.setPlaceholderText("Bind host")
-		self.ed_bind_host.setFixedWidth(120)
-		row_layout.addWidget(self.ed_bind_host)
+		self.ed_bind = QLineEdit("")
+		self.ed_bind.setPlaceholderText("Bind host:port (e.g., 127.0.0.1:8080)")
+		self.ed_bind.setFixedWidth(220)
+		row_layout.addWidget(self.ed_bind)
 
-		self.ed_bind_port = QLineEdit("")
-		self.ed_bind_port.setPlaceholderText("Bind port")
-		self.ed_bind_port.setFixedWidth(90)
-		row_layout.addWidget(self.ed_bind_port)
-
-		self.ed_target_host = QLineEdit("")
-		self.ed_target_host.setPlaceholderText("Target host")
-		self.ed_target_host.setFixedWidth(160)
-		row_layout.addWidget(self.ed_target_host)
-
-		self.ed_target_port = QLineEdit("")
-		self.ed_target_port.setPlaceholderText("Target port")
-		self.ed_target_port.setFixedWidth(90)
-		row_layout.addWidget(self.ed_target_port)
+		self.ed_target = QLineEdit("")
+		self.ed_target.setPlaceholderText("Target server:port (e.g., host:5432)")
+		self.ed_target.setFixedWidth(240)
+		row_layout.addWidget(self.ed_target)
 
 		btn_add = QPushButton("Add")
 		btn_add.clicked.connect(self._on_add_forward)
@@ -100,8 +90,9 @@ class TunnelingDialog(QDialog):
 
 		layout.addWidget(row)
 
-		# React to type changes to hide/show Target Host for Local/Remote
+		# React to type changes to adjust Target for Local/Remote
 		self.cmb_type.currentTextChanged.connect(self._on_type_changed)
+		self.cmb_session.currentIndexChanged.connect(self._on_session_changed)
 		self._on_type_changed(self.cmb_type.currentText())
 
 		# Actions
@@ -128,14 +119,13 @@ class TunnelingDialog(QDialog):
 			forward_type = self.cmb_type.currentText()
 			idx = self.cmb_session.currentData()
 			session = self.session_manager.get_session(idx)
-			bind_host = self.ed_bind_host.text().strip() or "127.0.0.1"
-			bind_port = int(self.ed_bind_port.text().strip())
+			bind_host, bind_port = self._parse_host_port(self.ed_bind.text().strip(), default_host="127.0.0.1")
 			# For Local forwarding, use selected session host as target host
 			if forward_type == "Local":
-				target_host = getattr(session, 'host', '')
+				_, tport = self._parse_host_port(self.ed_target.text().strip(), default_host=getattr(session, 'host', ''))
+				target_host, target_port = getattr(session, 'host', ''), tport
 			else:
-				target_host = self.ed_target_host.text().strip()
-			target_port = int(self.ed_target_port.text().strip())
+				target_host, target_port = self._parse_host_port(self.ed_target.text().strip())
 			if forward_type == "Remote" and not target_host:
 				QMessageBox.warning(self, "Validation", "Target host is required")
 				return
@@ -160,9 +150,46 @@ class TunnelingDialog(QDialog):
 			QMessageBox.warning(self, "Validation", "Ports must be integers")
 
 	def _on_type_changed(self, text: str):
-		# Hide Target Host for Local tunnels; show for Remote
+		# For Local, suggest target server from selected session
 		is_local = (text == "Local")
-		self.ed_target_host.setVisible(not is_local)
+		try:
+			idx = self.cmb_session.currentData()
+			s = self.session_manager.get_session(idx)
+			h = getattr(s, 'host', '') if s else ''
+			if is_local:
+				# Keep host suggestion and allow user to enter port
+				current = self.ed_target.text().strip()
+				# if user hasn't entered anything or had previous suggestion, refresh
+				if not current or current.startswith(h + ":"):
+					self.ed_target.setText(f"{h}:")
+			else:
+				self.ed_target.setPlaceholderText("Target server:port (e.g., host:5432)")
+		except Exception:
+			pass
+
+	def _on_session_changed(self, _):
+		# When Local selected, keep target host synced to session host
+		if self.cmb_type.currentText() == "Local":
+			self._on_type_changed("Local")
+
+	def _parse_host_port(self, value: str, default_host: str = ""):
+		value = (value or "").strip()
+		host = default_host
+		port = 0
+		if ":" in value:
+			parts = value.split(":", 1)
+			host = parts[0].strip() or default_host
+			try:
+				port = int((parts[1] or "").strip())
+			except Exception:
+				port = 0
+		else:
+			# Only port provided
+			try:
+				port = int(value)
+			except Exception:
+				port = 0
+		return host, port
 
 	def _refresh_table(self):
 		self.table.setRowCount(len(self._forwards))
@@ -178,12 +205,10 @@ class TunnelingDialog(QDialog):
 			s = self.session_manager.get_session(fwd["session_index"]) or Session(host="?")
 			s_name = getattr(s, 'name', None) or s.host
 			self.table.setItem(r, 3, QTableWidgetItem(s_name))
-			# Bind host/port
-			self.table.setItem(r, 4, QTableWidgetItem(fwd["bind_host"]))
-			self.table.setItem(r, 5, QTableWidgetItem(str(fwd["bind_port"])))
-			# Target host/port
-			self.table.setItem(r, 6, QTableWidgetItem(fwd["target_host"]))
-			self.table.setItem(r, 7, QTableWidgetItem(str(fwd["target_port"])))
+			# Bind host:port
+			self.table.setItem(r, 4, QTableWidgetItem(f"{fwd['bind_host']}:{fwd['bind_port']}"))
+			# Target server:port
+			self.table.setItem(r, 5, QTableWidgetItem(f"{fwd['target_host']}:{fwd['target_port']}"))
 
 	def _selected_rows(self):
 		rows = set()
