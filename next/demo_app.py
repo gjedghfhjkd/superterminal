@@ -1,5 +1,6 @@
-from PyQt5.QtWidgets import QApplication, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QListWidget, QLineEdit, QLabel
-from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QApplication, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QListWidget, QLineEdit, QLabel, QTextEdit, QShortcut
+from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtGui import QFont, QKeySequence, QTextCursor
 import sys
 from terminal_web import TerminalWeb
 from ssh_backend import SSHBackend
@@ -32,7 +33,13 @@ class Demo(QWidget):
         left.addStretch()
 
         right = QVBoxLayout()
-        self.term = TerminalWeb()
+        # Try WebEngine terminal; fallback to simple QTextEdit terminal
+        try:
+            self.term = TerminalWeb()
+            self._term_is_web = True
+        except Exception:
+            self.term = TerminalStub()
+            self._term_is_web = False
         right.addWidget(self.term)
 
         bottom = QHBoxLayout()
@@ -49,7 +56,11 @@ class Demo(QWidget):
         self.ssh = SSHBackend()
         self.ssh.output.connect(self.term.append_output)
         self.ssh.status.connect(lambda ok,msg: print('SSH:',msg))
-        self.term.set_sender(lambda data: self.ssh.send(data))
+        # wire key sender
+        try:
+            self.term.set_sender(lambda data: self.ssh.send(data))
+        except Exception:
+            pass
 
         self.sftp = SFTPBackend()
         self.sftp.status.connect(lambda ok,msg: print('SFTP:',msg))
@@ -70,6 +81,66 @@ class Demo(QWidget):
         self.sftp_list.clear()
         for e in entries:
             self.sftp_list.addItem(f"{e['filename']}  {e['st_size']}")
+
+class TerminalStub(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._send = None
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0,0,0,0)
+        self.view = QTextEdit()
+        self.view.setReadOnly(False)
+        self.view.setLineWrapMode(QTextEdit.NoWrap)
+        f = QFont('Consolas'); f.setStyleHint(QFont.Monospace); f.setFixedPitch(True); f.setPointSize(12)
+        self.view.setFont(f)
+        self.view.installEventFilter(self)
+        self.view.viewport().installEventFilter(self)
+        lay.addWidget(self.view)
+        try:
+            QShortcut(QKeySequence.ZoomIn, self, activated=lambda: self.view.zoomIn(1))
+            QShortcut(QKeySequence.ZoomOut, self, activated=lambda: self.view.zoomOut(1))
+        except Exception:
+            pass
+
+    def set_sender(self, sender_callable):
+        self._send = sender_callable
+
+    def append_output(self, text: str):
+        self.view.moveCursor(QTextCursor.End)
+        self.view.insertPlainText(text)
+
+    def eventFilter(self, obj, event):
+        if obj in (self.view, self.view.viewport()):
+            if event.type() == QEvent.KeyPress:
+                key = event.key(); mods = event.modifiers()
+                # Enter
+                if key in (Qt.Key_Return, Qt.Key_Enter):
+                    if self._send: self._send("\r"); return True
+                # ESC
+                if key == Qt.Key_Escape:
+                    if self._send: self._send("\x1b"); return True
+                # Backspace
+                if key == Qt.Key_Backspace:
+                    if self._send: self._send("\x7f"); return True
+                # Arrows
+                if key == Qt.Key_Up:
+                    if self._send: self._send("\x1b[A"); return True
+                if key == Qt.Key_Down:
+                    if self._send: self._send("\x1b[B"); return True
+                if key == Qt.Key_Right:
+                    if self._send: self._send("\x1b[C"); return True
+                if key == Qt.Key_Left:
+                    if self._send: self._send("\x1b[D"); return True
+                # Ctrl+C / Ctrl+D
+                if (mods & Qt.ControlModifier) and key == Qt.Key_C:
+                    if self._send: self._send("\x03"); return True
+                if (mods & Qt.ControlModifier) and key == Qt.Key_D:
+                    if self._send: self._send("\x04"); return True
+                # Printable
+                txt = event.text()
+                if txt and self._send:
+                    self._send(txt); return True
+        return super().eventFilter(obj, event)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
