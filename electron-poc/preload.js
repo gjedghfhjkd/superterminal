@@ -8,6 +8,10 @@ contextBridge.exposeInMainWorld('api', {
   sshResize: (size) => ipcRenderer.send('ssh-resize', size),
 
   sftpConnect: (cfg) => ipcRenderer.invoke('sftp-connect', cfg),
-  sftpList: (remotePath) => ipcRenderer.invoke('sftp-list', remotePath)
+  sftpList: (remotePath) => ipcRenderer.invoke('sftp-list', remotePath),
+
+  sessionsLoad: () => ipcRenderer.invoke('sessions-load'),
+  sessionsAdd: (session) => ipcRenderer.invoke('sessions-add', session),
+  sessionsDelete: (idx) => ipcRenderer.invoke('sessions-delete', idx)
 })
 

@@ -16,7 +16,11 @@
   </head>
   <body>
     <div id="left">
-      <h3>SSH</h3>
+      <div style="display:flex; gap:8px; margin-bottom:8px">
+        <button id="tab-ssh">SSH</button>
+        <button id="tab-sftp">SFTP</button>
+      </div>
+      <h3 id="form-title">SSH</h3>
       <label>Host</label>
       <input id="host" value="localhost"/>
       <label>Port</label>
@@ -36,6 +40,9 @@
       <label id="lbl-passphrase">Passphrase</label>
       <input id="passphrase" type="password" />
       <button id="btn-connect">Connect</button>
+      <button id="btn-save">Save session</button>
+      <h3>Sessions</h3>
+      <ul id="sessions"></ul>
       <h3>SFTP</h3>
       <button id="btn-list">List /root</button>
       <ul id="list"></ul>
@@ -83,6 +90,40 @@
       }
       authSel.addEventListener('change', updateAuthUI)
       updateAuthUI()
+      // Tabs behavior (for POC forms are identical; could switch defaults)
+      const formTitle = document.getElementById('form-title')
+      document.getElementById('tab-ssh').onclick = () => { formTitle.textContent = 'SSH' }
+      document.getElementById('tab-sftp').onclick = () => { formTitle.textContent = 'SFTP' }
+
+      // Sessions persistence
+      async function refreshSessions() {
+        const res = await window.api.sessionsLoad()
+        const list = document.getElementById('sessions')
+        list.innerHTML = ''
+        if (!res || !res.sessions) return
+        res.sessions.forEach((s, idx) => {
+          const li = document.createElement('li')
+          const btn = document.createElement('button')
+          btn.textContent = `${s.type || 'SSH'} ${s.username}@${s.host}:${s.port}`
+          btn.onclick = async () => {
+            try {
+              await window.api.sshConnect(s)
+              await window.api.sshOpenPty()
+              resize()
+              try { await window.api.sftpConnect(s) } catch {}
+              term.write('\r\n[Connected]\r\n')
+            } catch (e) { alert('Connect error: ' + (e?.message||e)) }
+          }
+          const del = document.createElement('button')
+          del.textContent = '✕'
+          del.style.marginLeft = '6px'
+          del.onclick = async () => { await window.api.sessionsDelete(idx); refreshSessions() }
+          li.appendChild(btn); li.appendChild(del)
+          list.appendChild(li)
+        })
+      }
+      refreshSessions()
+
 
       // Read key file if chosen
       keyfile.addEventListener('change', async (e) => {
@@ -112,6 +153,21 @@
           const msg = (e && e.message) ? e.message : String(e)
           alert('Connect error: ' + msg)
         }
+      }
+
+      document.getElementById('btn-save').onclick = async () => {
+        const sess = {
+          type: 'SSH',
+          host: document.getElementById('host').value,
+          port: Number(document.getElementById('port').value),
+          username: document.getElementById('user').value,
+          auth: document.getElementById('auth').value,
+          password: document.getElementById('password').value,
+          privateKey: document.getElementById('pkey').value,
+          passphrase: document.getElementById('passphrase').value
+        }
+        await window.api.sessionsAdd(sess)
+        refreshSessions()
       }
 
       document.getElementById('btn-list').onclick = async () => {

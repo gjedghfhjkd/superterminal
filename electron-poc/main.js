@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
-import { readFile } from 'fs/promises'
+import { readFile, writeFile } from 'fs/promises'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { Client as SSHClient } from 'ssh2'
@@ -26,6 +26,40 @@ app.whenReady().then(createWindow)
 
 let ssh = null
 let sftp = null
+
+// Sessions persistence
+const sessionsFile = () => path.join(app.getPath('userData'), 'sessions.json')
+async function loadSessions() {
+  try {
+    const txt = await readFile(sessionsFile(), 'utf-8')
+    const data = JSON.parse(txt)
+    if (Array.isArray(data)) return data
+    return data && Array.isArray(data.sessions) ? data.sessions : []
+  } catch {
+    return []
+  }
+}
+async function saveSessions(sessions) {
+  const payload = { version: 1, sessions }
+  await writeFile(sessionsFile(), JSON.stringify(payload, null, 2))
+}
+
+ipcMain.handle('sessions-load', async () => {
+  const sessions = await loadSessions()
+  return { ok: true, sessions }
+})
+ipcMain.handle('sessions-add', async (evt, session) => {
+  const sessions = await loadSessions()
+  sessions.push(session)
+  await saveSessions(sessions)
+  return { ok: true, sessions }
+})
+ipcMain.handle('sessions-delete', async (evt, index) => {
+  const sessions = await loadSessions()
+  if (index >= 0 && index < sessions.length) sessions.splice(index, 1)
+  await saveSessions(sessions)
+  return { ok: true, sessions }
+})
 
 ipcMain.handle('ssh-connect', async (evt, cfg) => {
   return new Promise((resolve, reject) => {
