@@ -101,13 +101,16 @@
         const privateKey = document.getElementById('pkey').value
         const passphraseVal = document.getElementById('passphrase').value
         try {
-          await window.api.sshConnect({ host, port, username, auth, password: passwordVal, privateKey, passphrase: passphraseVal })
-          await window.api.sshOpenPty()
+          const res = await window.api.sshConnect({ host, port, username, auth, password: passwordVal, privateKey, passphrase: passphraseVal })
+          if (!res || !res.ok) throw new Error('SSH connect failed')
+          const pty = await window.api.sshOpenPty()
+          if (!pty || !pty.ok) throw new Error('PTY open failed')
           resize()
-          await window.api.sftpConnect({ host, port, username, auth, password: passwordVal, privateKey, passphrase: passphraseVal })
+          try { await window.api.sftpConnect({ host, port, username, auth, password: passwordVal, privateKey, passphrase: passphraseVal }) } catch {}
           term.write('\r\n[Connected]\r\n')
         } catch (e) {
-          alert('Connect error: ' + e)
+          const msg = (e && e.message) ? e.message : String(e)
+          alert('Connect error: ' + msg)
         }
       }
 

@@ -29,17 +29,17 @@ ipcMain.handle('ssh-connect', async (evt, cfg) => {
   return new Promise((resolve, reject) => {
     ssh = new SSHClient()
     ssh.on('ready', () => resolve({ ok: true }))
-    ssh.on('error', (e) => reject(String(e)))
+    ssh.on('error', (e) => reject(new Error(String(e))))
     const conn = {
       host: cfg.host, port: cfg.port, username: cfg.username,
       readyTimeout: 10000
     }
     if (cfg.auth === 'password') {
-      if (!cfg.password) return reject('Password is required')
+      if (!cfg.password) return reject(new Error('Password is required'))
       conn.password = cfg.password
     } else {
       const key = (cfg.privateKey || '').trim()
-      if (!key) return reject('Private key is required')
+      if (!key) return reject(new Error('Private key is required'))
       conn.privateKey = key
       if (cfg.passphrase) conn.passphrase = cfg.passphrase
     }
