@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (QTabWidget, QWidget, QVBoxLayout, QTextEdit, 
                              QHBoxLayout, QLineEdit, QLabel, QPushButton, QTabBar, QShortcut, QMenu, QAction, QApplication)
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent
-from PyQt5.QtGui import QFont, QTextCursor, QKeySequence
+from PyQt5.QtGui import QFont, QTextCursor, QKeySequence, QColor, QTextCharFormat
 from .custom_tab_widget import CloseButton
 try:
     import pyte
@@ -29,10 +29,10 @@ class TerminalTab(QWidget):
         self.terminal_output = QTextEdit()
         self.terminal_output.setStyleSheet("""
             QTextEdit {
-                background-color: black;
-                color: #00ff00;
+                background-color: #0f111a;
+                color: #e6e6e6;
                 border: none;
-                padding: 5px;
+                padding: 6px;
             }
         """)
         # Set default monospace font via QFont so we can control zoom reliably
@@ -142,6 +142,7 @@ class TerminalTab(QWidget):
                 height = getattr(self._pyte_screen, 'lines', len(lines))
                 if len(lines) < height:
                     lines += [""] * (height - len(lines))
+                # Render buffer with ANSI colors via pyte attributes
                 content = "\n".join(lines)
                 # Cleanup tail: collapse excessive blank lines and duplicate prompts
                 try:
@@ -197,7 +198,12 @@ class TerminalTab(QWidget):
                 except Exception:
                     pass
                 self._first_connect_cleanup = False
-                self.terminal_output.setPlainText(content)
+                # Use rich rendering with QTextCharFormat based on pyte cell attributes
+                try:
+                    self._render_pyte_screen()
+                except Exception:
+                    # Fallback to plain text if rich render fails
+                    self.terminal_output.setPlainText(content)
                 # Compute caret by moving cursor to row/col (0-based)
                 # Use document blocks to avoid landing on an implicit trailing empty block
                 doc = self.terminal_output.document()
@@ -717,6 +723,93 @@ class TerminalTab(QWidget):
                     self._send(text)
                     return True
         return super().eventFilter(obj, event)
+
+    def _render_pyte_screen(self):
+        if self._pyte_screen is None:
+            return
+        doc = self.terminal_output.document()
+        cursor = self.terminal_output.textCursor()
+        cursor.movePosition(QTextCursor.Start)
+        # Reset contents
+        self.terminal_output.clear()
+        # Map pyte colors to a modern palette close to One Dark
+        palette = {
+            'default_fg': QColor('#e6e6e6'),
+            'default_bg': QColor('#0f111a'),
+            0: QColor('#2e3440'),  # black
+            1: QColor('#bf616a'),  # red
+            2: QColor('#a3be8c'),  # green
+            3: QColor('#ebcb8b'),  # yellow
+            4: QColor('#81a1c1'),  # blue
+            5: QColor('#b48ead'),  # magenta
+            6: QColor('#88c0d0'),  # cyan
+            7: QColor('#e5e9f0'),  # white
+            8: QColor('#4c566a'),  # bright black
+            9: QColor('#d08770'),  # bright red/orange
+            10: QColor('#8fbcbb'), # bright green/cyan
+            11: QColor('#f0d399'), # bright yellow
+            12: QColor('#8fa3d6'), # bright blue
+            13: QColor('#c0a7c7'), # bright magenta
+            14: QColor('#93cee1'), # bright cyan
+            15: QColor('#eceff4'), # bright white
+        }
+        def color_from_attr(attr, is_fg=True):
+            try:
+                idx = attr.fg if is_fg else attr.bg
+                if idx is None:
+                    return palette['default_fg' if is_fg else 'default_bg']
+                return palette.get(idx, palette['default_fg' if is_fg else 'default_bg'])
+            except Exception:
+                return palette['default_fg' if is_fg else 'default_bg']
+
+        block_fmt = QTextCharFormat()
+        # Iterate rows
+        for y, row in enumerate(self._pyte_screen.buffer):
+            line = self._pyte_screen.buffer[y]
+            # Build segments of same attributes for fewer fmt changes
+            seg_text = ''
+            seg_attr = None
+            def flush_segment():
+                nonlocal seg_text, seg_attr
+                if not seg_text:
+                    return
+                fmt = QTextCharFormat()
+                if seg_attr is not None:
+                    fg = color_from_attr(seg_attr, True)
+                    bg = color_from_attr(seg_attr, False)
+                    fmt.setForeground(fg)
+                    # Keep background default to avoid big blocks; only set if non-default
+                    if bg != palette['default_bg']:
+                        fmt.setBackground(bg)
+                    if getattr(seg_attr, 'bold', False):
+                        fmt.setFontWeight(QFont.Bold)
+                    if getattr(seg_attr, 'italics', False):
+                        fmt.setFontItalic(True)
+                    if getattr(seg_attr, 'underscore', False):
+                        fmt.setUnderlineStyle(QTextCharFormat.SingleUnderline)
+                cursor.mergeCharFormat(fmt)
+                cursor.insertText(seg_text)
+                seg_text = ''
+                seg_attr = None
+
+            for x, cell in enumerate(line):
+                ch = cell.data or ' '
+                attr = cell.fg, cell.bg, cell.bold, cell.italics, cell.underscore
+                # Represent attributes compactly via the cell object itself
+                cur_attr = cell
+                if seg_attr is None:
+                    seg_attr = cur_attr
+                if (cell.fg != getattr(seg_attr, 'fg', None) or
+                    cell.bg != getattr(seg_attr, 'bg', None) or
+                    getattr(cell, 'bold', False) != getattr(seg_attr, 'bold', False) or
+                    getattr(cell, 'italics', False) != getattr(seg_attr, 'italics', False) or
+                    getattr(cell, 'underscore', False) != getattr(seg_attr, 'underscore', False)):
+                    flush_segment()
+                    seg_attr = cur_attr
+                seg_text += ch
+            flush_segment()
+            if y < getattr(self._pyte_screen, 'lines', 0) - 1:
+                cursor.insertText('\n')
 
     def _strip_ansi(self, s: str) -> str:
         """Remove ANSI control sequences (CSI, OSC, etc.) so QTextEdit shows clean text."""

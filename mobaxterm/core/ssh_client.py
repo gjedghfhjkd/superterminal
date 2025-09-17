@@ -153,6 +153,11 @@ class SSHClient(QObject):
                 "stty icanon icrnl -inlcr -igncr onlcr 2>/dev/null; "
                 "if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off' >/dev/null 2>&1; fi; "
                 "export LANG=C.UTF-8 LC_ALL=C.UTF-8 >/dev/null 2>&1; "
+                # Improve ls colors for better differentiation (dirs, symlinks, exec)
+                "export CLICOLOR=1 >/dev/null 2>&1; "
+                "export LS_COLORS='di=01;34:ln=01;36:ex=01;32:*.tar=01;31:*.gz=01;31:*.zip=01;31' >/dev/null 2>&1; "
+                # Alias ls with color and classify marks
+                "alias ls='ls --color=auto -F' >/dev/null 2>&1; "
                 "stty echo 2>/dev/null\n"
             )
             self.shell.send(cmd)
