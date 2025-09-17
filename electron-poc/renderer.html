@@ -49,6 +49,12 @@
 
       /* Tunneling placeholder */
       #tun-panel { position:relative; flex:1; display:none; background:#0f111a; color:#cfd3dc; padding:12px; }
+      #tun-controls { display:flex; gap:8px; margin-bottom:10px; align-items:center }
+      #tun-list { border-top:1px solid #1f2330; padding-top:8px }
+      .tun-row { display:flex; gap:10px; padding:6px 8px; border-radius:6px; align-items:center }
+      .tun-row:hover { background:#121623 }
+      .tun-col { flex:1 }
+      .tun-col.small { width:120px; flex:none; color:#8b90a0; font-size:12px }
       /* Ensure xterm fully occupies the pane without causing internal scroll splits */
       .pane > .xterm { width:100% !important; height:100% !important; }
       .pane > .xterm .xterm-viewport { width:100% !important; height:100% !important; }
@@ -109,7 +115,10 @@
         </div>
       </div>
       <div id="tun-panel">
-        <div style="opacity:.8">Tunneling view placeholder. Coming soon.</div>
+        <div id="tun-controls">
+          <button id="tun-add" class="btn">Add forward</button>
+        </div>
+        <div id="tun-list"></div>
       </div>
     </div>
     <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
@@ -244,7 +253,10 @@
         } catch (e) { alert('Create SFTP session error: ' + (e?.message||e)) }
       }
       document.getElementById('left-tun').onclick = async () => {
-        alert('Tunneling: coming soon')
+        document.getElementById('sftp-panel').style.display = 'none'
+        document.getElementById('panes').style.display = 'none'
+        document.getElementById('tabs').style.display = 'flex'
+        document.getElementById('tun-panel').style.display = 'block'
       }
 
       window.api.sshOnData(payload => {
@@ -834,6 +846,59 @@
       sftpLocalRefreshBtn.onclick = () => navigateLocal(sftpLocalPathEl.value)
       sftpLocalUpBtn.onclick = () => navigateLocal(dirname(sftpLocalPathEl.value))
       sftpLocalPathEl.addEventListener('keydown', (e) => { if (e.key==='Enter') navigateLocal(sftpLocalPathEl.value) })
+
+      // ===== Tunneling UI =====
+      const tunListEl = document.getElementById('tun-list')
+      const tunAddBtn = document.getElementById('tun-add')
+      const activeForwards = [] // { id, localHost, localPort, remoteHost, remotePort }
+
+      function renderTunnels() {
+        tunListEl.innerHTML = ''
+        for (let i=0;i<activeForwards.length;i++) {
+          const t = activeForwards[i]
+          const row = document.createElement('div')
+          row.className = 'tun-row'
+          const colA = document.createElement('div'); colA.className='tun-col small'; colA.textContent = t.id
+          const colB = document.createElement('div'); colB.className='tun-col'; colB.textContent = `${t.localHost||'127.0.0.1'}:${t.localPort} -> ${t.remoteHost}:${t.remotePort}`
+          const colC = document.createElement('div'); colC.className='tun-col small'
+          const stop = document.createElement('button'); stop.className='btn'; stop.textContent='Stop'
+          stop.onclick = async () => {
+            try { await window.api.tunnelStop(t.id, t.localPort) } catch {}
+            const idx = activeForwards.findIndex(x => x.id===t.id && x.localPort===t.localPort)
+            if (idx>=0) activeForwards.splice(idx,1)
+            renderTunnels()
+          }
+          colC.appendChild(stop)
+          row.appendChild(colA); row.appendChild(colB); row.appendChild(colC)
+          tunListEl.appendChild(row)
+        }
+      }
+
+      tunAddBtn.onclick = async () => {
+        // Use selected session
+        const selInfo = selectedId ? findNodeById(sessionTree, selectedId, null) : null
+        const sessNode = selInfo && selInfo.node && selInfo.node.type==='session' ? selInfo.node : null
+        if (!sessNode) { alert('Select a session in the left tree.'); return }
+        const localPortStr = await showInputModal('Local port', 'Enter local port', '8080')
+        if (!localPortStr) return
+        const remoteHost = await showInputModal('Remote host', 'Enter remote host', '127.0.0.1')
+        if (!remoteHost) return
+        const remotePortStr = await showInputModal('Remote port', 'Enter remote port', '80')
+        if (!remotePortStr) return
+        const localPort = Number(localPortStr)
+        const remotePort = Number(remotePortStr)
+        const rid = genId('tun')
+        try {
+          // ensure ssh connected for this forward id
+          const cfg = Object.assign({}, sessNode.session, { id: rid })
+          await window.api.sshConnect(cfg)
+          await window.api.tunnelStart(rid, '127.0.0.1', localPort, remoteHost, remotePort)
+          activeForwards.push({ id: rid, localHost: '127.0.0.1', localPort, remoteHost, remotePort })
+          renderTunnels()
+        } catch (e) {
+          alert('Tunnel error: ' + (e?.message||e))
+        }
+      }
     </script>
   </body>
   </html>

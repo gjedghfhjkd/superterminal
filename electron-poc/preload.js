@@ -40,5 +40,9 @@ contextBridge.exposeInMainWorld('api', {
   localMkdir: (localPath) => ipcRenderer.invoke('local-mkdir', { path: localPath }),
   getHome: () => ipcRenderer.invoke('get-home'),
   sftpDisconnect: (id) => ipcRenderer.invoke('sftp-disconnect', id)
+  ,
+  // Tunneling
+  tunnelStart: (id, localHost, localPort, remoteHost, remotePort) => ipcRenderer.invoke('tunnel-start', { id, localHost, localPort, remoteHost, remotePort }),
+  tunnelStop: (id, localPort) => ipcRenderer.invoke('tunnel-stop', { id, localPort })
 })
 
