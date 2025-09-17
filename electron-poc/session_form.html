@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { margin:0; font-family:sans-serif; padding:12px }
+      label { display:block; font-size:12px; margin-top:8px }
+      input, select, textarea { width:100%; box-sizing:border-box }
+      button { margin-top:12px }
+    </style>
+  </head>
+  <body>
+    <h3>Create Session</h3>
+    <label>Type</label>
+    <select id="type">
+      <option value="SSH">SSH</option>
+      <option value="SFTP">SFTP</option>
+    </select>
+    <label>Host</label>
+    <input id="host" value="localhost" />
+    <label>Port</label>
+    <input id="port" value="22" />
+    <label>User</label>
+    <input id="user" value="root" />
+    <label>Auth</label>
+    <select id="auth">
+      <option value="password">Password</option>
+      <option value="key">SSH key</option>
+    </select>
+    <label id="lbl-password">Password</label>
+    <input id="password" type="password" />
+    <label id="lbl-key">Private key (paste)</label>
+    <textarea id="pkey" style="height:100px"></textarea>
+    <label id="lbl-passphrase">Passphrase</label>
+    <input id="passphrase" type="password" />
+    <button id="btn-save">Save</button>
+    <script>
+      function updateAuth() {
+        const isKey = document.getElementById('auth').value === 'key'
+        document.getElementById('lbl-password').style.display = isKey ? 'none' : ''
+        document.getElementById('password').style.display = isKey ? 'none' : ''
+        document.getElementById('lbl-key').style.display = isKey ? '' : 'none'
+        document.getElementById('pkey').style.display = isKey ? '' : 'none'
+        document.getElementById('lbl-passphrase').style.display = isKey ? '' : 'none'
+        document.getElementById('passphrase').style.display = isKey ? '' : 'none'
+      }
+      document.getElementById('auth').addEventListener('change', updateAuth)
+      updateAuth()
+      document.getElementById('btn-save').onclick = async () => {
+        const sess = {
+          type: document.getElementById('type').value,
+          host: document.getElementById('host').value,
+          port: Number(document.getElementById('port').value),
+          username: document.getElementById('user').value,
+          auth: document.getElementById('auth').value,
+          password: document.getElementById('password').value,
+          privateKey: document.getElementById('pkey').value,
+          passphrase: document.getElementById('passphrase').value
+        }
+        try { await window.api.sessionsAdd(sess) } catch {}
+        window.close()
+      }
+    </script>
+  </body>
+  </html>

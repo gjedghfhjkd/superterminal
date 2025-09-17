@@ -12,6 +12,12 @@ contextBridge.exposeInMainWorld('api', {
 
   sessionsLoad: () => ipcRenderer.invoke('sessions-load'),
   sessionsAdd: (session) => ipcRenderer.invoke('sessions-add', session),
-  sessionsDelete: (idx) => ipcRenderer.invoke('sessions-delete', idx)
+  sessionsDelete: (idx) => ipcRenderer.invoke('sessions-delete', idx),
+  openSessionWindow: () => ipcRenderer.invoke('open-session-window'),
+
+  // multi-connection aware helpers (optional)
+  sshOpenPtyId: (id) => ipcRenderer.invoke('ssh-open-pty-id', { id }),
+  sshSendId: (id, data) => ipcRenderer.send('ssh-send', { id, data }),
+  sshResizeId: (id, cols, rows) => ipcRenderer.send('ssh-resize', { id, cols, rows })
 })
 
