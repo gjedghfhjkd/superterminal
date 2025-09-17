@@ -879,7 +879,13 @@
           startBtn.onclick = async () => {
             if (t.active) return
             try {
-              await window.api.tunnelStart(t.sessionId, t.localHost||'127.0.0.1', t.localPort, t.remoteHost||'127.0.0.1', t.remotePort)
+              // Ensure SSH connection exists for this tunnel
+              if (!t.connId) {
+                t.connId = genId('tunconn')
+                const cfg = Object.assign({}, t.sessionCfg || {}, { id: t.connId })
+                await window.api.sshConnect(cfg)
+              }
+              await window.api.tunnelStart(t.connId, '127.0.0.1', t.localPort, '127.0.0.1', t.remotePort)
               t.active = true
               await window.api.tunnelsSave(tunnels)
               renderTunnels()
@@ -888,8 +894,11 @@
           stopBtn.onclick = async () => {
             if (!t.active) return
             try {
-              await window.api.tunnelStop(t.sessionId, t.remoteHost||'127.0.0.1', t.remotePort)
+              const bindHost = '127.0.0.1'
+              await window.api.tunnelStop(t.connId || t.sessionId, bindHost, t.remotePort)
+              try { if (t.connId) await window.api.sshDisconnect(t.connId) } catch {}
               t.active = false
+              t.connId = undefined
               await window.api.tunnelsSave(tunnels)
               renderTunnels()
             } catch (e) { alert('Stop error: ' + (e?.message||e)) }
@@ -897,7 +906,12 @@
           delBtn.onclick = async () => {
             const ok = await showConfirmModal('Delete tunnel', `Delete ${t.name||''}?`, 'Delete', 'Cancel')
             if (!ok) return
-            try { if (t.active) { await window.api.tunnelStop(t.sessionId, t.remoteHost||'127.0.0.1', t.remotePort) } } catch {}
+            try {
+              if (t.active) {
+                await window.api.tunnelStop(t.connId || t.sessionId, '127.0.0.1', t.remotePort)
+                try { if (t.connId) await window.api.sshDisconnect(t.connId) } catch {}
+              }
+            } catch {}
             const idx = tunnels.indexOf(t)
             if (idx >= 0) tunnels.splice(idx,1)
             await window.api.tunnelsSave(tunnels)
@@ -963,7 +977,7 @@
         if (!localPort || !remotePort) { alert('Ports are required'); return }
         const name = (inName.value || '').trim()
         // Add tunnel inactive by default
-        const entry = { id: genId('tun'), sessionId: sessNode.session.id || sessNode.id, name, localHost:'127.0.0.1', localPort, remoteHost, remotePort, active:false }
+        const entry = { id: genId('tun'), sessionId: sessNode.id, sessionCfg: sessNode.session, name, localHost:'127.0.0.1', localPort, remoteHost, remotePort, active:false }
         tunnels.push(entry)
         await window.api.tunnelsSave(tunnels)
         renderTunnels()
