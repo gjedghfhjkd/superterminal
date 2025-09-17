@@ -30,7 +30,8 @@
     </select>
     <label id="lbl-password">Password</label>
     <input id="password" type="password" />
-    <label id="lbl-key">Private key (paste)</label>
+    <label id="lbl-key">Private key (paste or choose)</label>
+    <input id="keyfile" type="file" accept=".pem,.ppk,.key,.rsa,*/*" />
     <textarea id="pkey" style="height:100px"></textarea>
     <label id="lbl-passphrase">Passphrase</label>
     <input id="passphrase" type="password" />
@@ -41,12 +42,19 @@
         document.getElementById('lbl-password').style.display = isKey ? 'none' : ''
         document.getElementById('password').style.display = isKey ? 'none' : ''
         document.getElementById('lbl-key').style.display = isKey ? '' : 'none'
+        document.getElementById('keyfile').style.display = isKey ? '' : 'none'
         document.getElementById('pkey').style.display = isKey ? '' : 'none'
         document.getElementById('lbl-passphrase').style.display = isKey ? '' : 'none'
         document.getElementById('passphrase').style.display = isKey ? '' : 'none'
       }
       document.getElementById('auth').addEventListener('change', updateAuth)
       updateAuth()
+      document.getElementById('keyfile').addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0]
+        if (!file) return
+        const text = await file.text().catch(() => '')
+        if (text) document.getElementById('pkey').value = text
+      })
       document.getElementById('btn-save').onclick = async () => {
         const sess = {
           type: document.getElementById('type').value,

@@ -13,7 +13,7 @@ contextBridge.exposeInMainWorld('api', {
   sessionsLoad: () => ipcRenderer.invoke('sessions-load'),
   sessionsAdd: (session) => ipcRenderer.invoke('sessions-add', session),
   sessionsDelete: (idx) => ipcRenderer.invoke('sessions-delete', idx),
-  openSessionWindow: () => ipcRenderer.invoke('open-session-window'),
+  openSessionWindow: (type='SSH') => ipcRenderer.invoke('open-session-window', { type }),
 
   // multi-connection aware helpers (optional)
   sshOpenPtyId: (id) => ipcRenderer.invoke('ssh-open-pty-id', { id }),

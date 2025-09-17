@@ -43,8 +43,8 @@
       window.addEventListener('resize', resize)
 
       // New session windows
-      document.getElementById('new-ssh').onclick = async () => { await window.api.openSessionWindow(); refreshSessions() }
-      document.getElementById('new-sftp').onclick = async () => { await window.api.openSessionWindow(); refreshSessions() }
+      document.getElementById('new-ssh').onclick = async () => { await window.api.openSessionWindow('SSH'); refreshSessions() }
+      document.getElementById('new-sftp').onclick = async () => { await window.api.openSessionWindow('SFTP'); refreshSessions() }
 
       // Sessions persistence
       async function refreshSessions() {
