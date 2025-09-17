@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QTabWidget, QWidget, QVBoxLayout, QTextEdit, 
-                             QHBoxLayout, QLineEdit, QLabel, QPushButton, QTabBar, QShortcut)
+                             QHBoxLayout, QLineEdit, QLabel, QPushButton, QTabBar, QShortcut, QMenu, QAction)
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QTextCursor, QKeySequence
 from .custom_tab_widget import CloseButton
@@ -87,6 +87,10 @@ class TerminalTab(QWidget):
             self._pyte_stream = pyte.Stream(self._pyte_screen)
         # One-time cleanup right after first connect render
         self._first_connect_cleanup = True
+        # Track insertion caret position and mouse selection state
+        self._insertion_pos = 0
+        self._mouse_press_pos = None
+        self._dragging_selection = False
         
         # Only the terminal area is shown; input happens inline
         layout.addWidget(self.terminal_output)
@@ -173,6 +177,10 @@ class TerminalTab(QWidget):
                 for _ in range(col0):
                     cursor.movePosition(QTextCursor.Right)
                 self.terminal_output.setTextCursor(cursor)
+                try:
+                    self._insertion_pos = cursor.position()
+                except Exception:
+                    pass
                 return
             except Exception:
                 # Fallback to minimal logic below
@@ -314,6 +322,10 @@ class TerminalTab(QWidget):
         cursor.movePosition(QTextCursor.End)
         cursor.insertText(text)
         self.terminal_output.setTextCursor(cursor)
+        try:
+            self._insertion_pos = cursor.position()
+        except Exception:
+            pass
 
     def _replace_current_line(self, text: str):
         cursor = self.terminal_output.textCursor()
@@ -331,6 +343,10 @@ class TerminalTab(QWidget):
         cursor = self.terminal_output.textCursor()
         cursor.setPosition(caret_pos)
         self.terminal_output.setTextCursor(cursor)
+        try:
+            self._insertion_pos = caret_pos
+        except Exception:
+            pass
 
     def _render_current_line(self):
         self._replace_current_line(self._line_buffer)
@@ -383,18 +399,94 @@ class TerminalTab(QWidget):
 
     def eventFilter(self, obj, event):
         if obj in (self.terminal_output, self.terminal_output.viewport()):
-            # For SSH sessions, block mouse interactions from changing caret/selection
+            # For SSH sessions, allow selection and custom context menu, but ignore single left-clicks
             if getattr(self.session, 'type', None) == 'SSH':
-                if event.type() in (QEvent.MouseButtonPress, QEvent.MouseButtonRelease, QEvent.MouseButtonDblClick, QEvent.MouseMove, QEvent.ContextMenu):
+                # Handle custom context menu
+                if event.type() == QEvent.ContextMenu:
                     try:
-                        # Restore focus and keep caret where our render logic placed it
-                        self.terminal_output.setFocus()
-                        # Optionally ensure caret stays at current programmatic position
-                        cursor = self.terminal_output.textCursor()
-                        self.terminal_output.setTextCursor(cursor)
+                        menu = QMenu(self)
+                        act_copy = QAction("Copy", menu)
+                        act_select_all = QAction("Select All", menu)
+                        act_copy_all = QAction("Copy All", menu)
+                        act_clear_sel = QAction("Clear Selection", menu)
+                        act_copy.setEnabled(self.terminal_output.textCursor().hasSelection())
+                        menu.addAction(act_copy)
+                        menu.addSeparator()
+                        menu.addAction(act_select_all)
+                        menu.addAction(act_copy_all)
+                        menu.addSeparator()
+                        menu.addAction(act_clear_sel)
+
+                        chosen = menu.exec_(event.globalPos())
+                        if chosen is act_copy:
+                            self.terminal_output.copy()
+                            # Restore insertion caret
+                            try:
+                                c = self.terminal_output.textCursor()
+                                c.clearSelection()
+                                c.setPosition(self._insertion_pos)
+                                self.terminal_output.setTextCursor(c)
+                            except Exception:
+                                pass
+                            return True
+                        if chosen is act_select_all:
+                            self.terminal_output.selectAll()
+                            return True
+                        if chosen is act_copy_all:
+                            self.terminal_output.selectAll()
+                            self.terminal_output.copy()
+                            try:
+                                c = self.terminal_output.textCursor()
+                                c.clearSelection()
+                                c.setPosition(self._insertion_pos)
+                                self.terminal_output.setTextCursor(c)
+                            except Exception:
+                                pass
+                            return True
+                        if chosen is act_clear_sel:
+                            try:
+                                c = self.terminal_output.textCursor()
+                                c.clearSelection()
+                                self.terminal_output.setTextCursor(c)
+                            except Exception:
+                                pass
+                            return True
                     except Exception:
                         pass
                     return True
+
+                # Track left-button press/move/release to differentiate click vs drag
+                try:
+                    if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+                        self._mouse_press_pos = event.pos()
+                        self._dragging_selection = False
+                        return False  # allow selection to potentially start
+                    if event.type() == QEvent.MouseMove and self._mouse_press_pos is not None and (event.buttons() & Qt.LeftButton):
+                        # If mouse moved enough, treat as drag selection
+                        delta = event.pos() - self._mouse_press_pos
+                        if abs(delta.x()) > 2 or abs(delta.y()) > 2:
+                            self._dragging_selection = True
+                        return False
+                    if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
+                        # If it was a simple click (no drag), restore caret and consume
+                        if not self._dragging_selection:
+                            try:
+                                c = self.terminal_output.textCursor()
+                                c.clearSelection()
+                                c.setPosition(self._insertion_pos)
+                                self.terminal_output.setTextCursor(c)
+                                self.terminal_output.setFocus()
+                            except Exception:
+                                pass
+                            self._mouse_press_pos = None
+                            self._dragging_selection = False
+                            return True
+                        # Drag selection -> allow default behavior
+                        self._mouse_press_pos = None
+                        self._dragging_selection = False
+                        return False
+                except Exception:
+                    pass
 
             if event.type() == QEvent.KeyPress:
                 # Handle zoom shortcuts regardless of input mode
