@@ -34,8 +34,15 @@ ipcMain.handle('ssh-connect', async (evt, cfg) => {
       host: cfg.host, port: cfg.port, username: cfg.username,
       readyTimeout: 10000
     }
-    if (cfg.auth === 'password') conn.password = cfg.password
-    else { conn.privateKey = cfg.privateKey; if (cfg.passphrase) conn.passphrase = cfg.passphrase }
+    if (cfg.auth === 'password') {
+      if (!cfg.password) return reject('Password is required')
+      conn.password = cfg.password
+    } else {
+      const key = (cfg.privateKey || '').trim()
+      if (!key) return reject('Private key is required')
+      conn.privateKey = key
+      if (cfg.passphrase) conn.passphrase = cfg.passphrase
+    }
     ssh.connect(conn)
   })
 })
@@ -57,8 +64,15 @@ ipcMain.handle('ssh-open-pty', async () => {
 ipcMain.handle('sftp-connect', async (evt, cfg) => {
   sftp = new SFTPClient()
   const options = { host: cfg.host, port: cfg.port, username: cfg.username }
-  if (cfg.auth === 'password') options.password = cfg.password
-  else { options.privateKey = cfg.privateKey; if (cfg.passphrase) options.passphrase = cfg.passphrase }
+  if (cfg.auth === 'password') {
+    if (!cfg.password) throw new Error('Password is required')
+    options.password = cfg.password
+  } else {
+    const key = (cfg.privateKey || '').trim()
+    if (!key) throw new Error('Private key is required')
+    options.privateKey = key
+    if (cfg.passphrase) options.passphrase = cfg.passphrase
+  }
   await sftp.connect(options)
   return { ok: true }
 })

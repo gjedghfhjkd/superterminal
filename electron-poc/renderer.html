@@ -100,10 +100,15 @@
         const passwordVal = document.getElementById('password').value
         const privateKey = document.getElementById('pkey').value
         const passphraseVal = document.getElementById('passphrase').value
-        await window.api.sshConnect({ host, port, username, auth, password: passwordVal, privateKey, passphrase: passphraseVal })
-        await window.api.sshOpenPty()
-        resize()
-        await window.api.sftpConnect({ host, port, username, auth, password: passwordVal, privateKey, passphrase: passphraseVal })
+        try {
+          await window.api.sshConnect({ host, port, username, auth, password: passwordVal, privateKey, passphrase: passphraseVal })
+          await window.api.sshOpenPty()
+          resize()
+          await window.api.sftpConnect({ host, port, username, auth, password: passwordVal, privateKey, passphrase: passphraseVal })
+          term.write('\r\n[Connected]\r\n')
+        } catch (e) {
+          alert('Connect error: ' + e)
+        }
       }
 
       document.getElementById('btn-list').onclick = async () => {
