@@ -17,35 +17,11 @@
   <body>
     <div id="left">
       <div style="display:flex; gap:8px; margin-bottom:8px">
-        <button id="tab-ssh">SSH</button>
-        <button id="tab-sftp">SFTP</button>
+        <button id="new-ssh">+ SSH</button>
+        <button id="new-sftp">+ SFTP</button>
       </div>
-      <h3 id="form-title">SSH</h3>
-      <label>Host</label>
-      <input id="host" value="localhost"/>
-      <label>Port</label>
-      <input id="port" value="22"/>
-      <label>User</label>
-      <input id="user" value="root"/>
-      <label>Auth</label>
-      <select id="auth">
-        <option value="password">Password</option>
-        <option value="key">SSH key</option>
-      </select>
-      <label id="lbl-password">Password</label>
-      <input id="password" type="password" />
-      <label id="lbl-key">Private key (paste or choose)</label>
-      <input id="keyfile" type="file" accept=".pem,.ppk,.key,.rsa,*/*" />
-      <textarea id="pkey" style="width:100%; height:80px"></textarea>
-      <label id="lbl-passphrase">Passphrase</label>
-      <input id="passphrase" type="password" />
-      <button id="btn-connect">Connect</button>
-      <button id="btn-save">Save session</button>
       <h3>Sessions</h3>
       <ul id="sessions"></ul>
-      <h3>SFTP</h3>
-      <button id="btn-list">List /root</button>
-      <ul id="list"></ul>
     </div>
     <div id="right">
       <div id="term"></div>
@@ -66,34 +42,9 @@
       }
       window.addEventListener('resize', resize)
 
-      // Dynamic auth UI
-      const authSel = document.getElementById('auth')
-      const password = document.getElementById('password')
-      const lblPassword = document.getElementById('lbl-password')
-      const keyfile = document.getElementById('keyfile')
-      const pkey = document.getElementById('pkey')
-      const lblKey = document.getElementById('lbl-key')
-      const passphrase = document.getElementById('passphrase')
-      const lblPassphrase = document.getElementById('lbl-passphrase')
-
-      function updateAuthUI() {
-        const isKey = authSel.value === 'key'
-        // password fields
-        password.style.display = isKey ? 'none' : ''
-        lblPassword.style.display = isKey ? 'none' : ''
-        // key fields
-        keyfile.style.display = isKey ? '' : 'none'
-        pkey.style.display = isKey ? '' : 'none'
-        lblKey.style.display = isKey ? '' : 'none'
-        passphrase.style.display = isKey ? '' : 'none'
-        lblPassphrase.style.display = isKey ? '' : 'none'
-      }
-      authSel.addEventListener('change', updateAuthUI)
-      updateAuthUI()
-      // Tabs behavior (for POC forms are identical; could switch defaults)
-      const formTitle = document.getElementById('form-title')
-      document.getElementById('tab-ssh').onclick = () => { formTitle.textContent = 'SSH' }
-      document.getElementById('tab-sftp').onclick = () => { formTitle.textContent = 'SFTP' }
+      // New session windows
+      document.getElementById('new-ssh').onclick = async () => { await window.api.openSessionWindow(); refreshSessions() }
+      document.getElementById('new-sftp').onclick = async () => { await window.api.openSessionWindow(); refreshSessions() }
 
       // Sessions persistence
       async function refreshSessions() {
@@ -125,61 +76,7 @@
       refreshSessions()
 
 
-      // Read key file if chosen
-      keyfile.addEventListener('change', async (e) => {
-        const file = e.target.files && e.target.files[0]
-        if (!file) return
-        const text = await file.text().catch(() => '')
-        if (text) pkey.value = text
-      })
-
-      document.getElementById('btn-connect').onclick = async () => {
-        const host = document.getElementById('host').value
-        const port = Number(document.getElementById('port').value)
-        const username = document.getElementById('user').value
-        const auth = document.getElementById('auth').value
-        const passwordVal = document.getElementById('password').value
-        const privateKey = document.getElementById('pkey').value
-        const passphraseVal = document.getElementById('passphrase').value
-        try {
-          const res = await window.api.sshConnect({ host, port, username, auth, password: passwordVal, privateKey, passphrase: passphraseVal })
-          if (!res || !res.ok) throw new Error('SSH connect failed')
-          const pty = await window.api.sshOpenPty()
-          if (!pty || !pty.ok) throw new Error('PTY open failed')
-          resize()
-          try { await window.api.sftpConnect({ host, port, username, auth, password: passwordVal, privateKey, passphrase: passphraseVal }) } catch {}
-          term.write('\r\n[Connected]\r\n')
-        } catch (e) {
-          const msg = (e && e.message) ? e.message : String(e)
-          alert('Connect error: ' + msg)
-        }
-      }
-
-      document.getElementById('btn-save').onclick = async () => {
-        const sess = {
-          type: 'SSH',
-          host: document.getElementById('host').value,
-          port: Number(document.getElementById('port').value),
-          username: document.getElementById('user').value,
-          auth: document.getElementById('auth').value,
-          password: document.getElementById('password').value,
-          privateKey: document.getElementById('pkey').value,
-          passphrase: document.getElementById('passphrase').value
-        }
-        await window.api.sessionsAdd(sess)
-        refreshSessions()
-      }
-
-      document.getElementById('btn-list').onclick = async () => {
-        const items = await window.api.sftpList('/root')
-        const ul = document.getElementById('list')
-        ul.innerHTML = ''
-        for (const it of items) {
-          const li = document.createElement('li')
-          li.textContent = `${it.type} ${it.name} ${it.size}`
-          ul.appendChild(li)
-        }
-      }
+      // Removed inline auth/SFTP UI
     </script>
   </body>
   </html>
