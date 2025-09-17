@@ -180,7 +180,7 @@ class MobaXtermClone(QMainWindow):
         self.session_tab = QPushButton("🗂 Sessions")
         self.session_tab.setCheckable(True)
         self.session_tab.setChecked(True)
-        self.session_tab.setFixedSize(100, 34)
+        self.session_tab.setFixedSize(130, 34)
         self.session_tab.setStyleSheet(self.get_tab_style(True))
         
         self.servers_tab = QPushButton("📡 Tunelling")
@@ -516,6 +516,11 @@ class MobaXtermClone(QMainWindow):
         self.servers_tab.setChecked(False)
         self.session_tab.setStyleSheet(self.get_tab_style(True))
         self.servers_tab.setStyleSheet(self.get_tab_style(False))
+        # Open the same dialog as "+ Add Session"
+        try:
+            self.add_new_session()
+        except Exception:
+            pass
         
     def on_servers_tab_clicked(self):
         self.servers_tab.setChecked(True)
