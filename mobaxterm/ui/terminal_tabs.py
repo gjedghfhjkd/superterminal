@@ -150,15 +150,24 @@ class TerminalTab(QWidget):
                         # Collapse trailing blanks to at most one
                         while len(tail_lines) >= 3 and tail_lines[-1].strip() == '' and tail_lines[-2].strip() == '':
                             tail_lines.pop()
-                        # Deduplicate identical prompt lines at the very end
+                        # Deduplicate duplicate prompts at the very end, allowing one optional blank between
                         prompt_re = re.compile(r"(^.+@.+:.*[#$]\s*$|^\[[^\n]*\][#$]\s*$)")
-                        # Keep removing duplicates among last lines
-                        changed = True
-                        while changed and len(tail_lines) >= 2:
-                            changed = False
-                            if prompt_re.search(tail_lines[-1]) and tail_lines[-1] == tail_lines[-2]:
-                                tail_lines.pop(-2)
-                                changed = True
+                        # Find last prompt line index
+                        def find_last_prompt_index(lines):
+                            for idx in range(len(lines) - 1, -1, -1):
+                                if prompt_re.search(lines[idx] or ''):
+                                    return idx
+                            return -1
+                        last_idx = find_last_prompt_index(tail_lines)
+                        if last_idx >= 0:
+                            # Skip optional trailing blanks after last prompt
+                            prev_idx = last_idx - 1
+                            if prev_idx >= 0 and tail_lines[prev_idx].strip() == '':
+                                prev_idx -= 1
+                            # If another prompt is just before (ignoring a blank), and equal ignoring trailing spaces, drop the earlier one
+                            if prev_idx >= 0 and prompt_re.search(tail_lines[prev_idx] or ''):
+                                if (tail_lines[prev_idx].rstrip() == tail_lines[last_idx].rstrip()):
+                                    tail_lines.pop(prev_idx)
                         return '\n'.join(tail_lines)
                     content = _cleanup_tail(content)
                 except Exception:
@@ -315,6 +324,30 @@ class TerminalTab(QWidget):
                     for _ in range(blanks - 1):
                         c.movePosition(QTextCursor.PreviousBlock, QTextCursor.KeepAnchor)
                     c.removeSelectedText()
+                # Remove duplicate prompt lines at the very end (common on first connect)
+                # Find last two non-empty blocks and compare
+                last = doc.lastBlock()
+                # Skip trailing empty
+                while last.isValid() and last.text().strip() == '':
+                    last = last.previous()
+                if last.isValid():
+                    prev = last.previous()
+                    while prev.isValid() and prev.text().strip() == '':
+                        prev = prev.previous()
+                    if prev.isValid():
+                        last_text = last.text().rstrip()
+                        prev_text = prev.text().rstrip()
+                        prompt_re = re.compile(r"(^.+@.+:.*[#$]\s*$|^\[[^\n]*\][#$]\s*$)")
+                        if prompt_re.search(last_text) and last_text == prev_text:
+                            # Delete the previous prompt line
+                            c = self.terminal_output.textCursor()
+                            # Move to end, then to start of last block; then go to start of prev block and select to start of last
+                            c.movePosition(QTextCursor.End)
+                            c.movePosition(QTextCursor.StartOfBlock)
+                            # Now move to start of previous block keeping selection forward
+                            c.movePosition(QTextCursor.PreviousBlock)
+                            c.movePosition(QTextCursor.StartOfBlock, QTextCursor.KeepAnchor)
+                            c.removeSelectedText()
             except Exception:
                 pass
 
