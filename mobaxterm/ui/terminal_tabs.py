@@ -659,6 +659,10 @@ class TerminalTab(QWidget):
                 if (modifiers & Qt.ControlModifier) and key == Qt.Key_C:
                     self._send("\x03")  # ETX
                     return True
+                # ESC key (critical for vim/less etc.)
+                if key == Qt.Key_Escape:
+                    self._send("\x1b")
+                    return True
                 # Ctrl+D
                 if (modifiers & Qt.ControlModifier) and key == Qt.Key_D:
                     self._send("\x04")  # EOT
