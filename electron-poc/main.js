@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
-import { readFile, writeFile } from 'fs/promises'
+import { readFile, writeFile, readdir, stat, rm as fsrm, mkdir as fsmkdir, rename as fsrename } from 'fs/promises'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { Client as SSHClient } from 'ssh2'
@@ -162,6 +162,92 @@ ipcMain.handle('sftp-list', async (evt, remotePath) => {
   return list.map(e => ({ name: e.name, size: e.size, type: e.type }))
 })
 
+// Per-connection SFTP list
+ipcMain.handle('sftp-list-id', async (evt, payload) => {
+  const { id, path: remotePath } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  const list = await rec.sftp.list(remotePath)
+  return list.map(e => ({
+    name: e.name,
+    displayName: e.name,
+    pathName: e.name,
+    size: e.size,
+    type: e.type
+  }))
+})
+
+// SFTP file operations
+ipcMain.handle('sftp-delete', async (evt, payload) => {
+  const { id, path: remotePath, isDir, recursive=true } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  if (isDir) { await rec.sftp.rmdir(remotePath, recursive) } else { await rec.sftp.delete(remotePath) }
+  return { ok: true }
+})
+ipcMain.handle('sftp-rename', async (evt, payload) => {
+  const { id, from, to } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  await rec.sftp.rename(from, to)
+  return { ok: true }
+})
+ipcMain.handle('sftp-mkdir', async (evt, payload) => {
+  const { id, path: remotePath } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  await rec.sftp.mkdir(remotePath, true)
+  return { ok: true }
+})
+ipcMain.handle('sftp-upload', async (evt, payload) => {
+  const { id, local, remote } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  await rec.sftp.fastPut(local, remote)
+  return { ok: true }
+})
+ipcMain.handle('sftp-download', async (evt, payload) => {
+  const { id, remote, local } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  await rec.sftp.fastGet(remote, local)
+  return { ok: true }
+})
+ipcMain.handle('sftp-upload-dir', async (evt, payload) => {
+  const { id, localDir, remoteDir } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  if (!rec.sftp.uploadDir) throw new Error('uploadDir not supported in ssh2-sftp-client version')
+  await rec.sftp.uploadDir(localDir, remoteDir)
+  return { ok: true }
+})
+ipcMain.handle('sftp-download-dir', async (evt, payload) => {
+  const { id, remoteDir, localDir } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  if (!rec.sftp.downloadDir) throw new Error('downloadDir not supported in ssh2-sftp-client version')
+  await rec.sftp.downloadDir(remoteDir, localDir)
+  return { ok: true }
+})
+
+// Local FS operations
+ipcMain.handle('local-delete', async (evt, payload) => {
+  const { path: localPath, isDir, recursive=true } = payload || {}
+  if (isDir) await fsrm(localPath, { recursive, force: true })
+  else await fsrm(localPath, { force: true })
+  return { ok: true }
+})
+ipcMain.handle('local-rename', async (evt, payload) => {
+  const { from, to } = payload || {}
+  await fsrename(from, to)
+  return { ok: true }
+})
+ipcMain.handle('local-mkdir', async (evt, payload) => {
+  const { path: localPath } = payload || {}
+  await fsmkdir(localPath, { recursive: true })
+  return { ok: true }
+})
+
 ipcMain.on('ssh-send', (e, payload) => {
   const { id, data } = payload
   const rec = connections.get(id)
@@ -192,6 +278,7 @@ ipcMain.handle('ssh-disconnect', async (e, id) => {
 // Open separate window to create a session
 ipcMain.handle('open-session-window', async (evt, payload) => {
   const type = payload && payload.type ? payload.type : 'SSH'
+  const preset = payload && payload.preset ? payload.preset : null
   return new Promise(async (resolve) => {
     const child = new BrowserWindow({
       width: 480,
@@ -210,7 +297,48 @@ ipcMain.handle('open-session-window', async (evt, payload) => {
       resolve({ ok: true, session: sess })
     }
     ipcMain.once('session-form-submit', handler)
-    await child.loadFile('session_form.html', { query: { type } })
+    const query = preset ? { type, preset: encodeURIComponent(JSON.stringify(preset)) } : { type }
+    await child.loadFile('session_form.html', { query })
     child.on('closed', () => { if (!resolved) resolve({ ok: false }) })
   })
+})
+
+// Local filesystem listing for SFTP split view (left column)
+ipcMain.handle('local-list', async (evt, localPath) => {
+  try {
+    const dirPath = localPath && typeof localPath === 'string' && localPath.length ? localPath : '/'
+    const entries = await readdir(dirPath, { withFileTypes: true })
+    const mapped = await Promise.all(entries.map(async (ent) => {
+      const name = ent.name
+      let type = 'file'
+      try {
+        if (ent.isDirectory()) type = 'd'
+        else if (ent.isSymbolicLink()) {
+          const full = path.join(dirPath, name)
+          const st = await stat(full).catch(() => null)
+          type = st && st.isDirectory() ? 'd' : 'file'
+        }
+      } catch {}
+      return { name, type }
+    }))
+    // Sort: directories first, then files, by name
+    mapped.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'd' ? -1 : 1))
+    return mapped
+  } catch (e) {
+    throw new Error('Local list error: ' + String(e))
+  }
+})
+
+ipcMain.handle('get-home', async () => {
+  try { return app.getPath('home') } catch { return '/' }
+})
+
+ipcMain.handle('sftp-disconnect', async (evt, id) => {
+  const rec = connections.get(id)
+  if (rec) {
+    try { rec.sftp?.end?.() || rec.sftp?.close?.() } catch {}
+    rec.sftp = undefined
+    connections.set(id, rec)
+  }
+  return { ok: true }
 })
