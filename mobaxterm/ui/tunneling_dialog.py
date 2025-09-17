@@ -32,7 +32,7 @@ class TunnelingDialog(QDialog):
 
 		# Table of forwards
 		self.table = QTableWidget(0, 8)
-		self.table.setHorizontalHeaderLabels(["Name", "Type", "Session", "Bind Host", "Bind Port", "Target Host", "Target Port", "Actions"])
+		self.table.setHorizontalHeaderLabels(["Name", "Type", "Start/Stop", "Session", "Bind Host", "Bind Port", "Target Host", "Target Port"])
 		self.table.horizontalHeader().setStretchLastSection(True)
 		layout.addWidget(self.table)
 
@@ -158,19 +158,19 @@ class TunnelingDialog(QDialog):
 			self.table.setItem(r, 0, QTableWidgetItem(fwd.get("name", "")))
 			# Type
 			self.table.setItem(r, 1, QTableWidgetItem(fwd["type"]))
+			# Start/Stop actions (placed right of Type)
+			actions_widget = self._make_actions_widget(r, fwd.get("status") == "running")
+			self.table.setCellWidget(r, 2, actions_widget)
 			# Session display
 			s = self.session_manager.get_session(fwd["session_index"]) or Session(host="?")
 			s_name = getattr(s, 'name', None) or s.host
-			self.table.setItem(r, 2, QTableWidgetItem(s_name))
+			self.table.setItem(r, 3, QTableWidgetItem(s_name))
 			# Bind host/port
-			self.table.setItem(r, 3, QTableWidgetItem(fwd["bind_host"]))
-			self.table.setItem(r, 4, QTableWidgetItem(str(fwd["bind_port"])))
+			self.table.setItem(r, 4, QTableWidgetItem(fwd["bind_host"]))
+			self.table.setItem(r, 5, QTableWidgetItem(str(fwd["bind_port"])))
 			# Target host/port
-			self.table.setItem(r, 5, QTableWidgetItem(fwd["target_host"]))
-			self.table.setItem(r, 6, QTableWidgetItem(str(fwd["target_port"])))
-			# Actions
-			actions_widget = self._make_actions_widget(r, fwd.get("status") == "running")
-			self.table.setCellWidget(r, 7, actions_widget)
+			self.table.setItem(r, 6, QTableWidgetItem(fwd["target_host"]))
+			self.table.setItem(r, 7, QTableWidgetItem(str(fwd["target_port"])))
 
 	def _selected_rows(self):
 		rows = set()
