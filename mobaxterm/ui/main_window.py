@@ -179,9 +179,9 @@ class MobaXtermClone(QMainWindow):
         
         self.session_tab = QPushButton("🗂 Sessions")
         self.session_tab.setCheckable(True)
-        self.session_tab.setChecked(True)
+        self.session_tab.setChecked(False)
         self.session_tab.setFixedSize(130, 34)
-        self.session_tab.setStyleSheet(self.get_tab_style(True))
+        self.session_tab.setStyleSheet(self.get_tab_style(False))
         
         self.servers_tab = QPushButton("📡 Tunelling")
         self.servers_tab.setCheckable(True)
@@ -512,9 +512,10 @@ class MobaXtermClone(QMainWindow):
             """
         
     def on_session_tab_clicked(self):
-        self.session_tab.setChecked(True)
+        # Keep both tabs in neutral style after click
+        self.session_tab.setChecked(False)
         self.servers_tab.setChecked(False)
-        self.session_tab.setStyleSheet(self.get_tab_style(True))
+        self.session_tab.setStyleSheet(self.get_tab_style(False))
         self.servers_tab.setStyleSheet(self.get_tab_style(False))
         # Open the same dialog as "+ Add Session"
         try:
@@ -523,10 +524,11 @@ class MobaXtermClone(QMainWindow):
             pass
         
     def on_servers_tab_clicked(self):
-        self.servers_tab.setChecked(True)
+        # Keep both tabs in neutral style after click
         self.session_tab.setChecked(False)
-        self.servers_tab.setStyleSheet(self.get_tab_style(True))
+        self.servers_tab.setChecked(False)
         self.session_tab.setStyleSheet(self.get_tab_style(False))
+        self.servers_tab.setStyleSheet(self.get_tab_style(False))
         self.open_tunnelling_dialog()
         
     def load_sessions(self):
