@@ -178,8 +178,12 @@ class TerminalTab(QWidget):
                 self._first_connect_cleanup = False
                 self.terminal_output.setPlainText(content)
                 # Compute caret by moving cursor to row/col (0-based)
-                row0 = max(0, min(self._pyte_screen.cursor.y, len(lines) - 1))
-                line_text = lines[row0] if 0 <= row0 < len(lines) else ""
+                # Use the cleaned content to avoid off-by-one after tail trimming
+                render_lines = content.split('\n') if content is not None else []
+                if not render_lines:
+                    render_lines = [""]
+                row0 = max(0, min(self._pyte_screen.cursor.y, len(render_lines) - 1))
+                line_text = render_lines[row0] if 0 <= row0 < len(render_lines) else ""
                 col0 = max(0, min(self._pyte_screen.cursor.x, len(line_text)))
                 cursor = self.terminal_output.textCursor()
                 cursor.movePosition(QTextCursor.Start)
