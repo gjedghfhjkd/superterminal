@@ -45,7 +45,7 @@
       .sftp-row { display:flex; gap:10px; padding:6px 8px; border-radius:6px; cursor:default; align-items:center; }
       .sftp-row:hover { background:#121623; }
       .sftp-name { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-      .sftp-type { width:80px; text-transform:uppercase; color:#8b90a0; font-size:12px; text-align:right; }
+      .sftp-type { width:64px; text-transform:uppercase; color:#8b90a0; font-size:12px; text-align:right; overflow:hidden; }
 
       /* Tunneling placeholder */
       #tun-panel { position:relative; flex:1; display:none; background:#0f111a; color:#cfd3dc; padding:12px; }
@@ -669,8 +669,9 @@
           const row = document.createElement('div')
           row.className = 'sftp-row'
           const isDir = (it.type === 'd' || it.type === 'directory' || it.type === 'DIR')
-          const displayName = it.displayName || it.name
-          const pathName = (it.pathName || it.name || '').replace(/\\+/g, '/')
+          const rawName = (it.pathName || it.name || '').replace(/\\+/g, '/')
+          const displayName = (it.displayName || it.name || '').split('\\\\').pop().split('/').pop()
+          const pathName = rawName
           row.innerHTML = `${isDir ? '<span class=\"icon\"><svg viewBox=\\\"0 0 24 24\\\"><path d=\\\"M10 4l2 2h8a2 2 0 012 2v1H4V6a2 2 0 012-2h4zm12 6v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8h18z\\\"/></svg></span>' : '<span class=\\\"icon\\\"><svg viewBox=\\\"0 0 24 24\\\"><path d=\\\"M4 3h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2zm3 4v2h10V7H7zm0 4v2h6v-2H7z\\\"/></svg></span>'}<div class=\"sftp-name\" title=\"${displayName}\">${displayName}</div><div class=\"sftp-type\">${isDir?'dir':'file'}</div>`
           // Navigate by double click
           row.ondblclick = () => { if (isDir) onEnterDir(joinPath(basePath, pathName)); }
@@ -702,6 +703,7 @@
           else if (isDir) { const prev = map.get(seg); prev.type = 'd'; map.set(seg, prev) }
         }
         const items = Array.from(map.values())
+        // Directories first, then files, and limit file name width
         items.sort((a, b) => (a.type === b.type ? a.displayName.localeCompare(b.displayName) : a.type === 'd' ? -1 : 1))
         return items
       }
