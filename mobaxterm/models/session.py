@@ -9,6 +9,7 @@ class Session:
     port: int
     name: Optional[str] = None
     username: Optional[str] = None
+    terminal_font_size: Optional[int] = None
     auth_method: str = "password"  # 'password' | 'key'
     private_key_path: Optional[str] = None
     private_key_passphrase: Optional[str] = None
@@ -34,6 +35,7 @@ class Session:
             'port': self.port,
             'name': self.name,
             'username': self.username,
+            'terminal_font_size': self.terminal_font_size,
 
             'auth_method': self.auth_method,
             'private_key_path': self.private_key_path,
@@ -52,6 +54,7 @@ class Session:
             port=data['port'],
             name=data.get('name'),
             username=data['username'],
+            terminal_font_size=data.get('terminal_font_size'),
             auth_method=data.get('auth_method', 'password'),
             private_key_path=data.get('private_key_path'),
             private_key_passphrase=data.get('private_key_passphrase'),

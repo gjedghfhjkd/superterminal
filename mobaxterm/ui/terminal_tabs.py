@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QTabWidget, QWidget, QVBoxLayout, QTextEdit, 
-                             QHBoxLayout, QLineEdit, QLabel, QPushButton, QTabBar, QShortcut)
+                             QHBoxLayout, QLineEdit, QLabel, QPushButton, QTabBar, QShortcut, QMenu, QAction, QApplication)
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QTextCursor, QKeySequence
 from .custom_tab_widget import CloseButton
@@ -39,7 +39,15 @@ class TerminalTab(QWidget):
         default_font = QFont('Consolas')
         default_font.setStyleHint(QFont.Monospace)
         default_font.setFixedPitch(True)
-        default_font.setPointSize(14)
+        # Use session-configured font size when available; else SSH=12, others=14
+        try:
+            if getattr(self.session, 'terminal_font_size', None):
+                base_point_size = int(self.session.terminal_font_size)
+            else:
+                base_point_size = 12 if getattr(self.session, 'type', None) == 'SSH' else 14
+        except Exception:
+            base_point_size = 14
+        default_font.setPointSize(base_point_size)
         self.terminal_output.setFont(default_font)
         self.terminal_output.document().setDefaultFont(default_font)
         self._default_font = QFont(self.terminal_output.font())
@@ -79,6 +87,11 @@ class TerminalTab(QWidget):
             self._pyte_stream = pyte.Stream(self._pyte_screen)
         # One-time cleanup right after first connect render
         self._first_connect_cleanup = True
+        # Track insertion caret position and mouse selection state
+        self._insertion_pos = 0
+        self._mouse_press_pos = None
+        self._dragging_selection = False
+        self._double_click_active = False
         
         # Only the terminal area is shown; input happens inline
         layout.addWidget(self.terminal_output)
@@ -165,6 +178,10 @@ class TerminalTab(QWidget):
                 for _ in range(col0):
                     cursor.movePosition(QTextCursor.Right)
                 self.terminal_output.setTextCursor(cursor)
+                try:
+                    self._insertion_pos = cursor.position()
+                except Exception:
+                    pass
                 return
             except Exception:
                 # Fallback to minimal logic below
@@ -306,6 +323,10 @@ class TerminalTab(QWidget):
         cursor.movePosition(QTextCursor.End)
         cursor.insertText(text)
         self.terminal_output.setTextCursor(cursor)
+        try:
+            self._insertion_pos = cursor.position()
+        except Exception:
+            pass
 
     def _replace_current_line(self, text: str):
         cursor = self.terminal_output.textCursor()
@@ -323,6 +344,10 @@ class TerminalTab(QWidget):
         cursor = self.terminal_output.textCursor()
         cursor.setPosition(caret_pos)
         self.terminal_output.setTextCursor(cursor)
+        try:
+            self._insertion_pos = caret_pos
+        except Exception:
+            pass
 
     def _render_current_line(self):
         self._replace_current_line(self._line_buffer)
@@ -374,98 +399,226 @@ class TerminalTab(QWidget):
                 self._send_queue.append(data)
 
     def eventFilter(self, obj, event):
-        if obj in (self.terminal_output, self.terminal_output.viewport()) and event.type() == QEvent.KeyPress:
-            # Handle zoom shortcuts regardless of input mode
-            key = event.key()
-            modifiers = event.modifiers()
-            if (modifiers & Qt.ControlModifier):
-                # Ctrl + : zoom in (requires Shift on many layouts)
-                if key == Qt.Key_Plus:
-                    self.terminal_output.zoomIn(1)
-                    self._zoom_steps += 1
+        if obj in (self.terminal_output, self.terminal_output.viewport()):
+            # For SSH sessions, allow selection and custom context menu, but ignore single left-clicks
+            if getattr(self.session, 'type', None) == 'SSH':
+                # Handle custom context menu
+                if event.type() == QEvent.ContextMenu:
+                    try:
+                        menu = QMenu(self)
+                        act_paste = QAction("Paste", menu)
+                        act_copy = QAction("Copy", menu)
+                        act_select_all = QAction("Select All", menu)
+                        act_copy_all = QAction("Copy All", menu)
+                        act_clear_sel = QAction("Clear Selection", menu)
+                        # Enable/disable actions
+                        act_copy.setEnabled(self.terminal_output.textCursor().hasSelection())
+                        try:
+                            cb_text = QApplication.clipboard().text()
+                            act_paste.setEnabled(bool(cb_text))
+                        except Exception:
+                            act_paste.setEnabled(False)
+                        menu.addAction(act_paste)
+                        menu.addAction(act_copy)
+                        menu.addSeparator()
+                        menu.addAction(act_select_all)
+                        menu.addAction(act_copy_all)
+                        menu.addSeparator()
+                        menu.addAction(act_clear_sel)
+
+                        chosen = menu.exec_(event.globalPos())
+                        if chosen is act_paste:
+                            try:
+                                text = QApplication.clipboard().text()
+                                if text:
+                                    if self.local_echo_enabled:
+                                        self._write(text)
+                                    self._send(text)
+                            except Exception:
+                                pass
+                            return True
+                        if chosen is act_copy:
+                            self.terminal_output.copy()
+                            # Restore insertion caret
+                            try:
+                                c = self.terminal_output.textCursor()
+                                c.clearSelection()
+                                c.setPosition(self._insertion_pos)
+                                self.terminal_output.setTextCursor(c)
+                            except Exception:
+                                pass
+                            return True
+                        if chosen is act_select_all:
+                            self.terminal_output.selectAll()
+                            return True
+                        if chosen is act_copy_all:
+                            self.terminal_output.selectAll()
+                            self.terminal_output.copy()
+                            try:
+                                c = self.terminal_output.textCursor()
+                                c.clearSelection()
+                                c.setPosition(self._insertion_pos)
+                                self.terminal_output.setTextCursor(c)
+                            except Exception:
+                                pass
+                            return True
+                        if chosen is act_clear_sel:
+                            try:
+                                c = self.terminal_output.textCursor()
+                                c.clearSelection()
+                                self.terminal_output.setTextCursor(c)
+                            except Exception:
+                                pass
+                            return True
+                    except Exception:
+                        pass
                     return True
-                # Ctrl - : zoom out
-                if key == Qt.Key_Minus:
-                    self.terminal_output.zoomOut(1)
-                    self._zoom_steps -= 1
+
+                # Track left-button press/move/release to differentiate click vs drag and handle double-click
+                try:
+                    if event.type() == QEvent.MouseButtonDblClick and event.button() == Qt.LeftButton:
+                        # Let Qt select the word on double-click; remember it's a double-click to avoid clearing on release
+                        self._double_click_active = True
+                        return False
+                    if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+                        self._mouse_press_pos = event.pos()
+                        self._dragging_selection = False
+                        return False  # allow selection to potentially start
+                    if event.type() == QEvent.MouseMove and self._mouse_press_pos is not None and (event.buttons() & Qt.LeftButton):
+                        # If mouse moved enough, treat as drag selection
+                        delta = event.pos() - self._mouse_press_pos
+                        if abs(delta.x()) > 2 or abs(delta.y()) > 2:
+                            self._dragging_selection = True
+                        return False
+                    if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
+                        # If it was a simple click (no drag), restore caret and consume
+                        if not self._dragging_selection:
+                            if self._double_click_active:
+                                # Keep the word selection; do not clear selection or move caret
+                                self._double_click_active = False
+                                self._mouse_press_pos = None
+                                return False
+                            try:
+                                c = self.terminal_output.textCursor()
+                                c.clearSelection()
+                                c.setPosition(self._insertion_pos)
+                                self.terminal_output.setTextCursor(c)
+                                self.terminal_output.setFocus()
+                            except Exception:
+                                pass
+                            self._mouse_press_pos = None
+                            self._dragging_selection = False
+                            return True
+                        # Drag selection -> allow default behavior
+                        self._mouse_press_pos = None
+                        self._dragging_selection = False
+                        return False
+                except Exception:
+                    pass
+
+            if event.type() == QEvent.KeyPress:
+                # Handle zoom shortcuts regardless of input mode
+                key = event.key()
+                modifiers = event.modifiers()
+                if (modifiers & Qt.ControlModifier):
+                    # Paste with Ctrl+Shift+V
+                    if (modifiers & Qt.ShiftModifier) and key == Qt.Key_V:
+                        try:
+                            text = QApplication.clipboard().text()
+                            if text:
+                                if self.local_echo_enabled:
+                                    self._write(text)
+                                self._send(text)
+                        except Exception:
+                            pass
+                        return True
+                    # Ctrl + : zoom in (requires Shift on many layouts)
+                    if key == Qt.Key_Plus:
+                        self.terminal_output.zoomIn(1)
+                        self._zoom_steps += 1
+                        return True
+                    # Ctrl - : zoom out
+                    if key == Qt.Key_Minus:
+                        self.terminal_output.zoomOut(1)
+                        self._zoom_steps -= 1
+                        return True
+                    # Ctrl = : reset to default zoom
+                    if key == Qt.Key_Equal or key == Qt.Key_0:
+                        if self._zoom_steps > 0:
+                            self.terminal_output.zoomOut(self._zoom_steps)
+                        elif self._zoom_steps < 0:
+                            self.terminal_output.zoomIn(-self._zoom_steps)
+                        self._zoom_steps = 0
+                        return True
+                if not self.input_enabled:
+                    return True if self.terminal_output.isReadOnly() else False
+                # Ctrl+C
+                if (modifiers & Qt.ControlModifier) and key == Qt.Key_C:
+                    self._send("\x03")  # ETX
                     return True
-                # Ctrl = : reset to default zoom
-                if key == Qt.Key_Equal or key == Qt.Key_0:
-                    if self._zoom_steps > 0:
-                        self.terminal_output.zoomOut(self._zoom_steps)
-                    elif self._zoom_steps < 0:
-                        self.terminal_output.zoomIn(-self._zoom_steps)
-                    self._zoom_steps = 0
+                # Ctrl+D
+                if (modifiers & Qt.ControlModifier) and key == Qt.Key_D:
+                    self._send("\x04")  # EOT
                     return True
-            if not self.input_enabled:
-                return True if self.terminal_output.isReadOnly() else False
-            # Ctrl+C
-            if (modifiers & Qt.ControlModifier) and key == Qt.Key_C:
-                self._send("\x03")  # ETX
-                return True
-            # Ctrl+D
-            if (modifiers & Qt.ControlModifier) and key == Qt.Key_D:
-                self._send("\x04")  # EOT
-                return True
-            # Ctrl+S should not freeze: send XOFF only if we really want to; otherwise ignore
-            if (modifiers & Qt.ControlModifier) and key == Qt.Key_S:
-                # ignore to prevent terminal freeze
-                return True
-            # Enter / Return
-            if key in (Qt.Key_Return, Qt.Key_Enter):
-                # Most PTYs expect CR; bash will map CR to NL via icrnl
-                self._send("\r")
-                return True
-            # Backspace
-            if key == Qt.Key_Backspace:
-                # Send only DEL (erase = ^? per stty -a)
-                self._send("\x7f")
-                return True
-            # Tab completion
-            if key == Qt.Key_Tab:
-                # Ask for one completion attempt
-                self._send("\t")
-                return True
-            # Arrow keys and navigation as ANSI sequences
-            if key == Qt.Key_Up:
-                self._send("\x1b[A")
-                return True
-            if key == Qt.Key_Down:
-                self._send("\x1b[B")
-                return True
-            if key == Qt.Key_Right:
-                self._send("\x1b[C")
-                return True
-            if key == Qt.Key_Left:
-                # Only send one left; do not perform any local deletion
-                self._send("\x1b[D")
-                return True
-            if key == Qt.Key_Home:
-                self._send("\x1b[H")
-                return True
-            if key == Qt.Key_End:
-                self._send("\x1b[F")
-                return True
-            if key == Qt.Key_PageUp:
-                self._send("\x1b[5~")
-                return True
-            if key == Qt.Key_PageDown:
-                self._send("\x1b[6~")
-                return True
-            if key == Qt.Key_Delete:
-                self._send("\x1b[3~")
-                return True
-            # Ctrl+L clear screen
-            if (modifiers & Qt.ControlModifier) and key == Qt.Key_L:
-                self._send("\x0c")
-                return True
-            # Printable characters
-            text = event.text()
-            if text:
-                if self.local_echo_enabled:
-                    self._write(text)
-                self._send(text)
-                return True
+                # Ctrl+S should not freeze: send XOFF only if we really want to; otherwise ignore
+                if (modifiers & Qt.ControlModifier) and key == Qt.Key_S:
+                    # ignore to prevent terminal freeze
+                    return True
+                # Enter / Return
+                if key in (Qt.Key_Return, Qt.Key_Enter):
+                    # Most PTYs expect CR; bash will map CR to NL via icrnl
+                    self._send("\r")
+                    return True
+                # Backspace
+                if key == Qt.Key_Backspace:
+                    # Send only DEL (erase = ^? per stty -a)
+                    self._send("\x7f")
+                    return True
+                # Tab completion
+                if key == Qt.Key_Tab:
+                    # Ask for one completion attempt
+                    self._send("\t")
+                    return True
+                # Arrow keys and navigation as ANSI sequences
+                if key == Qt.Key_Up:
+                    self._send("\x1b[A")
+                    return True
+                if key == Qt.Key_Down:
+                    self._send("\x1b[B")
+                    return True
+                if key == Qt.Key_Right:
+                    self._send("\x1b[C")
+                    return True
+                if key == Qt.Key_Left:
+                    # Only send one left; do not perform any local deletion
+                    self._send("\x1b[D")
+                    return True
+                if key == Qt.Key_Home:
+                    self._send("\x1b[H")
+                    return True
+                if key == Qt.Key_End:
+                    self._send("\x1b[F")
+                    return True
+                if key == Qt.Key_PageUp:
+                    self._send("\x1b[5~")
+                    return True
+                if key == Qt.Key_PageDown:
+                    self._send("\x1b[6~")
+                    return True
+                if key == Qt.Key_Delete:
+                    self._send("\x1b[3~")
+                    return True
+                # Ctrl+L clear screen
+                if (modifiers & Qt.ControlModifier) and key == Qt.Key_L:
+                    self._send("\x0c")
+                    return True
+                # Printable characters
+                text = event.text()
+                if text:
+                    if self.local_echo_enabled:
+                        self._write(text)
+                    self._send(text)
+                    return True
         return super().eventFilter(obj, event)
 
     def _strip_ansi(self, s: str) -> str:
