@@ -31,8 +31,8 @@ class TunnelingDialog(QDialog):
 		layout.addWidget(header)
 
 		# Table of forwards
-		self.table = QTableWidget(0, 6)
-		self.table.setHorizontalHeaderLabels(["Type", "Session", "Bind Host", "Bind Port", "Target Host", "Target Port"])
+		self.table = QTableWidget(0, 8)
+		self.table.setHorizontalHeaderLabels(["Name", "Type", "Session", "Bind Host", "Bind Port", "Target Host", "Target Port", "Actions"])
 		self.table.horizontalHeader().setStretchLastSection(True)
 		layout.addWidget(self.table)
 
@@ -45,6 +45,12 @@ class TunnelingDialog(QDialog):
 		self.cmb_type = QComboBox()
 		self.cmb_type.addItems(["Local", "Remote"])  # Local: -L, Remote: -R
 		row_layout.addWidget(self.cmb_type)
+
+		# Tunnel name
+		self.ed_name = QLineEdit("")
+		self.ed_name.setPlaceholderText("Tunnel name (optional)")
+		self.ed_name.setFixedWidth(180)
+		row_layout.addWidget(self.ed_name)
 
 		self.cmb_session = QComboBox()
 		sessions = self.session_manager.get_all_sessions()
@@ -121,7 +127,13 @@ class TunnelingDialog(QDialog):
 			if bind_port <= 0 or target_port <= 0:
 				QMessageBox.warning(self, "Validation", "Ports must be positive integers")
 				return
+			# Determine display name
+			name = self.ed_name.text().strip()
+			if not name:
+				# Generate a short default name
+				name = f"{forward_type} {bind_host}:{bind_port}->{target_host}:{target_port}"
 			self._forwards.append({
+				"name": name,
 				"type": forward_type,
 				"session_index": idx,
 				"bind_host": bind_host,
@@ -142,20 +154,83 @@ class TunnelingDialog(QDialog):
 	def _refresh_table(self):
 		self.table.setRowCount(len(self._forwards))
 		for r, fwd in enumerate(self._forwards):
-			self.table.setItem(r, 0, QTableWidgetItem(fwd["type"]))
+			# Name
+			self.table.setItem(r, 0, QTableWidgetItem(fwd.get("name", "")))
+			# Type
+			self.table.setItem(r, 1, QTableWidgetItem(fwd["type"]))
+			# Session display
 			s = self.session_manager.get_session(fwd["session_index"]) or Session(host="?")
-			name = getattr(s, 'name', None) or s.host
-			self.table.setItem(r, 1, QTableWidgetItem(name))
-			self.table.setItem(r, 2, QTableWidgetItem(fwd["bind_host"]))
-			self.table.setItem(r, 3, QTableWidgetItem(str(fwd["bind_port"])))
-			self.table.setItem(r, 4, QTableWidgetItem(fwd["target_host"]))
-			self.table.setItem(r, 5, QTableWidgetItem(str(fwd["target_port"])))
+			s_name = getattr(s, 'name', None) or s.host
+			self.table.setItem(r, 2, QTableWidgetItem(s_name))
+			# Bind host/port
+			self.table.setItem(r, 3, QTableWidgetItem(fwd["bind_host"]))
+			self.table.setItem(r, 4, QTableWidgetItem(str(fwd["bind_port"])))
+			# Target host/port
+			self.table.setItem(r, 5, QTableWidgetItem(fwd["target_host"]))
+			self.table.setItem(r, 6, QTableWidgetItem(str(fwd["target_port"])))
+			# Actions
+			actions_widget = self._make_actions_widget(r, fwd.get("status") == "running")
+			self.table.setCellWidget(r, 7, actions_widget)
 
 	def _selected_rows(self):
 		rows = set()
 		for idx in self.table.selectedIndexes():
 			rows.add(idx.row())
 		return sorted(rows)
+
+	def _make_actions_widget(self, row_index: int, is_running: bool) -> QWidget:
+		w = QWidget()
+		lay = QHBoxLayout(w)
+		lay.setContentsMargins(0, 0, 0, 0)
+		lay.setSpacing(4)
+		btn_start = QPushButton("▶")
+		btn_stop = QPushButton("⏹")
+		btn_start.setFixedWidth(28)
+		btn_stop.setFixedWidth(28)
+		btn_start.setEnabled(not is_running)
+		btn_stop.setEnabled(is_running)
+		btn_start.clicked.connect(lambda: self._start_row(row_index))
+		btn_stop.clicked.connect(lambda: self._stop_row(row_index))
+		lay.addWidget(btn_start)
+		lay.addWidget(btn_stop)
+		lay.addStretch()
+		return w
+
+	def _start_row(self, r: int):
+		if r < 0 or r >= len(self._forwards):
+			return
+		f = self._forwards[r]
+		try:
+			if f.get("status") == "running" and f.get("id"):
+				return
+			if f["type"] == "Local":
+				fid = port_forward_manager.start_local_forward(
+					f["session_index"], f["bind_host"], f["bind_port"], f["target_host"], f["target_port"]
+				)
+			else:
+				fid = port_forward_manager.start_remote_forward(
+					f["session_index"], f["bind_host"], f["bind_port"], f["target_host"], f["target_port"]
+				)
+			f["id"] = fid
+			f["status"] = "running"
+		except Exception as e:
+			QMessageBox.warning(self, "Tunneling", f"Failed to start: {e}")
+		self._refresh_table()
+
+	def _stop_row(self, r: int):
+		if r < 0 or r >= len(self._forwards):
+			return
+		f = self._forwards[r]
+		fid = f.get("id")
+		if not fid:
+			return
+		try:
+			port_forward_manager.stop_forward(fid)
+			f["status"] = "stopped"
+			f.pop("id", None)
+		except Exception as e:
+			QMessageBox.warning(self, "Tunneling", f"Failed to stop: {e}")
+		self._refresh_table()
 
 	def _start_selected(self):
 		rows = self._selected_rows()
