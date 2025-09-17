@@ -397,105 +397,105 @@ class TerminalTab(QWidget):
                     return True
 
             if event.type() == QEvent.KeyPress:
-            # Handle zoom shortcuts regardless of input mode
-            key = event.key()
-            modifiers = event.modifiers()
-            if (modifiers & Qt.ControlModifier):
-                # Ctrl + : zoom in (requires Shift on many layouts)
-                if key == Qt.Key_Plus:
-                    self.terminal_output.zoomIn(1)
-                    self._zoom_steps += 1
+                # Handle zoom shortcuts regardless of input mode
+                key = event.key()
+                modifiers = event.modifiers()
+                if (modifiers & Qt.ControlModifier):
+                    # Ctrl + : zoom in (requires Shift on many layouts)
+                    if key == Qt.Key_Plus:
+                        self.terminal_output.zoomIn(1)
+                        self._zoom_steps += 1
+                        return True
+                    # Ctrl - : zoom out
+                    if key == Qt.Key_Minus:
+                        self.terminal_output.zoomOut(1)
+                        self._zoom_steps -= 1
+                        return True
+                    # Ctrl = : reset to default zoom
+                    if key == Qt.Key_Equal or key == Qt.Key_0:
+                        if self._zoom_steps > 0:
+                            self.terminal_output.zoomOut(self._zoom_steps)
+                        elif self._zoom_steps < 0:
+                            self.terminal_output.zoomIn(-self._zoom_steps)
+                        self._zoom_steps = 0
+                        return True
+                if not self.input_enabled:
+                    return True if self.terminal_output.isReadOnly() else False
+                # Ctrl+C
+                if (modifiers & Qt.ControlModifier) and key == Qt.Key_C:
+                    self._send("\x03")  # ETX
                     return True
-                # Ctrl - : zoom out
-                if key == Qt.Key_Minus:
-                    self.terminal_output.zoomOut(1)
-                    self._zoom_steps -= 1
+                # Ctrl+D
+                if (modifiers & Qt.ControlModifier) and key == Qt.Key_D:
+                    self._send("\x04")  # EOT
                     return True
-                # Ctrl = : reset to default zoom
-                if key == Qt.Key_Equal or key == Qt.Key_0:
-                    if self._zoom_steps > 0:
-                        self.terminal_output.zoomOut(self._zoom_steps)
-                    elif self._zoom_steps < 0:
-                        self.terminal_output.zoomIn(-self._zoom_steps)
-                    self._zoom_steps = 0
+                # Ctrl+S should not freeze: send XOFF only if we really want to; otherwise ignore
+                if (modifiers & Qt.ControlModifier) and key == Qt.Key_S:
+                    # ignore to prevent terminal freeze
                     return True
-            if not self.input_enabled:
-                return True if self.terminal_output.isReadOnly() else False
-            # Ctrl+C
-            if (modifiers & Qt.ControlModifier) and key == Qt.Key_C:
-                self._send("\x03")  # ETX
-                return True
-            # Ctrl+D
-            if (modifiers & Qt.ControlModifier) and key == Qt.Key_D:
-                self._send("\x04")  # EOT
-                return True
-            # Ctrl+S should not freeze: send XOFF only if we really want to; otherwise ignore
-            if (modifiers & Qt.ControlModifier) and key == Qt.Key_S:
-                # ignore to prevent terminal freeze
-                return True
-            # Enter / Return
-            if key in (Qt.Key_Return, Qt.Key_Enter):
-                # Most PTYs expect CR; bash will map CR to NL via icrnl
-                self._send("\r")
-                return True
-            # Backspace
-            if key == Qt.Key_Backspace:
-                # Send only DEL (erase = ^? per stty -a)
-                self._send("\x7f")
-                return True
-            # Tab completion
-            if key == Qt.Key_Tab:
-                # Ask for one completion attempt
-                self._send("\t")
-                return True
-            # Arrow keys and navigation as ANSI sequences
-            if key == Qt.Key_Up:
-                self._send("\x1b[A")
-                return True
-            if key == Qt.Key_Down:
-                self._send("\x1b[B")
-                return True
-            if key == Qt.Key_Right:
-                self._send("\x1b[C")
-                return True
-            if key == Qt.Key_Left:
-                # Only send one left; do not perform any local deletion
-                self._send("\x1b[D")
-                return True
-            if key == Qt.Key_Home:
-                self._send("\x1b[H")
-                return True
-            if key == Qt.Key_End:
-                self._send("\x1b[F")
-                return True
-            if key == Qt.Key_PageUp:
-                self._send("\x1b[5~")
-                return True
-            if key == Qt.Key_PageDown:
-                self._send("\x1b[6~")
-                return True
-            if key == Qt.Key_Delete:
-                self._send("\x1b[3~")
-                return True
-            # Ctrl+L clear screen
-            if (modifiers & Qt.ControlModifier) and key == Qt.Key_L:
-                self._send("\x0c")
-                return True
-            # Printable characters
-            text = event.text()
-            if text:
-                if self.local_echo_enabled:
-                    self._write(text)
-                self._send(text)
-                # Keep caret visually at the right side of input for SSH sessions
-                try:
-                    if getattr(self.session, 'type', None) == 'SSH':
-                        cursor = self.terminal_output.textCursor()
-                        cursor.movePosition(QTextCursor.End)
-                        self.terminal_output.setTextCursor(cursor)
-                except Exception:
-                    pass
-                return True
+                # Enter / Return
+                if key in (Qt.Key_Return, Qt.Key_Enter):
+                    # Most PTYs expect CR; bash will map CR to NL via icrnl
+                    self._send("\r")
+                    return True
+                # Backspace
+                if key == Qt.Key_Backspace:
+                    # Send only DEL (erase = ^? per stty -a)
+                    self._send("\x7f")
+                    return True
+                # Tab completion
+                if key == Qt.Key_Tab:
+                    # Ask for one completion attempt
+                    self._send("\t")
+                    return True
+                # Arrow keys and navigation as ANSI sequences
+                if key == Qt.Key_Up:
+                    self._send("\x1b[A")
+                    return True
+                if key == Qt.Key_Down:
+                    self._send("\x1b[B")
+                    return True
+                if key == Qt.Key_Right:
+                    self._send("\x1b[C")
+                    return True
+                if key == Qt.Key_Left:
+                    # Only send one left; do not perform any local deletion
+                    self._send("\x1b[D")
+                    return True
+                if key == Qt.Key_Home:
+                    self._send("\x1b[H")
+                    return True
+                if key == Qt.Key_End:
+                    self._send("\x1b[F")
+                    return True
+                if key == Qt.Key_PageUp:
+                    self._send("\x1b[5~")
+                    return True
+                if key == Qt.Key_PageDown:
+                    self._send("\x1b[6~")
+                    return True
+                if key == Qt.Key_Delete:
+                    self._send("\x1b[3~")
+                    return True
+                # Ctrl+L clear screen
+                if (modifiers & Qt.ControlModifier) and key == Qt.Key_L:
+                    self._send("\x0c")
+                    return True
+                # Printable characters
+                text = event.text()
+                if text:
+                    if self.local_echo_enabled:
+                        self._write(text)
+                    self._send(text)
+                    # Keep caret visually at the right side of input for SSH sessions
+                    try:
+                        if getattr(self.session, 'type', None) == 'SSH':
+                            cursor = self.terminal_output.textCursor()
+                            cursor.movePosition(QTextCursor.End)
+                            self.terminal_output.setTextCursor(cursor)
+                    except Exception:
+                        pass
+                    return True
         return super().eventFilter(obj, event)
 
     def _strip_ansi(self, s: str) -> str:
