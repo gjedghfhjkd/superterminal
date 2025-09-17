@@ -667,16 +667,18 @@
           const row = document.createElement('div')
           row.className = 'sftp-row'
           const isDir = (it.type === 'd' || it.type === 'directory' || it.type === 'DIR')
-          row.innerHTML = `${isDir ? '<span class="icon"><svg viewBox=\"0 0 24 24\"><path d=\"M10 4l2 2h8a2 2 0 012 2v1H4V6a2 2 0 012-2h4zm12 6v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8h18z\"/></svg></span>' : '<span class=\"icon\"><svg viewBox=\"0 0 24 24\"><path d=\"M4 3h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2zm3 4v2h10V7H7zm0 4v2h6v-2H7z\"/></svg></span>'}<div class=\"sftp-name\" title=\"${it.name}\">${it.name}</div><div class=\"sftp-type\">${isDir?'dir':'file'}</div>`
+          const displayName = it.displayName || it.name
+          const pathName = (it.pathName || it.name || '').replace(/\\+/g, '/')
+          row.innerHTML = `${isDir ? '<span class=\"icon\"><svg viewBox=\\\"0 0 24 24\\\"><path d=\\\"M10 4l2 2h8a2 2 0 012 2v1H4V6a2 2 0 012-2h4zm12 6v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8h18z\\\"/></svg></span>' : '<span class=\\\"icon\\\"><svg viewBox=\\\"0 0 24 24\\\"><path d=\\\"M4 3h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2zm3 4v2h10V7H7zm0 4v2h6v-2H7z\\\"/></svg></span>'}<div class=\"sftp-name\" title=\"${displayName}\">${displayName}</div><div class=\"sftp-type\">${isDir?'dir':'file'}</div>`
           // Navigate by double click
-          row.ondblclick = () => { if (isDir) onEnterDir(joinPath(basePath, it.name)); }
+          row.ondblclick = () => { if (isDir) onEnterDir(joinPath(basePath, pathName)); }
           // Context menu
-          row.oncontextmenu = (e) => { e.preventDefault(); openSftpCtxMenu(e.clientX, e.clientY, { basePath, name: it.name, isDir, ownerEl: el }) }
+          row.oncontextmenu = (e) => { e.preventDefault(); openSftpCtxMenu(e.clientX, e.clientY, { basePath, name: displayName, pathName, isDir, ownerEl: el }) }
           // Drag support
           row.draggable = true
           row.addEventListener('dragstart', (e) => {
             e.dataTransfer.effectAllowed = 'copyMove'
-            const payload = JSON.stringify({ name: it.name, basePath, isDir, areaId: el.id })
+            const payload = JSON.stringify({ name: displayName, pathName, basePath, isDir, areaId: el.id })
             try { e.dataTransfer.setData('application/json', payload) } catch {}
           })
           rows.appendChild(row)
@@ -690,8 +692,8 @@
         function add(label, handler) {
           const it = document.createElement('div'); it.className='ctx-item'; it.textContent=label; it.onmousedown=(e)=>{ e.preventDefault(); e.stopPropagation(); hideCtx(); handler() }; menu.appendChild(it)
         }
-        const { basePath, name, isDir, ownerEl } = info
-        const fullPath = joinPath(basePath, name)
+        const { basePath, name, pathName, isDir, ownerEl } = info
+        const fullPath = joinPath(basePath, (pathName || name))
         const isRemote = ownerEl && ownerEl.id === 'sftp-remote-list'
         add('Rename…', async () => {
           const newName = await showInputModal('Rename', 'New name', name)

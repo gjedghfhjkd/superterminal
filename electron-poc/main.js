@@ -168,7 +168,13 @@ ipcMain.handle('sftp-list-id', async (evt, payload) => {
   const rec = connections.get(id)
   if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
   const list = await rec.sftp.list(remotePath)
-  return list.map(e => ({ name: e.name, size: e.size, type: e.type }))
+  return list.map(e => ({
+    name: e.name,
+    displayName: e.name,
+    pathName: e.name,
+    size: e.size,
+    type: e.type
+  }))
 })
 
 // SFTP file operations
