@@ -1,6 +1,8 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
 							  QTableWidget, QTableWidgetItem, QWidget, QLineEdit, QComboBox, QMessageBox)
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
+import os
+import json
 from ..core.session_manager import SessionManager
 from ..core.tunneling import port_forward_manager
 from ..models.session import Session
@@ -13,10 +15,16 @@ class TunnelingDialog(QDialog):
 		self.resize(640, 420)
 		self.session_manager = getattr(parent, 'session_manager', SessionManager())
 		self._forwards = []  # in-memory definitions; extend to persistence if needed
+		self._config_file = "tunnels.json"
 		self._init_ui()
 		# Allow backend to resolve sessions by index
 		try:
 			port_forward_manager.set_session_resolver(self.session_manager.get_session)
+		except Exception:
+			pass
+		# Load saved tunnels from disk
+		try:
+			self._load_tunnels()
 		except Exception:
 			pass
 
@@ -31,8 +39,8 @@ class TunnelingDialog(QDialog):
 		layout.addWidget(header)
 
 		# Table of forwards
-		self.table = QTableWidget(0, 6)
-		self.table.setHorizontalHeaderLabels(["Type", "Session", "Bind Host", "Bind Port", "Target Host", "Target Port"])
+		self.table = QTableWidget(0, 8)
+		self.table.setHorizontalHeaderLabels(["Name", "Type", "Start/Stop", "Session", "Bind Host", "Bind Port", "Target Host", "Target Port"])
 		self.table.horizontalHeader().setStretchLastSection(True)
 		layout.addWidget(self.table)
 
@@ -45,6 +53,12 @@ class TunnelingDialog(QDialog):
 		self.cmb_type = QComboBox()
 		self.cmb_type.addItems(["Local", "Remote"])  # Local: -L, Remote: -R
 		row_layout.addWidget(self.cmb_type)
+
+		# Tunnel name
+		self.ed_name = QLineEdit("")
+		self.ed_name.setPlaceholderText("Tunnel name (optional)")
+		self.ed_name.setFixedWidth(180)
+		row_layout.addWidget(self.ed_name)
 
 		self.cmb_session = QComboBox()
 		sessions = self.session_manager.get_all_sessions()
@@ -79,6 +93,10 @@ class TunnelingDialog(QDialog):
 
 		layout.addWidget(row)
 
+		# React to type changes to hide/show Target Host for Local/Remote
+		self.cmb_type.currentTextChanged.connect(self._on_type_changed)
+		self._on_type_changed(self.cmb_type.currentText())
+
 		# Actions
 		actions = QWidget()
 		actions_layout = QHBoxLayout(actions)
@@ -105,15 +123,22 @@ class TunnelingDialog(QDialog):
 			session = self.session_manager.get_session(idx)
 			bind_host = self.ed_bind_host.text().strip() or "127.0.0.1"
 			bind_port = int(self.ed_bind_port.text().strip())
-			target_host = self.ed_target_host.text().strip()
+			# For Local forwarding, use selected session host as target host
+			if forward_type == "Local":
+				target_host = getattr(session, 'host', '')
+			else:
+				target_host = self.ed_target_host.text().strip()
 			target_port = int(self.ed_target_port.text().strip())
-			if not target_host:
+			if forward_type == "Remote" and not target_host:
 				QMessageBox.warning(self, "Validation", "Target host is required")
 				return
 			if bind_port <= 0 or target_port <= 0:
 				QMessageBox.warning(self, "Validation", "Ports must be positive integers")
 				return
+			# Determine display name (empty by default if not provided)
+			name = self.ed_name.text().strip()
 			self._forwards.append({
+				"name": name,
 				"type": forward_type,
 				"session_index": idx,
 				"bind_host": bind_host,
@@ -123,26 +148,161 @@ class TunnelingDialog(QDialog):
 				"status": "stopped"
 			})
 			self._refresh_table()
+			self._save_tunnels()
 		except ValueError:
 			QMessageBox.warning(self, "Validation", "Ports must be integers")
+
+	def _on_type_changed(self, text: str):
+		# Hide Target Host for Local tunnels; show for Remote
+		is_local = (text == "Local")
+		self.ed_target_host.setVisible(not is_local)
 
 	def _refresh_table(self):
 		self.table.setRowCount(len(self._forwards))
 		for r, fwd in enumerate(self._forwards):
-			self.table.setItem(r, 0, QTableWidgetItem(fwd["type"]))
+			# Name
+			self.table.setItem(r, 0, QTableWidgetItem(fwd.get("name", "")))
+			# Type
+			self.table.setItem(r, 1, QTableWidgetItem(fwd["type"]))
+			# Start/Stop actions (placed right of Type)
+			actions_widget = self._make_actions_widget(r, fwd.get("status") == "running")
+			self.table.setCellWidget(r, 2, actions_widget)
+			# Session display
 			s = self.session_manager.get_session(fwd["session_index"]) or Session(host="?")
-			name = getattr(s, 'name', None) or s.host
-			self.table.setItem(r, 1, QTableWidgetItem(name))
-			self.table.setItem(r, 2, QTableWidgetItem(fwd["bind_host"]))
-			self.table.setItem(r, 3, QTableWidgetItem(str(fwd["bind_port"])))
-			self.table.setItem(r, 4, QTableWidgetItem(fwd["target_host"]))
-			self.table.setItem(r, 5, QTableWidgetItem(str(fwd["target_port"])))
+			s_name = getattr(s, 'name', None) or s.host
+			self.table.setItem(r, 3, QTableWidgetItem(s_name))
+			# Bind host/port
+			self.table.setItem(r, 4, QTableWidgetItem(fwd["bind_host"]))
+			self.table.setItem(r, 5, QTableWidgetItem(str(fwd["bind_port"])))
+			# Target host/port
+			self.table.setItem(r, 6, QTableWidgetItem(fwd["target_host"]))
+			self.table.setItem(r, 7, QTableWidgetItem(str(fwd["target_port"])))
 
 	def _selected_rows(self):
 		rows = set()
 		for idx in self.table.selectedIndexes():
 			rows.add(idx.row())
 		return sorted(rows)
+
+	def _make_actions_widget(self, row_index: int, is_running: bool) -> QWidget:
+		w = QWidget()
+		lay = QHBoxLayout(w)
+		lay.setContentsMargins(0, 0, 0, 0)
+		lay.setSpacing(4)
+		# Status indicator (blinking dot when running)
+		indicator = QLabel("●")
+		indicator.setFixedWidth(14)
+		indicator.setAlignment(Qt.AlignCenter)
+		lay.addWidget(indicator)
+		btn_start = QPushButton("▶")
+		btn_stop = QPushButton("⏹")
+		btn_start.setFixedWidth(28)
+		btn_stop.setFixedWidth(28)
+		btn_start.setEnabled(not is_running)
+		btn_stop.setEnabled(is_running)
+		btn_start.clicked.connect(lambda: self._start_row(row_index))
+		btn_stop.clicked.connect(lambda: self._stop_row(row_index))
+		lay.addWidget(btn_start)
+		lay.addWidget(btn_stop)
+		lay.addStretch()
+		# Blink setup
+		if is_running:
+			indicator.setStyleSheet("color: #28a745;")
+			try:
+				blink = QTimer(w)
+				blink.setInterval(500)
+				state = {"on": True}
+				def toggle():
+					state["on"] = not state["on"]
+					indicator.setStyleSheet("color: #28a745;" if state["on"] else "color: #7ddc9a;")
+				blink.timeout.connect(toggle)
+				blink.start()
+			except Exception:
+				pass
+		else:
+			indicator.setStyleSheet("color: #bbbbbb;")
+		return w
+
+	def _start_row(self, r: int):
+		if r < 0 or r >= len(self._forwards):
+			return
+		f = self._forwards[r]
+		try:
+			if f.get("status") == "running" and f.get("id"):
+				return
+			if f["type"] == "Local":
+				fid = port_forward_manager.start_local_forward(
+					f["session_index"], f["bind_host"], f["bind_port"], f["target_host"], f["target_port"]
+				)
+			else:
+				fid = port_forward_manager.start_remote_forward(
+					f["session_index"], f["bind_host"], f["bind_port"], f["target_host"], f["target_port"]
+				)
+			f["id"] = fid
+			f["status"] = "running"
+		except Exception as e:
+			QMessageBox.warning(self, "Tunneling", f"Failed to start: {e}")
+		self._refresh_table()
+		self._save_tunnels()
+
+	def _stop_row(self, r: int):
+		if r < 0 or r >= len(self._forwards):
+			return
+		f = self._forwards[r]
+		fid = f.get("id")
+		if not fid:
+			return
+		try:
+			port_forward_manager.stop_forward(fid)
+			f["status"] = "stopped"
+			f.pop("id", None)
+		except Exception as e:
+			QMessageBox.warning(self, "Tunneling", f"Failed to stop: {e}")
+		self._refresh_table()
+		self._save_tunnels()
+
+	def _load_tunnels(self):
+		if not os.path.exists(self._config_file):
+			return
+		with open(self._config_file, 'r', encoding='utf-8') as f:
+			data = json.load(f)
+			if isinstance(data, list):
+				self._forwards = []
+				for item in data:
+					try:
+						self._forwards.append({
+							"name": item.get("name", ""),
+							"type": item.get("type", "Local"),
+							"session_index": int(item.get("session_index", 0)),
+							"bind_host": item.get("bind_host", "127.0.0.1"),
+							"bind_port": int(item.get("bind_port", 0)),
+							"target_host": item.get("target_host", ""),
+							"target_port": int(item.get("target_port", 0)),
+							"status": item.get("status", "stopped")
+						})
+					except Exception:
+						pass
+		self._refresh_table()
+
+	def _save_tunnels(self):
+		# Persist non-ephemeral fields; do not save ephemeral connection id
+		payload = []
+		for fwd in self._forwards:
+			payload.append({
+				"name": fwd.get("name", ""),
+				"type": fwd.get("type", "Local"),
+				"session_index": fwd.get("session_index", 0),
+				"bind_host": fwd.get("bind_host", "127.0.0.1"),
+				"bind_port": fwd.get("bind_port", 0),
+				"target_host": fwd.get("target_host", ""),
+				"target_port": fwd.get("target_port", 0),
+				"status": fwd.get("status", "stopped")
+			})
+		try:
+			with open(self._config_file, 'w', encoding='utf-8') as f:
+				json.dump(payload, f, ensure_ascii=False, indent=2)
+		except Exception:
+			pass
 
 	def _start_selected(self):
 		rows = self._selected_rows()
