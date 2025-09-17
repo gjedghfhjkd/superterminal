@@ -14,11 +14,11 @@ class TunnelingDialog(QDialog):
 		self.session_manager = getattr(parent, 'session_manager', SessionManager())
 		self._forwards = []  # in-memory definitions; extend to persistence if needed
 		self._init_ui()
-        # Allow backend to resolve sessions by index
-        try:
-            port_forward_manager.set_session_resolver(self.session_manager.get_session)
-        except Exception:
-            pass
+		# Allow backend to resolve sessions by index
+		try:
+			port_forward_manager.set_session_resolver(self.session_manager.get_session)
+		except Exception:
+			pass
 
 	def _init_ui(self):
 		layout = QVBoxLayout(self)
