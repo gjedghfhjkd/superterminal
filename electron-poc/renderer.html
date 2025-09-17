@@ -8,7 +8,7 @@
       html, body { height:100%; overflow:hidden; }
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       #left { width:320px; padding:12px; border-right:1px solid #ddd; box-sizing:border-box; }
-      #right { flex:1; display:flex; flex-direction:column; min-width:0; }
+      #right { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
       #tabs { height:36px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:flex-end; gap:6px; padding:0 8px; box-sizing:border-box; }
       .tab { cursor:pointer; padding:6px 10px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
       .tab.active { background:#0f111a; color:#ffffff; }
@@ -16,6 +16,9 @@
       #panes { position:relative; flex:1; overflow:hidden; background:#0f111a; min-height:0; }
       .pane { position:absolute; inset:0; display:none; }
       .pane.active { display:block; }
+      /* Ensure xterm fully occupies the pane without causing internal scroll splits */
+      .pane > .xterm { width:100% !important; height:100% !important; }
+      .pane > .xterm .xterm-viewport { width:100% !important; height:100% !important; }
       label { display:block; font-size:12px; margin-top:8px; }
       input, select { width:100%; box-sizing:border-box; }
       ul { list-style:none; padding:0; margin:0; height:180px; overflow:auto; border-top:1px solid #eee; }
@@ -35,6 +38,7 @@
       <div id="panes"></div>
     </div>
     <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
+    <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
     <script>
       const terminals = new Map() // id -> { term, el }
       const tabs = new Map() // id -> tab element
@@ -47,10 +51,12 @@
         pane.className = 'pane'
         panesEl.appendChild(pane)
         const term = new Terminal({ cursorBlink:true, theme:{ background:'#0f111a', foreground:'#e6e6e6' } })
+        const fit = new FitAddon.FitAddon()
+        term.loadAddon(fit)
         term.open(pane)
         term.focus()
         term.onData(data => { if (currentId != null) window.api.sshSendId(currentId, data) })
-        terminals.set(id, { term, el: pane })
+        terminals.set(id, { term, el: pane, fit })
 
         const tab = document.createElement('div')
         tab.className = 'tab'
@@ -99,11 +105,13 @@
       function resize() {
         const active = currentId != null ? terminals.get(currentId) : null
         if (!active) return
-        const rect = active.el.getBoundingClientRect()
-        const cw = 9; const ch = 18; // rough; good enough for POC
-        const cols = Math.max(20, Math.floor(rect.width / cw))
-        const rows = Math.max(5, Math.floor(rect.height / ch))
-        if (currentId != null) window.api.sshResizeId(currentId, cols, rows)
+        try { active.fit.fit() } catch {}
+        if (currentId != null) {
+          const term = active.term
+          if (term && typeof term.cols === 'number' && typeof term.rows === 'number') {
+            window.api.sshResizeId(currentId, term.cols, term.rows)
+          }
+        }
       }
       window.addEventListener('resize', resize)
 
@@ -131,6 +139,8 @@
                 await window.api.sshOpenPtyId(idx)
                 try { await window.api.sftpConnect(cfg) } catch {}
                 const rec = terminals.get(idx)
+                try { rec.fit.fit() } catch {}
+                try { window.api.sshResizeId(idx, rec.term.cols, rec.term.rows) } catch {}
                 rec.term.write('\r\n[Connected]\r\n')
               }
               activateTab(idx)
