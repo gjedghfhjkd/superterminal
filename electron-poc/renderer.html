@@ -668,7 +668,7 @@
         for (const it of items || []) {
           const row = document.createElement('div')
           row.className = 'sftp-row'
-          const isDir = (it.type === 'd' || it.type === 'directory' || it.type === 'DIR')
+          const isDir = (it.type === 'd' || it.type === 'directory' || it.type === 'DIR' || it.type === 'l')
           const rawName = (it.pathName || it.name || '').replace(/\\+/g, '/')
           const displayName = (it.displayName || it.name || '').split('\\\\').pop().split('/').pop()
           const pathName = rawName
@@ -799,8 +799,7 @@
 
       async function listRemote(p) {
         const list = await window.api.sftpListById(currentId, p)
-        const normalized = p === '/' ? normalizeSftpItems(p, list) : list
-        renderListInto(sftpRemoteListEl, p, normalized, navigateRemote)
+        renderListInto(sftpRemoteListEl, p, list, navigateRemote)
       }
       async function navigateRemote(p) {
         sftpRemotePathEl.value = p
