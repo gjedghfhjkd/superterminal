@@ -1,4 +1,5 @@
 import paramiko
+import logging
 import threading
 import time
 from PyQt5.QtCore import QObject, pyqtSignal
@@ -9,6 +10,10 @@ class SSHBackend(QObject):
 
     def __init__(self):
         super().__init__()
+        try:
+            logging.getLogger('paramiko').setLevel(logging.WARNING)
+        except Exception:
+            pass
         self.client = None
         self.chan = None
         self._run = False

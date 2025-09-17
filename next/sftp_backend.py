@@ -1,4 +1,5 @@
 import paramiko
+import logging
 from PyQt5.QtCore import QObject, pyqtSignal
 
 class SFTPBackend(QObject):
@@ -7,6 +8,10 @@ class SFTPBackend(QObject):
 
     def __init__(self):
         super().__init__()
+        try:
+            logging.getLogger('paramiko').setLevel(logging.WARNING)
+        except Exception:
+            pass
         self.client = None
         self.sftp = None
 
