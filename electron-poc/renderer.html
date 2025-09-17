@@ -170,25 +170,12 @@
         close.onclick = async (e) => {
           e.stopPropagation()
           try { await window.api.sftpDisconnect?.(id) } catch {}
-          // If there is a terminal for the same session id, dispose it too
-          if (terminals.has(id)) {
-            const rec = terminals.get(id)
-            try { rec.term.dispose() } catch {}
-            try { rec.el.remove() } catch {}
-            terminals.delete(id)
-            const tTab = tabs.get(id); if (tTab) { tTab.remove(); tabs.delete(id) }
-          }
+          if (currentId === id) currentId = null
           const t = tabs.get(id); if (t) { t.remove(); tabs.delete(id) }
-          // Activate another tab if any
+          // Activate another tab if any, otherwise show SSH view baseline
           const next = [...tabs.keys()][0]
           if (next != null) activateTab(next)
-          else {
-            // No tabs left: hide both SSH panes and SFTP panel
-            document.getElementById('panes').style.display = 'none'
-            document.getElementById('tabs').style.display = 'flex'
-            document.getElementById('sftp-panel').style.display = 'none'
-            document.getElementById('tun-panel').style.display = 'none'
-          }
+          else { showSshView() }
         }
         tab.appendChild(close)
         tab.onclick = () => { activateTab(id); showSftpView() }
