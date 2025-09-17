@@ -10,6 +10,7 @@ from .session_dialog import SessionDialog
 from .session_tree_widget import SessionTreeWidget
 from .terminal_tabs import TerminalTabs
 from .terminal2 import Terminal2
+from .terminal_js import TerminalJS
 from ..core.session_manager import SessionManager
 from ..core.ssh2 import SSH2
 from ..core.sftp_client import SFTPClient
@@ -796,7 +797,11 @@ class MobaXtermClone(QMainWindow):
             # Создаем новую вкладку терминала
             # Choose terminal implementation via feature flag
             if getattr(session, 'use_terminal2', False):
-                terminal_widget = Terminal2()
+                # Prefer JS terminal if available for better full-screen app support
+                try:
+                    terminal_widget = TerminalJS()
+                except Exception:
+                    terminal_widget = Terminal2()
                 # Add as a tab with display name
                 display_name = getattr(session, 'name', None) or session.host
                 tab_index = self.terminal_tabs.addTab(terminal_widget, f"🖥️ {display_name}")
