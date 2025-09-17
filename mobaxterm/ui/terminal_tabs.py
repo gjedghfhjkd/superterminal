@@ -199,21 +199,26 @@ class TerminalTab(QWidget):
                 self._first_connect_cleanup = False
                 self.terminal_output.setPlainText(content)
                 # Compute caret by moving cursor to row/col (0-based)
-                # Use the cleaned content to avoid off-by-one after tail trimming
-                render_lines = content.split('\n') if content is not None else []
-                if not render_lines:
-                    render_lines = [""]
-                row0 = max(0, min(self._pyte_screen.cursor.y, len(render_lines) - 1))
-                line_text = render_lines[row0] if 0 <= row0 < len(render_lines) else ""
+                # Use document blocks to avoid landing on an implicit trailing empty block
+                doc = self.terminal_output.document()
+                block_count = doc.blockCount()
+                # Desired row from emulator
+                desired_row = max(0, min(self._pyte_screen.cursor.y, block_count - 1))
+                block = doc.findBlockByNumber(desired_row)
+                # If target block is empty and there is a previous non-empty line (typical after prompt), move up one
+                if block.isValid() and not block.text() and desired_row > 0:
+                    prev_block = doc.findBlockByNumber(desired_row - 1)
+                    if prev_block.isValid() and prev_block.text():
+                        block = prev_block
+                        desired_row -= 1
+                line_text = block.text() if block.isValid() else ""
                 col0 = max(0, min(self._pyte_screen.cursor.x, len(line_text)))
                 cursor = self.terminal_output.textCursor()
-                cursor.movePosition(QTextCursor.Start)
-                # Move to the correct row (0-based)
-                for _ in range(row0):
-                    cursor.movePosition(QTextCursor.Down)
-                cursor.movePosition(QTextCursor.StartOfLine)
-                for _ in range(col0):
-                    cursor.movePosition(QTextCursor.Right)
+                # Place cursor at exact position within the chosen block
+                if block.isValid():
+                    cursor.setPosition(block.position() + col0)
+                else:
+                    cursor.movePosition(QTextCursor.End)
                 self.terminal_output.setTextCursor(cursor)
                 try:
                     self._insertion_pos = cursor.position()
