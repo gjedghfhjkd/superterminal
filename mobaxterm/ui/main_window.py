@@ -14,6 +14,7 @@ from ..core.ssh_client import SSHClient
 from ..core.sftp_client import SFTPClient
 from .sftp_tab import SFTPTab
 from ..models.session import Session
+from .tunneling_dialog import TunnelingDialog
 import threading
 import time
 import sys
@@ -165,7 +166,7 @@ class MobaXtermClone(QMainWindow):
         
         # Top bar with tabs and status
         top_bar = QWidget()
-        top_bar.setFixedHeight(35)
+        top_bar.setFixedHeight(40)
         top_bar_layout = QHBoxLayout(top_bar)
         top_bar_layout.setContentsMargins(0, 0, 0, 0)
         top_bar_layout.setSpacing(10)
@@ -176,15 +177,15 @@ class MobaXtermClone(QMainWindow):
         tabs_layout.setSpacing(2)
         tabs_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.session_tab = QPushButton("Session")
+        self.session_tab = QPushButton("🗂 Sessions")
         self.session_tab.setCheckable(True)
         self.session_tab.setChecked(True)
-        self.session_tab.setFixedSize(80, 30)
+        self.session_tab.setFixedSize(100, 34)
         self.session_tab.setStyleSheet(self.get_tab_style(True))
         
-        self.servers_tab = QPushButton("Servers")
+        self.servers_tab = QPushButton("📡 Tunelling")
         self.servers_tab.setCheckable(True)
-        self.servers_tab.setFixedSize(80, 30)
+        self.servers_tab.setFixedSize(110, 34)
         self.servers_tab.setStyleSheet(self.get_tab_style(False))
         
         tabs_layout.addWidget(self.session_tab)
@@ -492,7 +493,7 @@ class MobaXtermClone(QMainWindow):
                     border: 2px solid #005fa3;
                     padding: 4px 12px;
                     border-radius: 5px;
-                    font-size: 14px;
+                    font-size: 15px;
                 }
             """
         else:
@@ -503,7 +504,7 @@ class MobaXtermClone(QMainWindow):
                     border: 2px solid #dee2e6;
                     padding: 4px 12px;
                     border-radius: 5px;
-                    font-size: 14px;
+                    font-size: 15px;
                 }
                 QPushButton:hover {
                     background-color: #e9ecef;
@@ -521,6 +522,7 @@ class MobaXtermClone(QMainWindow):
         self.session_tab.setChecked(False)
         self.servers_tab.setStyleSheet(self.get_tab_style(True))
         self.session_tab.setStyleSheet(self.get_tab_style(False))
+        self.open_tunnelling_dialog()
         
     def load_sessions(self):
         """Загрузка сессий с поддержкой вложенных папок"""
@@ -938,6 +940,13 @@ class MobaXtermClone(QMainWindow):
         
     def hide_loading(self):
         self.progress_bar.setVisible(False)
+
+    def open_tunnelling_dialog(self):
+        try:
+            dlg = TunnelingDialog(self)
+            dlg.exec_()
+        except Exception as e:
+            QMessageBox.warning(self, "Tunnelling", f"Failed to open tunnelling manager: {e}")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
