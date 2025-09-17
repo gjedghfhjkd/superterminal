@@ -150,15 +150,48 @@ class TerminalTab(QWidget):
                         # Collapse trailing blanks to at most one
                         while len(tail_lines) >= 3 and tail_lines[-1].strip() == '' and tail_lines[-2].strip() == '':
                             tail_lines.pop()
-                        # Deduplicate identical prompt lines at the very end
+                        # Deduplicate duplicate prompts at the very end, allowing one optional blank between
                         prompt_re = re.compile(r"(^.+@.+:.*[#$]\s*$|^\[[^\n]*\][#$]\s*$)")
-                        # Keep removing duplicates among last lines
-                        changed = True
-                        while changed and len(tail_lines) >= 2:
-                            changed = False
-                            if prompt_re.search(tail_lines[-1]) and tail_lines[-1] == tail_lines[-2]:
-                                tail_lines.pop(-2)
-                                changed = True
+                        # Prompt prefix extractor: capture the prompt part without trailing spaces and without user input
+                        prompt_prefix_re = re.compile(r"^(?:(?P<p1>.+@.+:.*[#$])|(?P<p2>\[[^\n]*\][#$]))(?:\s.*)?$")
+                        # Find last prompt line index
+                        def find_last_prompt_index(lines):
+                            for idx in range(len(lines) - 1, -1, -1):
+                                if prompt_re.search(lines[idx] or ''):
+                                    return idx
+                            return -1
+                        last_idx = find_last_prompt_index(tail_lines)
+                        if last_idx >= 0:
+                            # Skip optional trailing blanks after last prompt
+                            prev_idx = last_idx - 1
+                            if prev_idx >= 0 and tail_lines[prev_idx].strip() == '':
+                                prev_idx -= 1
+                            # If another prompt is just before (ignoring a blank), and equal ignoring trailing spaces, drop the earlier one
+                            if prev_idx >= 0 and prompt_re.search(tail_lines[prev_idx] or ''):
+                                if (tail_lines[prev_idx].rstrip() == tail_lines[last_idx].rstrip()):
+                                    tail_lines.pop(prev_idx)
+                        # If the last two non-empty lines are (1) prompt-only and (2) same prompt with typed text, drop the prompt-only line
+                        # Find last non-empty index
+                        j = len(tail_lines) - 1
+                        while j >= 0 and tail_lines[j].strip() == '':
+                            j -= 1
+                        if j >= 0:
+                            i = j - 1
+                            while i >= 0 and tail_lines[i].strip() == '':
+                                i -= 1
+                            if i >= 0:
+                                m_last = prompt_prefix_re.match(tail_lines[j] or '')
+                                m_prev = prompt_prefix_re.match(tail_lines[i] or '')
+                                if m_last and m_prev:
+                                    last_prefix = (m_last.group('p1') or m_last.group('p2') or '').rstrip()
+                                    prev_prefix = (m_prev.group('p1') or m_prev.group('p2') or '').rstrip()
+                                    # Last line has more than just the prompt?
+                                    if last_prefix and prev_prefix and last_prefix == prev_prefix and tail_lines[j].rstrip() != prev_prefix:
+                                        # Remove previous prompt-only line
+                                        tail_lines.pop(i)
+                        # If content ends with a blank line after a prompt, drop that blank to keep caret on prompt
+                        if len(tail_lines) >= 2 and tail_lines[-1].strip() == '' and prompt_re.search(tail_lines[-2] or ''):
+                            tail_lines.pop()
                         return '\n'.join(tail_lines)
                     content = _cleanup_tail(content)
                 except Exception:
@@ -166,17 +199,26 @@ class TerminalTab(QWidget):
                 self._first_connect_cleanup = False
                 self.terminal_output.setPlainText(content)
                 # Compute caret by moving cursor to row/col (0-based)
-                row0 = max(0, min(self._pyte_screen.cursor.y, len(lines) - 1))
-                line_text = lines[row0] if 0 <= row0 < len(lines) else ""
+                # Use document blocks to avoid landing on an implicit trailing empty block
+                doc = self.terminal_output.document()
+                block_count = doc.blockCount()
+                # Desired row from emulator
+                desired_row = max(0, min(self._pyte_screen.cursor.y, block_count - 1))
+                block = doc.findBlockByNumber(desired_row)
+                # If target block is empty and there is a previous non-empty line (typical after prompt), move up one
+                if block.isValid() and not block.text() and desired_row > 0:
+                    prev_block = doc.findBlockByNumber(desired_row - 1)
+                    if prev_block.isValid() and prev_block.text():
+                        block = prev_block
+                        desired_row -= 1
+                line_text = block.text() if block.isValid() else ""
                 col0 = max(0, min(self._pyte_screen.cursor.x, len(line_text)))
                 cursor = self.terminal_output.textCursor()
-                cursor.movePosition(QTextCursor.Start)
-                # Move to the correct row (0-based)
-                for _ in range(row0):
-                    cursor.movePosition(QTextCursor.Down)
-                cursor.movePosition(QTextCursor.StartOfLine)
-                for _ in range(col0):
-                    cursor.movePosition(QTextCursor.Right)
+                # Place cursor at exact position within the chosen block
+                if block.isValid():
+                    cursor.setPosition(block.position() + col0)
+                else:
+                    cursor.movePosition(QTextCursor.End)
                 self.terminal_output.setTextCursor(cursor)
                 try:
                     self._insertion_pos = cursor.position()
@@ -315,6 +357,61 @@ class TerminalTab(QWidget):
                     for _ in range(blanks - 1):
                         c.movePosition(QTextCursor.PreviousBlock, QTextCursor.KeepAnchor)
                     c.removeSelectedText()
+                # Remove duplicate prompt lines at the very end (common on first connect)
+                # Find last two non-empty blocks and compare; if the last has
+                # the same prompt plus typed text, drop the previous prompt-only line
+                last = doc.lastBlock()
+                # Skip trailing empty
+                while last.isValid() and last.text().strip() == '':
+                    last = last.previous()
+                if last.isValid():
+                    prev = last.previous()
+                    while prev.isValid() and prev.text().strip() == '':
+                        prev = prev.previous()
+                    if prev.isValid():
+                        last_text = last.text().rstrip()
+                        prev_text = prev.text().rstrip()
+                        prompt_re = re.compile(r"(^.+@.+:.*[#$]\s*$|^\[[^\n]*\][#$]\s*$)")
+                        prompt_prefix_re = re.compile(r"^(?:(?P<p1>.+@.+:.*[#$])|(?P<p2>\[[^\n]*\][#$]))(?:\s.*)?$")
+                        # Case 1: exact duplicate prompts -> remove previous
+                        if prompt_re.search(last_text) and last_text == prev_text:
+                            c = self.terminal_output.textCursor()
+                            c.movePosition(QTextCursor.End)
+                            c.movePosition(QTextCursor.StartOfBlock)
+                            c.movePosition(QTextCursor.PreviousBlock)
+                            c.movePosition(QTextCursor.StartOfBlock, QTextCursor.KeepAnchor)
+                            c.removeSelectedText()
+                        else:
+                            # Case 2: last has same prompt plus typed text -> remove previous prompt-only
+                            m_last = prompt_prefix_re.match(last_text or '')
+                            m_prev = prompt_prefix_re.match(prev_text or '')
+                            if m_last and m_prev:
+                                last_prefix = (m_last.group('p1') or m_last.group('p2') or '').rstrip()
+                                prev_prefix = (m_prev.group('p1') or m_prev.group('p2') or '').rstrip()
+                                if last_prefix and prev_prefix and last_prefix == prev_prefix and last_text != prev_prefix:
+                                    c = self.terminal_output.textCursor()
+                                    c.movePosition(QTextCursor.End)
+                                    c.movePosition(QTextCursor.StartOfBlock)
+                                    c.movePosition(QTextCursor.PreviousBlock)
+                                    c.movePosition(QTextCursor.StartOfBlock, QTextCursor.KeepAnchor)
+                                    c.removeSelectedText()
+                # If last visible line is a prompt and there is a trailing empty block, remove that empty block
+                try:
+                    c2 = self.terminal_output.textCursor()
+                    c2.movePosition(QTextCursor.End)
+                    last_block = doc.lastBlock()
+                    if last_block.isValid() and last_block.text().strip() == '':
+                        prev_block = last_block.previous()
+                        if prev_block.isValid():
+                            prev_text2 = prev_block.text().rstrip()
+                            prompt_re2 = re.compile(r"(^.+@.+:.*[#$]\s*$|^\[[^\n]*\][#$]\s*$)")
+                            if prompt_re2.search(prev_text2):
+                                # Select last empty block and delete it
+                                c2.movePosition(QTextCursor.End)
+                                c2.movePosition(QTextCursor.StartOfBlock, QTextCursor.KeepAnchor)
+                                c2.removeSelectedText()
+                except Exception:
+                    pass
             except Exception:
                 pass
 
