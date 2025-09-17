@@ -910,6 +910,9 @@
       }
 
       tunCreateBtn.onclick = async () => {
+        const selInfo0 = selectedId ? findNodeById(sessionTree, selectedId, null) : null
+        const sessNode0 = selInfo0 && selInfo0.node && selInfo0.node.type==='session' ? selInfo0.node : null
+        if (!sessNode0) { await showConfirmModal('Error', 'Select a session in the left tree first.', 'OK', ''); return }
         // Modal wizard
         const overlay = document.createElement('div'); overlay.className='modal-overlay'
         const modal = document.createElement('div'); modal.className='modal'
@@ -954,7 +957,7 @@
         const selInfo = selectedId ? findNodeById(sessionTree, selectedId, null) : null
         const sessNode = selInfo && selInfo.node && selInfo.node.type==='session' ? selInfo.node : null
         if (!sessNode) { await showConfirmModal('Error', 'Select a session in the left tree first.', 'OK', ''); return }
-        const remoteHost = '127.0.0.1'
+        const remoteHost = (sessNode.session && (sessNode.session.host || sessNode.session.hostname)) || '127.0.0.1'
         const localPort = Number(inLocal.value || '0')
         const remotePort = Number(inRemote.value || '0')
         if (!localPort || !remotePort) { alert('Ports are required'); return }
