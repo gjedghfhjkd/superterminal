@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="https://unpkg.com/xterm@5.3.0/css/xterm.css" />
+    <style>
+      body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
+      #left { width:320px; padding:12px; border-right:1px solid #ddd; box-sizing:border-box; }
+      #right { flex:1; display:flex; flex-direction:column; }
+      #term { flex:1; background:#0f111a; }
+      label { display:block; font-size:12px; margin-top:8px; }
+      input, select { width:100%; box-sizing:border-box; }
+      ul { list-style:none; padding:0; margin:0; height:180px; overflow:auto; border-top:1px solid #eee; }
+    </style>
+  </head>
+  <body>
+    <div id="left">
+      <h3>SSH</h3>
+      <label>Host</label>
+      <input id="host" value="localhost"/>
+      <label>Port</label>
+      <input id="port" value="22"/>
+      <label>User</label>
+      <input id="user" value="root"/>
+      <label>Auth</label>
+      <select id="auth">
+        <option value="password">Password</option>
+        <option value="key">SSH key</option>
+      </select>
+      <label>Password</label>
+      <input id="password" type="password" />
+      <label>Private key (paste)</label>
+      <textarea id="pkey" style="width:100%; height:80px"></textarea>
+      <label>Passphrase</label>
+      <input id="passphrase" type="password" />
+      <button id="btn-connect">Connect</button>
+      <h3>SFTP</h3>
+      <button id="btn-list">List /root</button>
+      <ul id="list"></ul>
+    </div>
+    <div id="right">
+      <div id="term"></div>
+    </div>
+    <script src="https://unpkg.com/xterm@5.3.0/lib/xterm.js"></script>
+    <script>
+      const term = new Terminal({ cursorBlink:true, theme:{ background:'#0f111a', foreground:'#e6e6e6' } })
+      term.open(document.getElementById('term'))
+      term.focus()
+      window.api.sshOnData(data => term.write(data))
+      term.onData(data => window.api.sshSend(data))
+      function resize() {
+        const rect = document.getElementById('term').getBoundingClientRect()
+        const cw = 9; const ch = 18; // rough; good enough for POC
+        const cols = Math.max(20, Math.floor(rect.width / cw))
+        const rows = Math.max(5, Math.floor(rect.height / ch))
+        window.api.sshResize({ cols, rows })
+      }
+      window.addEventListener('resize', resize)
+
+      document.getElementById('btn-connect').onclick = async () => {
+        const host = document.getElementById('host').value
+        const port = Number(document.getElementById('port').value)
+        const username = document.getElementById('user').value
+        const auth = document.getElementById('auth').value
+        const password = document.getElementById('password').value
+        const privateKey = document.getElementById('pkey').value
+        const passphrase = document.getElementById('passphrase').value
+        await window.api.sshConnect({ host, port, username, auth, password, privateKey, passphrase })
+        await window.api.sshOpenPty()
+        resize()
+        await window.api.sftpConnect({ host, port, username, auth, password, privateKey, passphrase })
+      }
+
+      document.getElementById('btn-list').onclick = async () => {
+        const items = await window.api.sftpList('/root')
+        const ul = document.getElementById('list')
+        ul.innerHTML = ''
+        for (const it of items) {
+          const li = document.createElement('li')
+          li.textContent = `${it.type} ${it.name} ${it.size}`
+          ul.appendChild(li)
+        }
+      }
+    </script>
+  </body>
+  </html>
