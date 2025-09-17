@@ -658,11 +658,13 @@
       function renderListInto(el, basePath, items, onEnterDir) {
         el.innerHTML = ''
         const rows = document.createDocumentFragment()
-        const upRow = document.createElement('div')
-        upRow.className = 'sftp-row'
-        upRow.innerHTML = '<span class="icon"><svg viewBox="0 0 24 24"><path d="M12 5l6 6h-4v6h-4v-6H6l6-6z"/></svg></span><div class="sftp-name">..</div><div class="sftp-type"></div>'
-        upRow.onclick = () => onEnterDir(dirname(basePath))
-        rows.appendChild(upRow)
+        if (basePath && basePath !== '/') {
+          const upRow = document.createElement('div')
+          upRow.className = 'sftp-row'
+          upRow.innerHTML = '<span class="icon"><svg viewBox="0 0 24 24"><path d="M12 5l6 6h-4v6h-4v-6H6l6-6z"/></svg></span><div class="sftp-name">..</div><div class="sftp-type"></div>'
+          upRow.onclick = () => onEnterDir(dirname(basePath))
+          rows.appendChild(upRow)
+        }
         for (const it of items || []) {
           const row = document.createElement('div')
           row.className = 'sftp-row'
@@ -684,6 +686,24 @@
           rows.appendChild(row)
         }
         el.appendChild(rows)
+      }
+
+      function normalizeSftpItems(basePath, rawItems) {
+        const map = new Map()
+        for (const it of rawItems || []) {
+          let nm = (it && it.name ? String(it.name) : '').trim()
+          if (!nm || nm === '.' || nm === '..') continue
+          nm = nm.replace(/\\+/g, '/')
+          const parts = nm.split('/').filter(Boolean)
+          if (parts.length === 0) continue
+          const seg = parts[0]
+          const isDir = (it.type === 'd') || (parts.length > 1) || (/(dir|directory)/i.test(String(it.type)))
+          if (!map.has(seg)) map.set(seg, { name: seg, displayName: seg, pathName: seg, type: isDir ? 'd' : 'file' })
+          else if (isDir) { const prev = map.get(seg); prev.type = 'd'; map.set(seg, prev) }
+        }
+        const items = Array.from(map.values())
+        items.sort((a, b) => (a.type === b.type ? a.displayName.localeCompare(b.displayName) : a.type === 'd' ? -1 : 1))
+        return items
       }
 
       function openSftpCtxMenu(x, y, info) {
@@ -744,11 +764,11 @@
           let data = null
           try { data = JSON.parse(e.dataTransfer.getData('application/json')) } catch {}
           if (!data || !data.name || !data.basePath) return
-          const srcFull = joinPath(data.basePath, data.name)
+          const srcFull = joinPath(data.basePath, (data.pathName || data.name))
           const dstIsRemote = id === 'sftp-remote-list'
           const srcIsRemote = data.areaId === 'sftp-remote-list'
           const dstBase = dstIsRemote ? sftpRemotePathEl.value : sftpLocalPathEl.value
-          const dstFull = joinPath(dstBase, data.name)
+          const dstFull = joinPath(dstBase, (data.pathName || data.name))
           try {
             if (srcIsRemote && !dstIsRemote) {
               await window.api.sftpDownload(currentId, srcFull, dstFull)
@@ -776,8 +796,9 @@
       }
 
       async function listRemote(p) {
-        const list = await window.api.sftpList(p)
-        renderListInto(sftpRemoteListEl, p, list, navigateRemote)
+        const list = await window.api.sftpListById(currentId, p)
+        const normalized = p === '/' ? normalizeSftpItems(p, list) : list
+        renderListInto(sftpRemoteListEl, p, normalized, navigateRemote)
       }
       async function navigateRemote(p) {
         sftpRemotePathEl.value = p
