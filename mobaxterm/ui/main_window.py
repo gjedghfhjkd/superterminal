@@ -11,7 +11,7 @@ from .session_tree_widget import SessionTreeWidget
 from .terminal_tabs import TerminalTabs
 from .terminal2 import Terminal2
 from ..core.session_manager import SessionManager
-from ..core.ssh_client import SSHClient
+from ..core.ssh2 import SSH2
 from ..core.sftp_client import SFTPClient
 from .sftp_tab import SFTPTab
 from ..models.session import Session
@@ -37,12 +37,12 @@ class SSHThread(QThread):
         self.input_to_send.emit(data)
 
     def run(self):
-        self.ssh_client = SSHClient()
+        self.ssh_client = SSH2()
         # Route output to UI
         self.ssh_client.output_received.connect(self.terminal_tab.append_output)
         self.ssh_client.connection_status.connect(self.connection_status.emit)
         # Deliver input in thread context
-        self.input_to_send.connect(self.ssh_client.send_raw)
+        self.input_to_send.connect(self.ssh_client.send)
         self.ssh_client.connect(
             host=self.session.host,
             port=self.session.port,
