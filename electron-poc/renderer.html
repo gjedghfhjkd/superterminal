@@ -82,6 +82,7 @@
         })
       }
       refreshSessions()
+      window.api.onSessionsUpdated(() => refreshSessions())
 
 
       // Removed inline auth/SFTP UI

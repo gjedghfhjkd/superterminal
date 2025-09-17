@@ -52,12 +52,14 @@ ipcMain.handle('sessions-add', async (evt, session) => {
   const sessions = await loadSessions()
   sessions.push(session)
   await saveSessions(sessions)
+  try { win.webContents.send('sessions-updated') } catch {}
   return { ok: true, sessions }
 })
 ipcMain.handle('sessions-delete', async (evt, index) => {
   const sessions = await loadSessions()
   if (index >= 0 && index < sessions.length) sessions.splice(index, 1)
   await saveSessions(sessions)
+  try { win.webContents.send('sessions-updated') } catch {}
   return { ok: true, sessions }
 })
 
@@ -172,15 +174,17 @@ ipcMain.handle('ssh-disconnect', async (e, id) => {
 // Open separate window to create a session
 ipcMain.handle('open-session-window', async (evt, payload) => {
   const type = payload && payload.type ? payload.type : 'SSH'
-  const child = new BrowserWindow({
-    width: 480,
-    height: 640,
-    parent: win,
-    modal: true,
-    autoHideMenuBar: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, preload: path.join(__dirname, 'preload.js') }
+  return new Promise(async (resolve) => {
+    const child = new BrowserWindow({
+      width: 480,
+      height: 640,
+      parent: win,
+      modal: true,
+      autoHideMenuBar: true,
+      webPreferences: { contextIsolation: true, nodeIntegration: false, preload: path.join(__dirname, 'preload.js') }
+    })
+    try { child.setMenu(null) } catch {}
+    await child.loadFile('session_form.html', { query: { type } })
+    child.on('closed', () => resolve({ ok: true }))
   })
-  try { child.setMenu(null) } catch {}
-  await child.loadFile('session_form.html', { query: { type } })
-  return { ok: true }
 })

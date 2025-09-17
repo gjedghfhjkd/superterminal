@@ -12,11 +12,7 @@
   </head>
   <body>
     <h3>Create Session</h3>
-    <label>Type</label>
-    <select id="type">
-      <option value="SSH">SSH</option>
-      <option value="SFTP">SFTP</option>
-    </select>
+    <!-- Type removed per requirement; default to SSH -->
     <label>Host</label>
     <input id="host" value="localhost" />
     <label>Port</label>
@@ -57,7 +53,7 @@
       })
       document.getElementById('btn-save').onclick = async () => {
         const sess = {
-          type: document.getElementById('type').value,
+          type: 'SSH',
           host: document.getElementById('host').value,
           port: Number(document.getElementById('port').value),
           username: document.getElementById('user').value,
