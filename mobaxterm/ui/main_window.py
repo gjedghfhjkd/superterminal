@@ -462,7 +462,8 @@ class MobaXtermClone(QMainWindow):
             if self.session_manager.update_session(session_index, session):
                 # Обновляем отображение: показываем Session Name, tooltip оставляем с host:port
                 icon = "🖥️" if session.type == 'SSH' else "🔗"
-                item.setText(0, f"{icon}  {session.name}")
+                user_suffix = f" ({session.username})" if getattr(session, 'username', None) else ""
+                item.setText(0, f"{icon}  {session.name}{user_suffix}")
                 item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
     
     def rename_folder(self, old_folder_name, item):
@@ -625,7 +626,9 @@ class MobaXtermClone(QMainWindow):
     
     def add_session_to_tree(self, session, index, parent_item):
         session_item = QTreeWidgetItem(parent_item)
-        display_name = getattr(session, 'name', None) or session.host
+        display_name = (getattr(session, 'name', None) or session.host)
+        if getattr(session, 'username', None):
+            display_name = f"{display_name} ({session.username})"
         icon = "🖥️" if session.type == 'SSH' else "🔗"
         session_item.setText(0, f"{icon}  {display_name}")
         session_item.setData(0, Qt.UserRole, "session")
@@ -670,7 +673,9 @@ class MobaXtermClone(QMainWindow):
                 folder_item = self.add_folder_to_tree(folder_name)
             
             session_item = QTreeWidgetItem(folder_item)
-            display_name = getattr(session, 'name', None) or session.host
+            display_name = (getattr(session, 'name', None) or session.host)
+            if getattr(session, 'username', None):
+                display_name = f"{display_name} ({session.username})"
             icon = "🖥️" if session.type == 'SSH' else "🔗"
             session_item.setText(0, f"{icon}  {display_name}")
             session_item.setData(0, Qt.UserRole, "session")

@@ -63,6 +63,13 @@ class TunnelingDialog(QDialog):
 		self.cmb_session = QComboBox()
 		sessions = self.session_manager.get_all_sessions()
 		for i, s in enumerate(sessions):
+			# Only allow SSH sessions in tunneling
+			try:
+				stype = getattr(s, 'type', None)
+				if stype != 'SSH':
+					continue
+			except Exception:
+				continue
 			name = getattr(s, 'name', None) or s.host
 			self.cmb_session.addItem(f"{name}", i)
 		row_layout.addWidget(self.cmb_session)
