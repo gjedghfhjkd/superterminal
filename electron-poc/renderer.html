@@ -28,11 +28,12 @@
         <option value="password">Password</option>
         <option value="key">SSH key</option>
       </select>
-      <label>Password</label>
+      <label id="lbl-password">Password</label>
       <input id="password" type="password" />
-      <label>Private key (paste)</label>
+      <label id="lbl-key">Private key (paste or choose)</label>
+      <input id="keyfile" type="file" accept=".pem,.ppk,.key,.rsa,*/*" />
       <textarea id="pkey" style="width:100%; height:80px"></textarea>
-      <label>Passphrase</label>
+      <label id="lbl-passphrase">Passphrase</label>
       <input id="passphrase" type="password" />
       <button id="btn-connect">Connect</button>
       <h3>SFTP</h3>
@@ -58,18 +59,51 @@
       }
       window.addEventListener('resize', resize)
 
+      // Dynamic auth UI
+      const authSel = document.getElementById('auth')
+      const password = document.getElementById('password')
+      const lblPassword = document.getElementById('lbl-password')
+      const keyfile = document.getElementById('keyfile')
+      const pkey = document.getElementById('pkey')
+      const lblKey = document.getElementById('lbl-key')
+      const passphrase = document.getElementById('passphrase')
+      const lblPassphrase = document.getElementById('lbl-passphrase')
+
+      function updateAuthUI() {
+        const isKey = authSel.value === 'key'
+        // password fields
+        password.style.display = isKey ? 'none' : ''
+        lblPassword.style.display = isKey ? 'none' : ''
+        // key fields
+        keyfile.style.display = isKey ? '' : 'none'
+        pkey.style.display = isKey ? '' : 'none'
+        lblKey.style.display = isKey ? '' : 'none'
+        passphrase.style.display = isKey ? '' : 'none'
+        lblPassphrase.style.display = isKey ? '' : 'none'
+      }
+      authSel.addEventListener('change', updateAuthUI)
+      updateAuthUI()
+
+      // Read key file if chosen
+      keyfile.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0]
+        if (!file) return
+        const text = await file.text().catch(() => '')
+        if (text) pkey.value = text
+      })
+
       document.getElementById('btn-connect').onclick = async () => {
         const host = document.getElementById('host').value
         const port = Number(document.getElementById('port').value)
         const username = document.getElementById('user').value
         const auth = document.getElementById('auth').value
-        const password = document.getElementById('password').value
+        const passwordVal = document.getElementById('password').value
         const privateKey = document.getElementById('pkey').value
-        const passphrase = document.getElementById('passphrase').value
-        await window.api.sshConnect({ host, port, username, auth, password, privateKey, passphrase })
+        const passphraseVal = document.getElementById('passphrase').value
+        await window.api.sshConnect({ host, port, username, auth, password: passwordVal, privateKey, passphrase: passphraseVal })
         await window.api.sshOpenPty()
         resize()
-        await window.api.sftpConnect({ host, port, username, auth, password, privateKey, passphrase })
+        await window.api.sftpConnect({ host, port, username, auth, password: passwordVal, privateKey, passphrase: passphraseVal })
       }
 
       document.getElementById('btn-list').onclick = async () => {
