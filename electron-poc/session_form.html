@@ -4,14 +4,19 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
-      body { margin:0; font-family:sans-serif; padding:12px }
+      body { margin:0; font-family:sans-serif; background:#0b0d14; color:#cfd3dc }
+      .wrap { padding:14px }
+      h3 { margin:0; padding:12px 14px; border-bottom:1px solid #1f2330 }
       label { display:block; font-size:12px; margin-top:8px }
-      input, select, textarea { width:100%; box-sizing:border-box }
-      button { margin-top:12px }
+      input, select, textarea { width:100%; box-sizing:border-box; background:#121623; color:#e6e6e6; border:1px solid #2a3040; border-radius:8px; padding:8px 10px; outline:none }
+      input:focus, select:focus, textarea:focus { border-color:#3a4160; box-shadow:0 0 0 3px rgba(42,48,64,.35) }
+      button { margin-top:12px; background:#2a5bd7; border:1px solid #2a5bd7; color:#fff; padding:8px 12px; border-radius:8px; cursor:pointer }
+      button:hover { background:#2f66ef }
     </style>
   </head>
   <body>
     <h3>Create Session</h3>
+    <div class="wrap">
     <!-- Type removed per requirement; default to SSH -->
     <label>Host</label>
     <input id="host" value="localhost" />
@@ -32,6 +37,7 @@
     <label id="lbl-passphrase">Passphrase</label>
     <input id="passphrase" type="password" />
     <button id="btn-save">Save</button>
+    </div>
     <script>
       function updateAuth() {
         const isKey = document.getElementById('auth').value === 'key'

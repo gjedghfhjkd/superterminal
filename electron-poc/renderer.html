@@ -32,6 +32,18 @@
       /* Ensure xterm fully occupies the pane without causing internal scroll splits */
       .pane > .xterm { width:100% !important; height:100% !important; }
       .pane > .xterm .xterm-viewport { width:100% !important; height:100% !important; }
+      /* Modal */
+      .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; z-index:2000; }
+      .modal { width:380px; max-width:90vw; background:#0b0d14; color:#cfd3dc; border:1px solid #1f2330; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.5); }
+      .modal-header { padding:12px 14px; border-bottom:1px solid #1f2330; font-weight:600; }
+      .modal-body { padding:14px; display:flex; flex-direction:column; gap:10px; }
+      .modal-actions { padding:12px 14px; border-top:1px solid #1f2330; display:flex; gap:8px; justify-content:flex-end; }
+      .input { background:#121623; color:#e6e6e6; border:1px solid #2a3040; border-radius:8px; padding:8px 10px; outline:none; }
+      .input:focus { border-color:#3a4160; box-shadow:0 0 0 3px rgba(42,48,64,.35); }
+      .btn { background:#1a1f2d; color:#e6e6e6; border:1px solid #2a3040; padding:8px 12px; border-radius:8px; cursor:pointer; }
+      .btn:hover { background:#22283a; }
+      .btn.primary { background:#2a5bd7; border-color:#2a5bd7; }
+      .btn.primary:hover { background:#2f66ef; }
       label { display:block; font-size:12px; margin-top:8px; }
       input, select { width:100%; box-sizing:border-box; }
       ul { list-style:none; padding:0; margin:0; height:180px; overflow:auto; border-top:1px solid #eee; }
@@ -211,7 +223,7 @@
         function add(label, handler) { const it = document.createElement('div'); it.className='ctx-item'; it.textContent=label; it.onclick=() => { hideCtx(); handler() }; menu.appendChild(it) }
         const isFolder = targetNode && targetNode.type==='folder'
         add('New Folder', async () => {
-          const name = prompt('Folder name:','New Folder')
+          const name = await showInputModal('New Folder', 'Folder name', 'New Folder')
           if (!name) return
           const node = { id: genId('fld'), type:'folder', name, expanded:true, children:[] }
           if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
@@ -258,6 +270,46 @@
           renderTree()
         }
       })
+
+      // Modal for input (since prompt is disabled in secure Electron)
+      function showInputModal(title, placeholder, initialValue='') {
+        return new Promise((resolve) => {
+          const overlay = document.createElement('div')
+          overlay.className = 'modal-overlay'
+          const modal = document.createElement('div')
+          modal.className = 'modal'
+          const header = document.createElement('div')
+          header.className = 'modal-header'
+          header.textContent = title
+          const body = document.createElement('div')
+          body.className = 'modal-body'
+          const input = document.createElement('input')
+          input.className = 'input'
+          input.placeholder = placeholder || ''
+          input.value = initialValue || ''
+          body.appendChild(input)
+          const actions = document.createElement('div')
+          actions.className = 'modal-actions'
+          const btnCancel = document.createElement('button')
+          btnCancel.className = 'btn'
+          btnCancel.textContent = 'Cancel'
+          const btnOk = document.createElement('button')
+          btnOk.className = 'btn primary'
+          btnOk.textContent = 'Create'
+          actions.appendChild(btnCancel)
+          actions.appendChild(btnOk)
+          modal.appendChild(header); modal.appendChild(body); modal.appendChild(actions)
+          overlay.appendChild(modal)
+          document.body.appendChild(overlay)
+
+          const close = (val) => { try { document.body.removeChild(overlay) } catch {}; resolve(val) }
+          btnCancel.onclick = () => close(null)
+          btnOk.onclick = () => close((input.value||'').trim())
+          overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close(null) })
+          input.addEventListener('keydown', (e) => { if (e.key==='Enter') btnOk.click() })
+          setTimeout(() => input.focus(), 0)
+        })
+      }
 
       // Load tree
       async function refreshSessions() {
