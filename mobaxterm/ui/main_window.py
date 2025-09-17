@@ -11,7 +11,10 @@ from .session_tree_widget import SessionTreeWidget
 from .terminal_tabs import TerminalTabs
 from ..core.session_manager import SessionManager
 from ..core.ssh_client import SSHClient
+from ..core.sftp_client import SFTPClient
+from .sftp_tab import SFTPTab
 from ..models.session import Session
+from .tunneling_dialog import TunnelingDialog
 import threading
 import time
 import sys
@@ -19,21 +22,122 @@ import sys
 class SSHThread(QThread):
     output_received = pyqtSignal(str)
     connection_status = pyqtSignal(bool, str)
+    input_to_send = pyqtSignal(str)
     
     def __init__(self, session, terminal_tab):
         super().__init__()
         self.session = session
         self.terminal_tab = terminal_tab
-        self.ssh_client = SSHClient()
-        
+        self.ssh_client = None
+    
+    def send_raw(self, data: str):
+        # This method can be called from UI thread; it emits a signal that
+        # will be delivered to the SSH client within this QThread context.
+        self.input_to_send.emit(data)
+
     def run(self):
+        self.ssh_client = SSHClient()
+        # Route output to UI
         self.ssh_client.output_received.connect(self.terminal_tab.append_output)
         self.ssh_client.connection_status.connect(self.connection_status.emit)
+        # Deliver input in thread context
+        self.input_to_send.connect(self.ssh_client.send_raw)
         self.ssh_client.connect(
             host=self.session.host,
             port=self.session.port,
-            username=self.session.username
+            username=self.session.username,
+            auth_method=getattr(self.session, 'auth_method', 'password'),
+            key_filename=getattr(self.session, 'private_key_path', None),
+            passphrase=getattr(self.session, 'private_key_passphrase', None),
+            allow_agent=True,
+            look_for_keys=True
         )
+        # Start event loop so queued signals (input_to_send) are processed in this thread
+        self.exec_()
+
+class SFTPThread(QThread):
+    connection_status = pyqtSignal(bool, str)
+    remote_listing = pyqtSignal(str, list)
+    change_dir = pyqtSignal(str)
+    up_dir = pyqtSignal()
+    upload_files = pyqtSignal(list, str)
+    download_files = pyqtSignal(list, str)
+    delete_paths = pyqtSignal(list)
+    rename_path = pyqtSignal(str, str)
+
+    def __init__(self, session):
+        super().__init__()
+        self.session = session
+        self.client = None
+
+    def run(self):
+        self.client = SFTPClient()
+        self.client.connection_status.connect(self.connection_status.emit)
+        self.client.remote_listing.connect(self.remote_listing.emit)
+        # UI -> thread operations
+        self.change_dir.connect(self.client.change_dir)
+        self.up_dir.connect(self.client.up_dir)
+        self.upload_files.connect(self.client.upload_files)
+        self.download_files.connect(self.client.download_files)
+        self.delete_paths.connect(self.client.delete_paths)
+        self.rename_path.connect(self.client.rename_path)
+        # Connect now
+        self.client.connect(
+            host=self.session.host,
+            port=self.session.port,
+            username=self.session.username,
+            password=getattr(self.session, 'password', None),
+            auth_method=getattr(self.session, 'auth_method', 'password'),
+            key_filename=getattr(self.session, 'private_key_path', None),
+            passphrase=getattr(self.session, 'private_key_passphrase', None),
+            allow_agent=True,
+            look_for_keys=True
+        )
+        self.exec_()
+
+    def disconnect(self):
+        try:
+            if self.client:
+                self.client.disconnect()
+        except Exception:
+            pass
+
+    # Wrapper slots to forward calls via signals (queued to this thread)
+    def on_change_dir(self, path: str):
+        try:
+            self.change_dir.emit(path)
+        except Exception:
+            pass
+
+    def on_up_dir(self):
+        try:
+            self.up_dir.emit()
+        except Exception:
+            pass
+
+    def on_upload(self, local_paths: list, remote_dir: str):
+        try:
+            self.upload_files.emit(local_paths, remote_dir)
+        except Exception:
+            pass
+
+    def on_download(self, remote_paths: list, local_dir: str):
+        try:
+            self.download_files.emit(remote_paths, local_dir)
+        except Exception:
+            pass
+
+    def on_delete(self, remote_paths: list):
+        try:
+            self.delete_paths.emit(remote_paths)
+        except Exception:
+            pass
+
+    def on_rename(self, old_path: str, new_basename: str):
+        try:
+            self.rename_path.emit(old_path, new_basename)
+        except Exception:
+            pass
 
 class MobaXtermClone(QMainWindow):
     def __init__(self):
@@ -62,7 +166,7 @@ class MobaXtermClone(QMainWindow):
         
         # Top bar with tabs and status
         top_bar = QWidget()
-        top_bar.setFixedHeight(35)
+        top_bar.setFixedHeight(40)
         top_bar_layout = QHBoxLayout(top_bar)
         top_bar_layout.setContentsMargins(0, 0, 0, 0)
         top_bar_layout.setSpacing(10)
@@ -73,15 +177,15 @@ class MobaXtermClone(QMainWindow):
         tabs_layout.setSpacing(2)
         tabs_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.session_tab = QPushButton("Session")
+        self.session_tab = QPushButton("🗂 Sessions")
         self.session_tab.setCheckable(True)
-        self.session_tab.setChecked(True)
-        self.session_tab.setFixedSize(80, 30)
-        self.session_tab.setStyleSheet(self.get_tab_style(True))
+        self.session_tab.setChecked(False)
+        self.session_tab.setFixedSize(130, 34)
+        self.session_tab.setStyleSheet(self.get_tab_style(False))
         
-        self.servers_tab = QPushButton("Servers")
+        self.servers_tab = QPushButton("📡 Tunelling")
         self.servers_tab.setCheckable(True)
-        self.servers_tab.setFixedSize(80, 30)
+        self.servers_tab.setFixedSize(110, 34)
         self.servers_tab.setStyleSheet(self.get_tab_style(False))
         
         tabs_layout.addWidget(self.session_tab)
@@ -284,6 +388,7 @@ class MobaXtermClone(QMainWindow):
         self.sessions_tree.context_menu_requested.connect(self.handle_tree_context_menu)
         self.sessions_tree.rename_requested.connect(self.handle_rename_request)
         self.sessions_tree.session_moved.connect(self.handle_session_move)
+        self.sessions_tree.folder_moved.connect(self.handle_folder_move)
 
         
         # Load saved sessions
@@ -317,6 +422,20 @@ class MobaXtermClone(QMainWindow):
         else:
             print("Failed to update session")
 
+    def handle_folder_move(self, folder_path, target_parent):
+        """Обработка перемещения папки"""
+        # Валидация на уровне UI (дополнительно к бэкенду)
+        if target_parent and (target_parent == folder_path or target_parent.startswith(folder_path + '/')):
+            QMessageBox.warning(self, "Invalid Move", "Cannot move a folder into itself or its descendant.")
+            return
+
+        if not self.session_manager.move_folder(folder_path, target_parent):
+            QMessageBox.warning(self, "Move Failed", "Could not move folder. It may already exist at destination or the move is invalid.")
+            return
+
+        # Успех — перезагружаем дерево
+        self.load_sessions()
+
     def handle_rename_request(self, item_type, item):
         """Обработка запроса на переименование"""
         if item_type == "folder":
@@ -328,32 +447,23 @@ class MobaXtermClone(QMainWindow):
             if session:
                 self.rename_session(session_index, session, item)
     def rename_session(self, session_index, session, item):
-        """Переименование сессии"""
+        """Переименование сессии (меняет только Session Name, не Remote host)"""
+        current_display_name = session.name or session.host
         new_name, ok = QInputDialog.getText(
             self,
             "Rename Session",
             "Enter new session name:",
             QLineEdit.Normal,
-            session.host  # Используем текущее имя хоста как значение по умолчанию
+            current_display_name
         )
         
-        if ok and new_name and new_name != session.host:
-            # Создаем копию сессии с новым именем
-            updated_session = Session(
-                type=session.type,
-                host=new_name,
-                port=session.port,
-                username=session.username,
-                folder=session.folder,
-                terminal_settings=session.terminal_settings,
-                network_settings=session.network_settings,
-                bookmark_settings=session.bookmark_settings
-            )
-            
-            if self.session_manager.update_session(session_index, updated_session):
-                # Обновляем отображение
-                item.setText(0, f"🖥️  {new_name}")
-                item.setToolTip(0, f"{session.type} - {new_name}:{session.port}")
+        if ok and new_name and new_name != current_display_name:
+            session.name = new_name
+            if self.session_manager.update_session(session_index, session):
+                # Обновляем отображение: показываем Session Name, tooltip оставляем с host:port
+                icon = "🖥️" if session.type == 'SSH' else "🔗"
+                item.setText(0, f"{icon}  {session.name}")
+                item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
     
     def rename_folder(self, old_folder_name, item):
         """Переименование папки"""
@@ -383,7 +493,7 @@ class MobaXtermClone(QMainWindow):
                     border: 2px solid #005fa3;
                     padding: 4px 12px;
                     border-radius: 5px;
-                    font-size: 14px;
+                    font-size: 15px;
                 }
             """
         else:
@@ -394,7 +504,7 @@ class MobaXtermClone(QMainWindow):
                     border: 2px solid #dee2e6;
                     padding: 4px 12px;
                     border-radius: 5px;
-                    font-size: 14px;
+                    font-size: 15px;
                 }
                 QPushButton:hover {
                     background-color: #e9ecef;
@@ -402,72 +512,47 @@ class MobaXtermClone(QMainWindow):
             """
         
     def on_session_tab_clicked(self):
-        self.session_tab.setChecked(True)
+        # Keep both tabs in neutral style after click
+        self.session_tab.setChecked(False)
         self.servers_tab.setChecked(False)
-        self.session_tab.setStyleSheet(self.get_tab_style(True))
+        self.session_tab.setStyleSheet(self.get_tab_style(False))
         self.servers_tab.setStyleSheet(self.get_tab_style(False))
+        # Open the same dialog as "+ Add Session"
+        try:
+            self.add_new_session()
+        except Exception:
+            pass
         
     def on_servers_tab_clicked(self):
-        self.servers_tab.setChecked(True)
+        # Keep both tabs in neutral style after click
         self.session_tab.setChecked(False)
-        self.servers_tab.setStyleSheet(self.get_tab_style(True))
+        self.servers_tab.setChecked(False)
         self.session_tab.setStyleSheet(self.get_tab_style(False))
+        self.servers_tab.setStyleSheet(self.get_tab_style(False))
+        self.open_tunnelling_dialog()
         
     def load_sessions(self):
-        print("=== Loading sessions ===")
+        """Загрузка сессий с поддержкой вложенных папок"""
         self.sessions_tree.clear()
         self.folder_items.clear()
         self.session_items.clear()
         
-        # Add folders first
-        folders = self.session_manager.get_all_folders()
-        print(f"Found folders: {folders}")
+        # Создаем (и отображаем) все папки, включая вложенные
+        all_folders = self.session_manager.get_all_folders()
+        for folder_path in all_folders:
+            if folder_path:
+                self.add_folder_to_tree(folder_path)
         
-        for folder_name in folders:
-            folder_item = QTreeWidgetItem(self.sessions_tree)
-            folder_item.setText(0, f"📁 {folder_name}")
-            folder_item.setData(0, Qt.UserRole, "folder")
-            folder_item.setData(0, Qt.UserRole + 1, folder_name)
-            folder_item.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator)
-            self.folder_items[folder_name] = folder_item
-            
-            # Add sessions in this folder
-            sessions = self.session_manager.get_sessions_in_folder(folder_name)
-            print(f"Folder '{folder_name}' has {len(sessions)} sessions")
-            
-            for session in sessions:
-                session_index = self.session_manager.sessions.index(session)
-                session_item = QTreeWidgetItem(folder_item)
-                session_item.setText(0, f"🖥️  {session.host}")
-                session_item.setData(0, Qt.UserRole, "session")
-                session_item.setData(0, Qt.UserRole + 1, session_index)
-                session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
-                self.session_items[session_index] = session_item
-                print(f"  - Session {session_index}: {session.host} (folder: {session.folder})")
-        
-        # Add sessions without folders (теперь ищем по session.folder вместо индексов)
-        orphan_sessions = []
-        for session_index, session in enumerate(self.session_manager.sessions):
-            # Используем session_manager.folders вместо self.folders
-            if not session.folder or session.folder not in self.session_manager.folders or session_index not in self.session_manager.folders[session.folder]:
-                orphan_sessions.append((session_index, session))
-        
-        print(f"Orphan sessions (no folder): {[s[0] for s in orphan_sessions]}")
-        
-        for session_index, session in orphan_sessions:
-            session_item = QTreeWidgetItem(self.sessions_tree)
-            session_item.setText(0, f"🖥️  {session.host}")
-            session_item.setData(0, Qt.UserRole, "session")
-            session_item.setData(0, Qt.UserRole + 1, session_index)
-            session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
-            self.session_items[session_index] = session_item
-            print(f"  - Orphan session {session_index}: {session.host} (folder: {session.folder})")
-        
-        # Expand all folders by default
-        for folder_item in self.folder_items.values():
-            folder_item.setExpanded(True)
-        
-        print("=== Finished loading sessions ===\n")
+        # Добавляем сессии в соответствующие папки или в корень
+        for index, session in enumerate(self.session_manager.get_all_sessions()):
+            if session.folder:
+                folder_item = self.folder_items.get(session.folder)
+                if not folder_item:
+                    folder_item = self.add_folder_to_tree(session.folder)
+                parent_item = folder_item if folder_item else self.sessions_tree
+                self.add_session_to_tree(session, index, parent_item)
+            else:
+                self.add_session_to_tree(session, index, self.sessions_tree)
         
     def handle_tree_context_menu(self, action_type, item):
         if action_type == "add_folder":
@@ -478,6 +563,19 @@ class MobaXtermClone(QMainWindow):
             if item and item.data(0, Qt.UserRole) == "folder":
                 folder_name = item.data(0, Qt.UserRole + 1)
                 self.add_new_session_to_folder(folder_name)
+        elif action_type == "add_subfolder":
+            if item and item.data(0, Qt.UserRole) == "folder":
+                parent_folder = item.data(0, Qt.UserRole + 1)
+                sub_name, ok = QInputDialog.getText(
+                    self,
+                    "New Subfolder",
+                    f"Enter subfolder name under '{parent_folder}':",
+                    QLineEdit.Normal
+                )
+                if ok and sub_name:
+                    new_path = f"{parent_folder}/{sub_name}"
+                    if self.session_manager.add_folder(new_path):
+                        self.load_sessions()
         elif action_type == "delete_folder":
             if item and item.data(0, Qt.UserRole) == "folder":
                 folder_name = item.data(0, Qt.UserRole + 1)
@@ -527,22 +625,36 @@ class MobaXtermClone(QMainWindow):
     
     def add_session_to_tree(self, session, index, parent_item):
         session_item = QTreeWidgetItem(parent_item)
-        session_item.setText(0, f"🖥️  {session.host}")
+        display_name = getattr(session, 'name', None) or session.host
+        icon = "🖥️" if session.type == 'SSH' else "🔗"
+        session_item.setText(0, f"{icon}  {display_name}")
         session_item.setData(0, Qt.UserRole, "session")
         session_item.setData(0, Qt.UserRole + 1, index)
         session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
         self.session_items[index] = session_item
         
     def add_folder_to_tree(self, folder_name):
-        folder_item = QTreeWidgetItem(self.sessions_tree)
-        folder_item.setText(0, f"📁 {folder_name}")
-        folder_item.setData(0, Qt.UserRole, "folder")
-        folder_item.setData(0, Qt.UserRole + 1, folder_name)
-        folder_item.setToolTip(0, f"Folder: {folder_name}")
-        folder_item.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator)
-        folder_item.setExpanded(True)
-        self.folder_items[folder_name] = folder_item
-        return folder_item
+        # Создаем вложенные элементы для пути вида "parent/child/sub"
+        parts = folder_name.split('/') if folder_name else []
+        parent_item = None
+        built_parts = []
+        for part in parts:
+            built_parts.append(part)
+            current_path = '/'.join(built_parts)
+            if current_path in self.folder_items:
+                parent_item = self.folder_items[current_path]
+                continue
+            container = parent_item if parent_item else self.sessions_tree
+            folder_item = QTreeWidgetItem(container)
+            folder_item.setText(0, f"📁 {part}")
+            folder_item.setData(0, Qt.UserRole, "folder")
+            folder_item.setData(0, Qt.UserRole + 1, current_path)
+            folder_item.setToolTip(0, f"Folder: {current_path}")
+            folder_item.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator)
+            folder_item.setExpanded(True)
+            self.folder_items[current_path] = folder_item
+            parent_item = folder_item
+        return self.folder_items.get(folder_name)
     
     def add_new_session_to_folder(self, folder_name):
         dialog = SessionDialog(self)
@@ -558,7 +670,9 @@ class MobaXtermClone(QMainWindow):
                 folder_item = self.add_folder_to_tree(folder_name)
             
             session_item = QTreeWidgetItem(folder_item)
-            session_item.setText(0, f"🖥️  {session.host}")
+            display_name = getattr(session, 'name', None) or session.host
+            icon = "🖥️" if session.type == 'SSH' else "🔗"
+            session_item.setText(0, f"{icon}  {display_name}")
             session_item.setData(0, Qt.UserRole, "session")
             session_item.setData(0, Qt.UserRole + 1, session_index)
             session_item.setToolTip(0, f"{session.type} - {session.host}:{session.port}")
@@ -598,11 +712,8 @@ class MobaXtermClone(QMainWindow):
             
             # Удаляем саму папку
             if self.session_manager.delete_folder(folder_name):
-                # Удаляем из дерева
-                if folder_name in self.folder_items:
-                    folder_item = self.folder_items[folder_name]
-                    self.sessions_tree.takeTopLevelItem(self.sessions_tree.indexOfTopLevelItem(folder_item))
-                    del self.folder_items[folder_name]
+                # Перезагружаем дерево, чтобы отразить изменения немедленно
+                self.load_sessions()
     
     def delete_session_with_confirmation(self, session_index, session_name):
         reply = QMessageBox.question(
@@ -679,8 +790,8 @@ class MobaXtermClone(QMainWindow):
             # Создаем новую вкладку терминала
             terminal_tab = self.terminal_tabs.add_terminal_tab(session)
             terminal_tab.session_index = session_index
-            terminal_tab.command_input.returnPressed.connect(
-                lambda: self.execute_command(session_index)
+            terminal_tab.command_submitted.connect(
+                lambda cmd, idx=session_index: self.execute_command(idx, cmd)
             )
             
             # Создаем и запускаем SSH поток
@@ -691,16 +802,61 @@ class MobaXtermClone(QMainWindow):
             ssh_thread.start()
             
             self.ssh_threads[session_index] = ssh_thread
+
+            # Provide terminal with a way to send raw keys to this SSH thread
+            terminal_tab.set_key_sender(lambda data, t=ssh_thread: t.send_raw(data))
+
+            # If the user starts typing immediately, ensure input is enabled
+            terminal_tab.enable_input()
+        elif session and session.type == 'SFTP':
+            # Check existing SFTP tab
+            if session_index in getattr(self, 'sftp_threads', {}):
+                for i in range(self.terminal_tabs.count()):
+                    tab = self.terminal_tabs.widget(i)
+                    if hasattr(tab, 'session_index') and tab.session_index == session_index:
+                        self.terminal_tabs.setCurrentIndex(i)
+                        return
+                return
+
+            self.current_session_index = session_index
+            self.show_loading(f"Connecting (SFTP) to {session.host}...")
+
+            # Create SFTP tab UI
+            sftp_tab = SFTPTab(session)
+            sftp_tab.session_index = session_index
+
+            # Start SFTP thread
+            sftp_thread = SFTPThread(session)
+            # Wire UI -> thread navigation via wrapper slots to ensure queued delivery
+            sftp_tab.remote_change_dir.connect(sftp_thread.on_change_dir)
+            sftp_tab.remote_up_dir.connect(sftp_thread.on_up_dir)
+            sftp_tab.request_upload.connect(sftp_thread.on_upload)
+            sftp_tab.request_download.connect(sftp_thread.on_download)
+            sftp_tab.request_remote_delete.connect(sftp_thread.on_delete)
+            sftp_tab.request_remote_rename.connect(sftp_thread.on_rename)
+            # Wire thread -> UI
+            sftp_thread.remote_listing.connect(sftp_tab.set_remote_listing)
+            sftp_thread.connection_status.connect(
+                lambda status, msg: self.update_connection_status(session_index, status, msg)
+            )
+
+            sftp_thread.start()
+
+            # Lazily create dict to track SFTP threads
+            if not hasattr(self, 'sftp_threads'):
+                self.sftp_threads = {}
+            self.sftp_threads[session_index] = sftp_thread
+
+            # Add tab to UI
+            self.terminal_tabs.add_sftp_tab(session, sftp_tab)
     
-    def execute_command(self, session_index):
-        if session_index in self.ssh_threads:
+    def execute_command(self, session_index, command: str):
+        if session_index in self.ssh_threads and command is not None:
             ssh_thread = self.ssh_threads[session_index]
             terminal_tab = self.terminal_tabs.get_current_terminal()
-            if terminal_tab and terminal_tab.command_input.text():
-                command = terminal_tab.command_input.text()
-                terminal_tab.append_output(f"$ {command}")
+            if terminal_tab:
+                # Command line is already visible inline in the terminal widget
                 ssh_thread.ssh_client.send_command(command)
-                terminal_tab.command_input.clear()
     
     def update_connection_status(self, session_index, connected, message):
         self.hide_loading()
@@ -735,13 +891,7 @@ class MobaXtermClone(QMainWindow):
                 self.status_label.setText("Disconnected")
             
         self.connection_info.setText(message)
-        
-        # Добавляем сообщение в соответствующую вкладку
-        for i in range(self.terminal_tabs.count()):
-            tab = self.terminal_tabs.widget(i)
-            if hasattr(tab, 'session_index') and tab.session_index == session_index:
-                tab.append_output(message)
-                break
+        # Не печатаем статусные сообщения в терминал, только в статус-бар
     
     def close_terminal_tab(self, index):
         tab = self.terminal_tabs.widget(index)
@@ -755,6 +905,14 @@ class MobaXtermClone(QMainWindow):
                     ssh_thread.quit()
                     ssh_thread.wait()
                 del self.ssh_threads[session_index]
+            # SFTP cleanup
+            if hasattr(self, 'sftp_threads') and session_index in self.sftp_threads:
+                sftp_thread = self.sftp_threads[session_index]
+                if sftp_thread.isRunning():
+                    sftp_thread.disconnect()
+                    sftp_thread.quit()
+                    sftp_thread.wait()
+                del self.sftp_threads[session_index]
         
         self.terminal_tabs.removeTab(index)
         
@@ -789,6 +947,13 @@ class MobaXtermClone(QMainWindow):
         
     def hide_loading(self):
         self.progress_bar.setVisible(False)
+
+    def open_tunnelling_dialog(self):
+        try:
+            dlg = TunnelingDialog(self)
+            dlg.exec_()
+        except Exception as e:
+            QMessageBox.warning(self, "Tunnelling", f"Failed to open tunnelling manager: {e}")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

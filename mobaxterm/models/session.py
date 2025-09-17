@@ -7,12 +7,20 @@ class Session:
     type: str  # 'SSH' or 'SFTP'
     host: str
     port: int
+    name: Optional[str] = None
     username: Optional[str] = None
+    terminal_font_size: Optional[int] = None
+    auth_method: str = "password"  # 'password' | 'key'
+    private_key_path: Optional[str] = None
+    private_key_passphrase: Optional[str] = None
     terminal_settings: bool = False
     network_settings: bool = False
+    folder: Optional[str] = None 
     bookmark_settings: bool = False
     folder: Optional[str] = None
-    
+    def __post_init__(self):
+        if self.folder and self.folder.startswith('/'):
+            self.folder = self.folder[1:]
     def display_name(self) -> str:
         if self.type == 'SSH':
             username_part = f"({self.username})" if self.username else ""
@@ -25,7 +33,13 @@ class Session:
             'type': self.type,
             'host': self.host,
             'port': self.port,
+            'name': self.name,
             'username': self.username,
+            'terminal_font_size': self.terminal_font_size,
+
+            'auth_method': self.auth_method,
+            'private_key_path': self.private_key_path,
+            'private_key_passphrase': self.private_key_passphrase,
             'terminal_settings': self.terminal_settings,
             'network_settings': self.network_settings,
             'bookmark_settings': self.bookmark_settings,
@@ -38,7 +52,12 @@ class Session:
             type=data['type'],
             host=data['host'],
             port=data['port'],
+            name=data.get('name'),
             username=data['username'],
+            terminal_font_size=data.get('terminal_font_size'),
+            auth_method=data.get('auth_method', 'password'),
+            private_key_path=data.get('private_key_path'),
+            private_key_passphrase=data.get('private_key_passphrase'),
             terminal_settings=data.get('terminal_settings', False),
             network_settings=data.get('network_settings', False),
             bookmark_settings=data.get('bookmark_settings', False),

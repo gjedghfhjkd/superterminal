@@ -13,36 +13,58 @@ class SSHClient(QObject):
         self.shell = None
         self.is_connected = False
         self.read_thread = None
+        # Buffer of bytes we expect to be echoed; we will strip this prefix
+        # from the next incoming recv() chunks to avoid printing our setup commands
+        self._suppress_bytes = b""
+        # Time-based textual suppression right after connect to hide setup lines
+        self._suppress_text_until = 0.0
         
-    def connect(self, host, port=22, username=None, password=None):
+    def connect(self, host, port=22, username=None, password=None, auth_method='password', key_filename=None, passphrase=None, allow_agent=True, look_for_keys=False):
         try:
-            self.output_received.emit("🔗 Connecting to server...")
+            # Show connecting status only in UI status label, not in terminal
             
             self.client = paramiko.SSHClient()
             self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             
             # Try to connect with timeout
-            self.client.connect(
-                hostname=host,
-                port=port,
-                username=username,
-                password=password,
-                timeout=10,
-                look_for_keys=False,
-                allow_agent=False
-            )
+            connect_kwargs = {
+                'hostname': host,
+                'port': port,
+                'username': username,
+                'timeout': 10,
+            }
+
+            if auth_method == 'key':
+                # Use provided private key file or fall back to agent/default keys
+                connect_kwargs['key_filename'] = key_filename
+                connect_kwargs['passphrase'] = passphrase
+                connect_kwargs['allow_agent'] = True if allow_agent is None else allow_agent
+                connect_kwargs['look_for_keys'] = True if look_for_keys is None else look_for_keys
+                # Do not pass password when using key auth
+            else:
+                connect_kwargs['password'] = password
+                connect_kwargs['allow_agent'] = False
+                connect_kwargs['look_for_keys'] = False
+
+            self.client.connect(**connect_kwargs)
             
             self.is_connected = True
-            self.shell = self.client.invoke_shell()
-            self.shell.settimeout(0.1)
+            # Allocate interactive PTY shell with colors
+            # Request a PTY with sane dimensions and xterm-256color
+            self.shell = self.client.invoke_shell(term='xterm-256color', width=160, height=40)
+            self.shell.settimeout(0.0)
             
-            # Start reading thread
+            # Start reading thread (after echo disabled)
             self.read_thread = threading.Thread(target=self.read_output)
             self.read_thread.daemon = True
             self.read_thread.start()
             
+            # Emit status to UI only (do not write to terminal widget)
             self.connection_status.emit(True, f"✅ Connected to {host}:{port}")
-            self.output_received.emit(f"Welcome to {host}\n")
+
+            # Configure immediately to avoid extra prompts
+            self._suppress_text_until = time.time() + 0.5
+            self.configure_remote_environment()
             
         except paramiko.AuthenticationException:
             error_msg = "❌ Authentication failed. Please check credentials."
@@ -60,23 +82,45 @@ class SSHClient(QObject):
             self.output_received.emit(error_msg)
     
     def read_output(self):
-        buffer = ""
         while self.is_connected:
             try:
                 if self.shell and self.shell.recv_ready():
-                    data = self.shell.recv(1024).decode('utf-8', errors='ignore')
+                    data_bytes = self.shell.recv(32768)
+                    # Suppress any expected echoed bytes from our recent sends
+                    if self._suppress_bytes:
+                        n = min(len(self._suppress_bytes), len(data_bytes))
+                        i = 0
+                        while i < n and data_bytes[i] == self._suppress_bytes[i]:
+                            i += 1
+                        if i > 0:
+                            data_bytes = data_bytes[i:]
+                            self._suppress_bytes = self._suppress_bytes[i:]
+                    if not data_bytes:
+                        time.sleep(0.02)
+                        continue
+                    try:
+                        data = data_bytes.decode('utf-8')
+                    except UnicodeDecodeError:
+                        data = data_bytes.decode('utf-8', errors='ignore')
                     if data:
-                        buffer += data
-                        if '\n' in buffer or '\r' in buffer:
-                            lines = buffer.splitlines(True)
-                            for line in lines[:-1]:
-                                self.output_received.emit(line.strip())
-                            buffer = lines[-1] if lines else ""
-                    else:
-                        time.sleep(0.1)
+                        # Suppress known setup lines very early after connect
+                        if time.time() < self._suppress_text_until:
+                            filtered_lines = []
+                            for ln in data.splitlines(True):
+                                s = ln.strip()
+                                if not s:
+                                    # Keep at most a single blank in this window
+                                    if filtered_lines and filtered_lines[-1].strip() == '':
+                                        continue
+                                # Drop any stty/PS1/LANG/bash-bind lines regardless of prompt prefix
+                                if ('stty ' in s) or s.startswith('PS1=') or s.startswith('export LANG') or s.startswith('export LC_ALL') or s.startswith("if [ -n \"$BASH_VERSION\""):
+                                    continue
+                                filtered_lines.append(ln)
+                            data = ''.join(filtered_lines)
+                        self.output_received.emit(data)
                 else:
-                    time.sleep(0.1)
-            except:
+                    time.sleep(0.02)
+            except Exception:
                 time.sleep(0.1)
     
     def send_command(self, command):
@@ -85,6 +129,35 @@ class SSHClient(QObject):
                 self.shell.send(command + '\n')
             except Exception as e:
                 self.output_received.emit(f"Error sending command: {str(e)}")
+
+    def send_raw(self, data: str):
+        if self.is_connected and self.shell and data is not None:
+            try:
+                self.shell.send(data)
+            except Exception as e:
+                self.output_received.emit(f"Error sending input: {str(e)}")
+
+    def configure_remote_environment(self):
+        """Set prompt to [user@host cwd]$ and enable sane terminal controls."""
+        try:
+            # First: turn echo OFF so next commands are not echoed by the PTY
+            cmd0 = "stty -echo 2>/dev/null\n"
+            self._suppress_bytes += cmd0.encode('utf-8')
+            self.shell.send(cmd0)
+            time.sleep(0.02)
+
+            # Then: run all settings with echo OFF, finally re-enable echo
+            # Do NOT touch PS1 or PROMPT_COMMAND to avoid extra prompts
+            cmd = (
+                "stty -ixon -ixoff intr ^C eof ^D erase ^? 2>/dev/null || stty erase ^H 2>/dev/null; "
+                "stty icanon icrnl -inlcr -igncr onlcr 2>/dev/null; "
+                "if [ -n \"$BASH_VERSION\" ]; then bind 'set enable-bracketed-paste off' >/dev/null 2>&1; fi; "
+                "export LANG=C.UTF-8 LC_ALL=C.UTF-8 >/dev/null 2>&1; "
+                "stty echo 2>/dev/null\n"
+            )
+            self.shell.send(cmd)
+        except Exception:
+            pass
     
     def disconnect(self):
         self.is_connected = False
