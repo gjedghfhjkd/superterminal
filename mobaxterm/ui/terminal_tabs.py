@@ -168,6 +168,9 @@ class TerminalTab(QWidget):
                             if prev_idx >= 0 and prompt_re.search(tail_lines[prev_idx] or ''):
                                 if (tail_lines[prev_idx].rstrip() == tail_lines[last_idx].rstrip()):
                                     tail_lines.pop(prev_idx)
+                        # If content ends with a blank line after a prompt, drop that blank to keep caret on prompt
+                        if len(tail_lines) >= 2 and tail_lines[-1].strip() == '' and prompt_re.search(tail_lines[-2] or ''):
+                            tail_lines.pop()
                         return '\n'.join(tail_lines)
                     content = _cleanup_tail(content)
                 except Exception:
@@ -348,6 +351,23 @@ class TerminalTab(QWidget):
                             c.movePosition(QTextCursor.PreviousBlock)
                             c.movePosition(QTextCursor.StartOfBlock, QTextCursor.KeepAnchor)
                             c.removeSelectedText()
+                # If last visible line is a prompt and there is a trailing empty block, remove that empty block
+                try:
+                    c2 = self.terminal_output.textCursor()
+                    c2.movePosition(QTextCursor.End)
+                    last_block = doc.lastBlock()
+                    if last_block.isValid() and last_block.text().strip() == '':
+                        prev_block = last_block.previous()
+                        if prev_block.isValid():
+                            prev_text2 = prev_block.text().rstrip()
+                            prompt_re2 = re.compile(r"(^.+@.+:.*[#$]\s*$|^\[[^\n]*\][#$]\s*$)")
+                            if prompt_re2.search(prev_text2):
+                                # Select last empty block and delete it
+                                c2.movePosition(QTextCursor.End)
+                                c2.movePosition(QTextCursor.StartOfBlock, QTextCursor.KeepAnchor)
+                                c2.removeSelectedText()
+                except Exception:
+                    pass
             except Exception:
                 pass
 
