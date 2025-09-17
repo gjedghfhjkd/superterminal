@@ -241,7 +241,9 @@
         }
         menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.style.display = 'block'
         setTimeout(() => {
-          const onDoc = (e) => { hideCtx(); document.removeEventListener('mousedown', onDoc) }
+          const onDoc = (e) => {
+            if (!menu.contains(e.target)) { hideCtx(); document.removeEventListener('mousedown', onDoc) }
+          }
           document.addEventListener('mousedown', onDoc)
         }, 0)
       }
