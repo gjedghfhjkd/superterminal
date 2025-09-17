@@ -866,7 +866,8 @@
           const row = document.createElement('div')
           row.className = 'tun-row'
           const colA = document.createElement('div'); colA.className='tun-col small'; colA.textContent = t.name || '(no name)'
-          const colB = document.createElement('div'); colB.className='tun-col'; colB.textContent = `${t.localHost||'127.0.0.1'}:${t.localPort} -> ${t.remoteHost}:${t.remotePort}`
+          const colB = document.createElement('div'); colB.className='tun-col'; colB.textContent = `${t.remoteHost||'127.0.0.1'}:${t.remotePort} -> ${t.localHost||'127.0.0.1'}:${t.localPort}`
+          if (t.active) { const dot = document.createElement('span'); dot.className='tun-dot active'; colB.appendChild(dot) }
           const colC = document.createElement('div'); colC.className='tun-col small'
           const startBtn = document.createElement('button'); startBtn.className='icon-btn'; startBtn.title='Start'
           startBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>'
@@ -953,7 +954,7 @@
         const selInfo = selectedId ? findNodeById(sessionTree, selectedId, null) : null
         const sessNode = selInfo && selInfo.node && selInfo.node.type==='session' ? selInfo.node : null
         if (!sessNode) { await showConfirmModal('Error', 'Select a session in the left tree first.', 'OK', ''); return }
-        const remoteHost = (sessNode.session && (sessNode.session.host || sessNode.session.hostname)) || '127.0.0.1'
+        const remoteHost = '127.0.0.1'
         const localPort = Number(inLocal.value || '0')
         const remotePort = Number(inRemote.value || '0')
         if (!localPort || !remotePort) { alert('Ports are required'); return }
