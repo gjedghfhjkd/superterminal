@@ -15,9 +15,18 @@ class Terminal2(QWidget):
         self._send_key = None
         self._stream = None
         self._screen = None
+        # Normal/alternate screen support for full-screen apps (vim, less)
+        self._normal_screen = None
+        self._normal_stream = None
+        self._alt_screen = None
+        self._alt_stream = None
+        self._using_alt = False
+        self._normal_snapshot = []
         if pyte is not None:
-            self._screen = pyte.Screen(200, 50)
-            self._stream = pyte.Stream(self._screen)
+            self._normal_screen = pyte.Screen(200, 50)
+            self._normal_stream = pyte.Stream(self._normal_screen)
+            self._screen = self._normal_screen
+            self._stream = self._normal_stream
         self._render_timer = QTimer(self)
         self._render_timer.setSingleShot(True)
         self._render_timer.timeout.connect(self._render)
@@ -65,6 +74,8 @@ class Terminal2(QWidget):
             self.view.insertPlainText(data)
             return
         try:
+            # Intercept alternate screen enable/disable sequences
+            data = self._handle_alt_screen_sequences(data)
             self._stream.feed(data)
             if not self._pending:
                 self._pending = True
@@ -78,6 +89,51 @@ class Terminal2(QWidget):
             self.feed(text)
         except Exception:
             pass
+
+    def _handle_alt_screen_sequences(self, s: str) -> str:
+        # Handle DEC Private Modes ?1049, ?47, ?1047
+        # Enter alt: ESC [ ? 1049 h (or 47/1047); Exit alt: ESC [ ? 1049 l
+        try:
+            import re
+            def enter_alt():
+                if not self._using_alt and pyte is not None:
+                    self._using_alt = True
+                    # Snapshot current view lines to restore later
+                    try:
+                        doc = self.view.document()
+                        lines = []
+                        blk = doc.firstBlock()
+                        while blk.isValid():
+                            lines.append(blk.text())
+                            blk = blk.next()
+                        self._normal_snapshot = lines
+                    except Exception:
+                        self._normal_snapshot = []
+                    # Create alt screen/stream fresh
+                    self._alt_screen = pyte.Screen(self._normal_screen.columns, self._normal_screen.lines)
+                    self._alt_stream = pyte.Stream(self._alt_screen)
+                    self._screen = self._alt_screen
+                    self._stream = self._alt_stream
+
+            def exit_alt():
+                if self._using_alt and pyte is not None:
+                    self._using_alt = False
+                    # Switch back to normal screen/stream
+                    self._screen = self._normal_screen
+                    self._stream = self._normal_stream
+                    # Restore snapshot to the view immediately
+                    try:
+                        self.view.setPlainText("\n".join(self._normal_snapshot))
+                    except Exception:
+                        pass
+
+            # Enter alt matches
+            s = re.sub(r"\x1b\[\?(?:1049|47|1047)h", lambda m: enter_alt() or "", s)
+            # Exit alt matches
+            s = re.sub(r"\x1b\[\?(?:1049|47|1047)l", lambda m: exit_alt() or "", s)
+            return s
+        except Exception:
+            return s
 
     def _render(self):
         self._pending = False
