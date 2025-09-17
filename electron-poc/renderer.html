@@ -9,7 +9,7 @@
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       #left { width:320px; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
       #left-topnav { padding:6px 8px; border-bottom:1px solid #1f2330; display:flex; gap:6px; align-items:center; }
-      .left-tab { cursor:pointer; padding:6px 10px; border-radius:8px; border:1px solid #2a3040; color:#cfd3dc; background:#1a1f2d; }
+      .left-tab { cursor:pointer; padding:6px 10px; border-radius:8px; border:1px solid #2a3040; color:#cfd3dc; background:#1a1f2d; display:flex; align-items:center; gap:6px; }
       .left-tab:hover { background:#22283a; }
       #left-header { padding:10px 12px; border-bottom:1px solid #1f2330; font-weight:600; letter-spacing:0.2px; }
       .tree { flex:1; overflow:auto; padding:6px 4px; }
@@ -67,14 +67,19 @@
       label { display:block; font-size:12px; margin-top:8px; }
       input, select { width:100%; box-sizing:border-box; }
       ul { list-style:none; padding:0; margin:0; height:180px; overflow:auto; border-top:1px solid #eee; }
+      /* Scrollbars */
+      .tree::-webkit-scrollbar, .sftp-list::-webkit-scrollbar, body::-webkit-scrollbar { width:10px; height:10px }
+      .tree::-webkit-scrollbar-track, .sftp-list::-webkit-scrollbar-track, body::-webkit-scrollbar-track { background:#0b0d14 }
+      .tree::-webkit-scrollbar-thumb, .sftp-list::-webkit-scrollbar-thumb, body::-webkit-scrollbar-thumb { background:#2a3040; border-radius:8px; border:2px solid #0b0d14 }
+      .tree::-webkit-scrollbar-thumb:hover, .sftp-list::-webkit-scrollbar-thumb:hover, body::-webkit-scrollbar-thumb:hover { background:#3a4160 }
     </style>
   </head>
   <body>
     <div id="left">
       <div id="left-topnav">
-        <div id="left-ssh" class="left-tab">SSH</div>
-        <div id="left-sftp" class="left-tab">SFTP</div>
-        <div id="left-tun" class="left-tab">Tunneling</div>
+        <div id="left-ssh" class="left-tab"><span class="icon"><svg viewBox="0 0 24 24"><path d="M3 12l4-4 4 4-4 4-4-4zm10-2h8v4h-8v-4z"/></svg></span>SSH</div>
+        <div id="left-sftp" class="left-tab"><span class="icon sftp"><svg viewBox="0 0 24 24"><path d="M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h16v2H4v-2zm0 4h10v2H4v-2z"/></svg></span>SFTP</div>
+        <div id="left-tun" class="left-tab"><span class="icon"><svg viewBox="0 0 24 24"><path d="M4 11h16v2H4v-2zm3-5h10v2H7V6zm0 10h10v2H7v-2z"/></svg></span>Tunneling</div>
       </div>
       <div id="left-header">Sessions</div>
       <div id="tree" class="tree"></div>
@@ -95,7 +100,6 @@
           </div>
           <div id="sftp-remote">
             <div class="sftp-controls">
-              <button id="sftp-remote-connect" class="btn">Connect</button>
               <button id="sftp-remote-up" class="btn">Up</button>
               <input id="sftp-remote-path" class="input" placeholder="/" value="/" />
               <button id="sftp-remote-refresh" class="btn">Refresh</button>
@@ -502,7 +506,8 @@
         })
         if (targetNode) {
           add('Delete…', async () => {
-            if (!confirm('Delete selected item?')) return
+            const ok = await showConfirmModal('Delete', 'Delete selected item?', 'Delete', 'Cancel')
+            if (!ok) return
             removeNodeById(targetNode.id)
             selectedId = null
             await window.api.sessionsSaveTree(sessionTree)
@@ -521,7 +526,8 @@
       document.getElementById('left').oncontextmenu = (e) => { if (e.target && e.target.closest('.item')) return; e.preventDefault(); openCtxMenu(e.clientX, e.clientY, null) }
       document.addEventListener('keydown', async (e) => {
         if (e.key === 'Delete' && selectedId) {
-          if (!confirm('Delete selected item?')) return
+          const ok = await showConfirmModal('Delete', 'Delete selected item?', 'Delete', 'Cancel')
+          if (!ok) return
           removeNodeById(selectedId)
           selectedId = null
           await window.api.sessionsSaveTree(sessionTree)
@@ -584,6 +590,42 @@
         })
       }
 
+      function showConfirmModal(title, message, okLabel='OK', cancelLabel='Cancel') {
+        return new Promise((resolve) => {
+          const overlay = document.createElement('div')
+          overlay.className = 'modal-overlay'
+          const modal = document.createElement('div')
+          modal.className = 'modal'
+          const header = document.createElement('div')
+          header.className = 'modal-header'
+          header.textContent = title
+          const body = document.createElement('div')
+          body.className = 'modal-body'
+          const text = document.createElement('div')
+          text.textContent = message
+          body.appendChild(text)
+          const actions = document.createElement('div')
+          actions.className = 'modal-actions'
+          const btnCancel = document.createElement('button')
+          btnCancel.className = 'btn'
+          btnCancel.textContent = cancelLabel
+          const btnOk = document.createElement('button')
+          btnOk.className = 'btn primary'
+          btnOk.textContent = okLabel
+          actions.appendChild(btnCancel)
+          actions.appendChild(btnOk)
+          modal.appendChild(header); modal.appendChild(body); modal.appendChild(actions)
+          overlay.appendChild(modal)
+          document.body.appendChild(overlay)
+
+          const close = (val) => { try { document.body.removeChild(overlay) } catch {}; resolve(val) }
+          btnCancel.onclick = () => close(false)
+          btnOk.onclick = () => close(true)
+          overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close(false) })
+          setTimeout(() => btnOk.focus(), 0)
+        })
+      }
+
       // Load tree
       async function refreshSessions() {
         const res = await window.api.sessionsLoad()
@@ -605,7 +647,7 @@
       const sftpRemotePathEl = document.getElementById('sftp-remote-path')
       const sftpRemoteUpBtn = document.getElementById('sftp-remote-up')
       const sftpRemoteRefreshBtn = document.getElementById('sftp-remote-refresh')
-      const sftpRemoteConnectBtn = document.getElementById('sftp-remote-connect')
+      // no explicit remote connect button anymore
 
       function renderListInto(el, basePath, items, onEnterDir) {
         el.innerHTML = ''
@@ -669,17 +711,7 @@
       sftpRemoteRefreshBtn.onclick = () => navigateRemote(sftpRemotePathEl.value)
       sftpRemoteUpBtn.onclick = () => navigateRemote(dirname(sftpRemotePathEl.value))
       sftpRemotePathEl.addEventListener('keydown', (e) => { if (e.key==='Enter') navigateRemote(sftpRemotePathEl.value) })
-      sftpRemoteConnectBtn.onclick = async () => {
-        try {
-          const selInfo = selectedId ? findNodeById(sessionTree, selectedId, null) : null
-          const sess = selInfo && selInfo.node && selInfo.node.type==='session' ? selInfo.node.session : null
-          if (!sess) { alert('Select a session in the left tree first.'); return }
-          const cfg = Object.assign({}, sess, { id: selInfo.node.id })
-          await window.api.sftpConnect(cfg)
-          await initSftpSplitIfNeeded(selInfo.node.id)
-          await navigateRemote('/')
-        } catch (e) { alert('SFTP connect error: ' + (e?.message||e)) }
-      }
+      // connection is established on double-click of SFTP session in the tree
 
       sftpLocalRefreshBtn.onclick = () => navigateLocal(sftpLocalPathEl.value)
       sftpLocalUpBtn.onclick = () => navigateLocal(dirname(sftpLocalPathEl.value))
