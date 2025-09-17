@@ -141,9 +141,7 @@ class Terminal2(QWidget):
             lines = list(self._screen.display)
         except Exception:
             lines = []
-        height = getattr(self._screen, 'lines', len(lines))
-        if len(lines) < height:
-            lines += [""] * (height - len(lines))
+        # Do not pad with blank lines; render exactly available display lines
         self.view.setPlainText("\n".join(lines))
         # caret
         try:
@@ -173,6 +171,17 @@ class Terminal2(QWidget):
                         text = QApplication.clipboard().text()
                         if text:
                             self._send(text)
+                    except Exception:
+                        pass
+                    return True
+                # Treat Cut (Ctrl+X) as Copy (do not delete text locally)
+                if (mods & Qt.ControlModifier) and key == Qt.Key_X:
+                    try:
+                        from PyQt5.QtWidgets import QApplication
+                        c = self.view.textCursor()
+                        if c.hasSelection():
+                            QApplication.clipboard().setText(c.selectedText())
+                            # Do not remove text from terminal view
                     except Exception:
                         pass
                     return True
