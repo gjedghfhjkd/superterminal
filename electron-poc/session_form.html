@@ -50,6 +50,20 @@
         return params.get(name)
       }
       const sessionType = (getQueryParam('type') || 'SSH').toUpperCase()
+      try {
+        const presetRaw = getQueryParam('preset')
+        if (presetRaw) {
+          const preset = JSON.parse(decodeURIComponent(presetRaw))
+          if (preset.name) document.getElementById('name').value = preset.name
+          if (preset.host) document.getElementById('host').value = preset.host
+          if (preset.port) document.getElementById('port').value = String(preset.port)
+          if (preset.username) document.getElementById('user').value = preset.username
+          if (preset.auth) document.getElementById('auth').value = preset.auth
+          if (preset.password) document.getElementById('password').value = preset.password
+          if (preset.privateKey) document.getElementById('pkey').value = preset.privateKey
+          if (preset.passphrase) document.getElementById('passphrase').value = preset.passphrase
+        }
+      } catch {}
       document.getElementById('title').textContent = `Create ${sessionType} Session`
 
       function updateAuth() {

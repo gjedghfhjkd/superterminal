@@ -35,11 +35,13 @@
       .pane { position:absolute; inset:0; display:none; }
       .pane.active { display:block; }
 
-      /* SFTP panel */
+      /* SFTP panel split */
       #sftp-panel { position:relative; flex:1; display:none; background:#0f111a; color:#cfd3dc; }
-      #sftp-controls { display:flex; gap:8px; padding:8px; border-bottom:1px solid #1f2330; align-items:center; }
-      #sftp-controls .input { width:420px; }
-      #sftp-list { position:absolute; top:48px; bottom:0; left:0; right:0; overflow:auto; padding:8px; }
+      #sftp-split { position:absolute; inset:0; display:flex; gap:0; }
+      #sftp-local, #sftp-remote { flex:1; display:flex; flex-direction:column; min-width:0; }
+      .sftp-controls { display:flex; gap:8px; padding:8px; border-bottom:1px solid #1f2330; align-items:center; }
+      .sftp-controls .input { width:100%; max-width:480px; }
+      .sftp-list { flex:1; overflow:auto; padding:8px; }
       .sftp-row { display:flex; gap:10px; padding:6px 8px; border-radius:6px; cursor:default; align-items:center; }
       .sftp-row:hover { background:#121623; }
       .sftp-name { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -82,13 +84,25 @@
       <div id="tabs"></div>
       <div id="panes"></div>
       <div id="sftp-panel">
-        <div id="sftp-controls">
-          <button id="sftp-connect" class="btn">Connect to selected</button>
-          <button id="sftp-up" class="btn">Up</button>
-          <input id="sftp-path" class="input" placeholder="/" value="/" />
-          <button id="sftp-refresh" class="btn">Refresh</button>
+        <div id="sftp-split">
+          <div id="sftp-local">
+            <div class="sftp-controls">
+              <button id="sftp-local-up" class="btn">Up</button>
+              <input id="sftp-local-path" class="input" placeholder="/" value="/" />
+              <button id="sftp-local-refresh" class="btn">Refresh</button>
+            </div>
+            <div id="sftp-local-list" class="sftp-list"></div>
+          </div>
+          <div id="sftp-remote">
+            <div class="sftp-controls">
+              <button id="sftp-remote-connect" class="btn">Connect</button>
+              <button id="sftp-remote-up" class="btn">Up</button>
+              <input id="sftp-remote-path" class="input" placeholder="/" value="/" />
+              <button id="sftp-remote-refresh" class="btn">Refresh</button>
+            </div>
+            <div id="sftp-remote-list" class="sftp-list"></div>
+          </div>
         </div>
-        <div id="sftp-list"></div>
       </div>
       <div id="tun-panel">
         <div style="opacity:.8">Tunneling view placeholder. Coming soon.</div>
@@ -136,6 +150,29 @@
         }
         tab.appendChild(close)
         tab.onclick = () => activateTab(id)
+        tabsEl.appendChild(tab)
+        tabs.set(id, tab)
+      }
+
+      function createSftpTab(id, title) {
+        if (tabs.has(id)) return
+        const tab = document.createElement('div')
+        tab.className = 'tab'
+        tab.title = title
+        tab.textContent = title
+        const close = document.createElement('span')
+        close.textContent = '✕'
+        close.className = 'close'
+        close.onclick = async (e) => {
+          e.stopPropagation()
+          try { await window.api.sftpDisconnect?.(id) } catch {}
+          const t = tabs.get(id); if (t) { t.remove(); tabs.delete(id) }
+          // Activate another tab if any
+          const next = [...tabs.keys()][0]
+          if (next != null) activateTab(next)
+        }
+        tab.appendChild(close)
+        tab.onclick = () => { activateTab(id); showSftpView() }
         tabsEl.appendChild(tab)
         tabs.set(id, tab)
       }
@@ -271,10 +308,13 @@
             caret.style.visibility = n.type==='folder' ? 'visible' : 'hidden'
             row.appendChild(caret)
             const icon = document.createElement('span')
-            icon.className = 'icon'
+            const isSftp = (n.session?.type||'').toUpperCase() === 'SFTP'
+            icon.className = 'icon' + (isSftp ? ' sftp' : '')
             icon.innerHTML = n.type === 'folder'
               ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4l2 2h8a2 2 0 012 2v1H4V6a2 2 0 012-2h4zm12 6v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8h18z"/></svg>'
-              : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18a2 2 0 012 2v10a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2zm3 3v2h12V8H6zm0 4v2h8v-2H6z"/></svg>'
+              : (isSftp
+                ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h16v2H4v-2zm0 4h10v2H4v-2z"/></svg>'
+                : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18a2 2 0 012 2v10a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2zm3 3v2h12V8H6zm0 4v2h8v-2H6z"/></svg>')
             row.appendChild(icon)
             const label = document.createElement('div')
             label.className = 'label'
@@ -298,8 +338,12 @@
                     // Open SFTP view and connect
                     const cfg = Object.assign({}, s, { id })
                     await window.api.sftpConnect(cfg)
+                    // Create SFTP tab (visual consistency)
+                    createSftpTab(id, `${s.type || 'SFTP'} ${s.name||s.host} (${s.username})`)
+                    activateTab(id)
                     showSftpView()
-                    await navigateTo('/')
+                    await initSftpSplitIfNeeded(id)
+                    await navigateRemote('/')
                   } else {
                     const title = `${s.type || 'SSH'} ${s.name||s.host} (${s.username})`
                     if (!terminals.has(id)) {
@@ -441,6 +485,21 @@
           await window.api.sessionsSaveTree(sessionTree)
           renderTree()
         })
+        add('Edit…', async () => {
+          if (!targetNode) return
+          const present = targetNode.type==='session' ? (targetNode.session || {}) : { name: targetNode.name }
+          const res = await window.api.openSessionWindowPreset((present.type||'SSH'), present)
+          const s = res && res.session
+          if (!s) return
+          if (targetNode.type==='session') {
+            targetNode.session = s
+            targetNode.name = `${s.name||s.host} (${s.username})`
+          } else if (targetNode.type==='folder') {
+            targetNode.name = s.name || targetNode.name
+          }
+          await window.api.sessionsSaveTree(sessionTree)
+          renderTree()
+        })
         if (targetNode) {
           add('Delete…', async () => {
             if (!confirm('Delete selected item?')) return
@@ -465,6 +524,21 @@
           if (!confirm('Delete selected item?')) return
           removeNodeById(selectedId)
           selectedId = null
+          await window.api.sessionsSaveTree(sessionTree)
+          renderTree()
+        }
+        if (e.key === 'F2' && selectedId) {
+          const info = findNodeById(sessionTree, selectedId, null)
+          if (!info) return
+          const isSession = info.node.type === 'session'
+          const currentName = isSession ? (info.node.name || info.node.session?.name || '') : (info.node.name || '')
+          const newName = await showInputModal('Rename', 'New name', currentName)
+          if (!newName) return
+          if (isSession) {
+            info.node.name = newName
+          } else {
+            info.node.name = newName
+          }
           await window.api.sessionsSaveTree(sessionTree)
           renderTree()
         }
@@ -521,29 +595,35 @@
 
 
       // ===== SFTP UI =====
-      const sftpListEl = document.getElementById('sftp-list')
-      const sftpPathEl = document.getElementById('sftp-path')
-      const sftpUpBtn = document.getElementById('sftp-up')
-      const sftpRefreshBtn = document.getElementById('sftp-refresh')
-      const sftpConnectBtn = document.getElementById('sftp-connect')
+      // Split refs
+      const sftpLocalListEl = document.getElementById('sftp-local-list')
+      const sftpLocalPathEl = document.getElementById('sftp-local-path')
+      const sftpLocalUpBtn = document.getElementById('sftp-local-up')
+      const sftpLocalRefreshBtn = document.getElementById('sftp-local-refresh')
 
-      function renderSftpList(items) {
-        sftpListEl.innerHTML = ''
+      const sftpRemoteListEl = document.getElementById('sftp-remote-list')
+      const sftpRemotePathEl = document.getElementById('sftp-remote-path')
+      const sftpRemoteUpBtn = document.getElementById('sftp-remote-up')
+      const sftpRemoteRefreshBtn = document.getElementById('sftp-remote-refresh')
+      const sftpRemoteConnectBtn = document.getElementById('sftp-remote-connect')
+
+      function renderListInto(el, basePath, items, onEnterDir) {
+        el.innerHTML = ''
         const rows = document.createDocumentFragment()
         const upRow = document.createElement('div')
         upRow.className = 'sftp-row'
         upRow.innerHTML = '<span class="icon"><svg viewBox="0 0 24 24"><path d="M12 5l6 6h-4v6h-4v-6H6l6-6z"/></svg></span><div class="sftp-name">..</div><div class="sftp-type"></div>'
-        upRow.onclick = () => goUp()
+        upRow.onclick = () => onEnterDir(dirname(basePath))
         rows.appendChild(upRow)
         for (const it of items || []) {
           const row = document.createElement('div')
           row.className = 'sftp-row'
           const isDir = (it.type === 'd' || it.type === 'directory' || it.type === 'DIR')
           row.innerHTML = `${isDir ? '<span class="icon"><svg viewBox=\"0 0 24 24\"><path d=\"M10 4l2 2h8a2 2 0 012 2v1H4V6a2 2 0 012-2h4zm12 6v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8h18z\"/></svg></span>' : '<span class=\"icon\"><svg viewBox=\"0 0 24 24\"><path d=\"M4 3h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2zm3 4v2h10V7H7zm0 4v2h6v-2H7z\"/></svg></span>'}<div class="sftp-name" title="${it.name}">${it.name}</div><div class="sftp-type">${isDir?'dir':'file'}</div>`
-          row.onclick = () => { if (isDir) navigateTo(joinPath(sftpPathEl.value, it.name)); }
+          row.onclick = () => { if (isDir) onEnterDir(joinPath(basePath, it.name)); }
           rows.appendChild(row)
         }
-        sftpListEl.appendChild(rows)
+        el.appendChild(rows)
       }
 
       function joinPath(a, b) {
@@ -558,39 +638,52 @@
         return out ? (out.startsWith('/') ? out : '/' + out) : '/'
       }
 
-      async function listPath(p) {
-        try {
-          const list = await window.api.sftpList(p)
-          renderSftpList(list)
-        } catch (e) {
-          alert('SFTP list error: ' + (e?.message||e))
-        }
+      async function listRemote(p) {
+        const list = await window.api.sftpList(p)
+        renderListInto(sftpRemoteListEl, p, list, navigateRemote)
       }
-      async function navigateTo(p) {
-        sftpPathEl.value = p
-        await listPath(p)
+      async function navigateRemote(p) {
+        sftpRemotePathEl.value = p
+        try { await listRemote(p) } catch (e) { alert('SFTP list error: ' + (e?.message||e)) }
       }
-      function goUp() {
-        const up = dirname(sftpPathEl.value)
-        navigateTo(up)
+      async function listLocal(p) {
+        const list = await window.api.localList(p)
+        renderListInto(sftpLocalListEl, p, list, navigateLocal)
+      }
+      async function navigateLocal(p) {
+        sftpLocalPathEl.value = p
+        try { await listLocal(p) } catch (e) { alert('Local list error: ' + (e?.message||e)) }
       }
 
-      sftpRefreshBtn.onclick = () => navigateTo(sftpPathEl.value)
-      sftpUpBtn.onclick = () => goUp()
-      sftpPathEl.addEventListener('keydown', (e) => { if (e.key==='Enter') navigateTo(sftpPathEl.value) })
-      sftpConnectBtn.onclick = async () => {
+      async function initSftpSplitIfNeeded(id) {
+        // Initialize local path to home directory once
+        if (!sftpLocalPathEl.dataset.ready) {
+          const home = await window.api.getHome().catch(() => '/')
+          await navigateLocal(home || '/')
+          sftpLocalPathEl.dataset.ready = '1'
+        }
+        // Remote path default root
+        await navigateRemote('/')
+      }
+
+      sftpRemoteRefreshBtn.onclick = () => navigateRemote(sftpRemotePathEl.value)
+      sftpRemoteUpBtn.onclick = () => navigateRemote(dirname(sftpRemotePathEl.value))
+      sftpRemotePathEl.addEventListener('keydown', (e) => { if (e.key==='Enter') navigateRemote(sftpRemotePathEl.value) })
+      sftpRemoteConnectBtn.onclick = async () => {
         try {
-          // Attempt to connect using the currently selected session in the tree
           const selInfo = selectedId ? findNodeById(sessionTree, selectedId, null) : null
           const sess = selInfo && selInfo.node && selInfo.node.type==='session' ? selInfo.node.session : null
           if (!sess) { alert('Select a session in the left tree first.'); return }
           const cfg = Object.assign({}, sess, { id: selInfo.node.id })
           await window.api.sftpConnect(cfg)
-          await navigateTo('/')
-        } catch (e) {
-          alert('SFTP connect error: ' + (e?.message||e))
-        }
+          await initSftpSplitIfNeeded(selInfo.node.id)
+          await navigateRemote('/')
+        } catch (e) { alert('SFTP connect error: ' + (e?.message||e)) }
       }
+
+      sftpLocalRefreshBtn.onclick = () => navigateLocal(sftpLocalPathEl.value)
+      sftpLocalUpBtn.onclick = () => navigateLocal(dirname(sftpLocalPathEl.value))
+      sftpLocalPathEl.addEventListener('keydown', (e) => { if (e.key==='Enter') navigateLocal(sftpLocalPathEl.value) })
     </script>
   </body>
   </html>

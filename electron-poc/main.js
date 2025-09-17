@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
-import { readFile, writeFile } from 'fs/promises'
+import { readFile, writeFile, readdir, stat } from 'fs/promises'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { Client as SSHClient } from 'ssh2'
@@ -192,6 +192,7 @@ ipcMain.handle('ssh-disconnect', async (e, id) => {
 // Open separate window to create a session
 ipcMain.handle('open-session-window', async (evt, payload) => {
   const type = payload && payload.type ? payload.type : 'SSH'
+  const preset = payload && payload.preset ? payload.preset : null
   return new Promise(async (resolve) => {
     const child = new BrowserWindow({
       width: 480,
@@ -210,7 +211,48 @@ ipcMain.handle('open-session-window', async (evt, payload) => {
       resolve({ ok: true, session: sess })
     }
     ipcMain.once('session-form-submit', handler)
-    await child.loadFile('session_form.html', { query: { type } })
+    const query = preset ? { type, preset: encodeURIComponent(JSON.stringify(preset)) } : { type }
+    await child.loadFile('session_form.html', { query })
     child.on('closed', () => { if (!resolved) resolve({ ok: false }) })
   })
+})
+
+// Local filesystem listing for SFTP split view (left column)
+ipcMain.handle('local-list', async (evt, localPath) => {
+  try {
+    const dirPath = localPath && typeof localPath === 'string' && localPath.length ? localPath : '/'
+    const entries = await readdir(dirPath, { withFileTypes: true })
+    const mapped = await Promise.all(entries.map(async (ent) => {
+      const name = ent.name
+      let type = 'file'
+      try {
+        if (ent.isDirectory()) type = 'd'
+        else if (ent.isSymbolicLink()) {
+          const full = path.join(dirPath, name)
+          const st = await stat(full).catch(() => null)
+          type = st && st.isDirectory() ? 'd' : 'file'
+        }
+      } catch {}
+      return { name, type }
+    }))
+    // Sort: directories first, then files, by name
+    mapped.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'd' ? -1 : 1))
+    return mapped
+  } catch (e) {
+    throw new Error('Local list error: ' + String(e))
+  }
+})
+
+ipcMain.handle('get-home', async () => {
+  try { return app.getPath('home') } catch { return '/' }
+})
+
+ipcMain.handle('sftp-disconnect', async (evt, id) => {
+  const rec = connections.get(id)
+  if (rec) {
+    try { rec.sftp?.end?.() || rec.sftp?.close?.() } catch {}
+    rec.sftp = undefined
+    connections.set(id, rec)
+  }
+  return { ok: true }
 })

@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('api', {
   sessionsDelete: (idx) => ipcRenderer.invoke('sessions-delete', idx),
   sessionsSaveTree: (tree) => ipcRenderer.invoke('sessions-save', tree),
   openSessionWindow: (type='SSH') => ipcRenderer.invoke('open-session-window', { type }),
+  openSessionWindowPreset: (type='SSH', preset=null) => ipcRenderer.invoke('open-session-window', { type, preset }),
   onSessionsUpdated: (cb) => ipcRenderer.on('sessions-updated', cb),
   sessionFormSubmit: (sess) => ipcRenderer.send('session-form-submit', sess),
 
@@ -23,5 +24,10 @@ contextBridge.exposeInMainWorld('api', {
   sshOpenPtyId: (id) => ipcRenderer.invoke('ssh-open-pty-id', { id }),
   sshSendId: (id, data) => ipcRenderer.send('ssh-send', { id, data }),
   sshResizeId: (id, cols, rows) => ipcRenderer.send('ssh-resize', { id, cols, rows })
+  ,
+  // Local FS + SFTP helpers
+  localList: (localPath) => ipcRenderer.invoke('local-list', localPath),
+  getHome: () => ipcRenderer.invoke('get-home'),
+  sftpDisconnect: (id) => ipcRenderer.invoke('sftp-disconnect', id)
 })
 
