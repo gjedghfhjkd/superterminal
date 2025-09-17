@@ -24,6 +24,9 @@
       .ctx-item:hover { background:#1a1f2d; }
       .drop-target { outline:1px dashed #3a4160; background:#141a29; }
       #right { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
+      #topnav { height:38px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:center; gap:6px; padding:0 8px; box-sizing:border-box; }
+      .top-tab { cursor:pointer; padding:6px 10px; border-radius:8px; border:1px solid transparent; color:#cfd3dc; }
+      .top-tab.active { background:#1a1f2d; border-color:#2a3040; color:#ffffff; }
       #tabs { height:36px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:flex-end; gap:6px; padding:0 8px; box-sizing:border-box; }
       .tab { cursor:pointer; padding:6px 10px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
       .tab.active { background:#0f111a; color:#ffffff; }
@@ -31,6 +34,19 @@
       #panes { position:relative; flex:1; overflow:hidden; background:#0f111a; min-height:0; }
       .pane { position:absolute; inset:0; display:none; }
       .pane.active { display:block; }
+
+      /* SFTP panel */
+      #sftp-panel { position:relative; flex:1; display:none; background:#0f111a; color:#cfd3dc; }
+      #sftp-controls { display:flex; gap:8px; padding:8px; border-bottom:1px solid #1f2330; align-items:center; }
+      #sftp-controls .input { width:420px; }
+      #sftp-list { position:absolute; top:48px; bottom:0; left:0; right:0; overflow:auto; padding:8px; }
+      .sftp-row { display:flex; gap:10px; padding:6px 8px; border-radius:6px; cursor:default; align-items:center; }
+      .sftp-row:hover { background:#121623; }
+      .sftp-name { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .sftp-type { width:80px; text-transform:uppercase; color:#8b90a0; font-size:12px; text-align:right; }
+
+      /* Tunneling placeholder */
+      #tun-panel { position:relative; flex:1; display:none; background:#0f111a; color:#cfd3dc; padding:12px; }
       /* Ensure xterm fully occupies the pane without causing internal scroll splits */
       .pane > .xterm { width:100% !important; height:100% !important; }
       .pane > .xterm .xterm-viewport { width:100% !important; height:100% !important; }
@@ -57,9 +73,26 @@
       <div id="tree" class="tree"></div>
       <div id="ctx" class="ctx-menu" style="display:none"></div>
     </div>
-    <div id="right">
+      <div id="right">
+      <div id="topnav">
+        <div id="tab-ssh" class="top-tab active">SSH</div>
+        <div id="tab-sftp" class="top-tab">SFTP</div>
+        <div id="tab-tun" class="top-tab">Tunneling</div>
+      </div>
       <div id="tabs"></div>
       <div id="panes"></div>
+      <div id="sftp-panel">
+        <div id="sftp-controls">
+          <button id="sftp-connect" class="btn">Connect to selected</button>
+          <button id="sftp-up" class="btn">Up</button>
+          <input id="sftp-path" class="input" placeholder="/" value="/" />
+          <button id="sftp-refresh" class="btn">Refresh</button>
+        </div>
+        <div id="sftp-list"></div>
+      </div>
+      <div id="tun-panel">
+        <div style="opacity:.8">Tunneling view placeholder. Coming soon.</div>
+      </div>
     </div>
     <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
     <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
@@ -70,6 +103,7 @@
       const tabsEl = document.getElementById('tabs')
       let currentId = null
       let draggingId = null
+      let activeTopTab = 'ssh'
 
       function createTerminalFor(id, title) {
         const pane = document.createElement('div')
@@ -115,6 +149,28 @@
         const rec = terminals.get(id)
         try { rec?.term?.focus() } catch {}
       }
+
+      // Top navigation switching
+      function setTopTab(tab) {
+        activeTopTab = tab
+        document.getElementById('tab-ssh').classList.toggle('active', tab==='ssh')
+        document.getElementById('tab-sftp').classList.toggle('active', tab==='sftp')
+        document.getElementById('tab-tun').classList.toggle('active', tab==='tun')
+        const panes = document.getElementById('panes')
+        const tabsBar = document.getElementById('tabs')
+        const sftpPanel = document.getElementById('sftp-panel')
+        const tunPanel = document.getElementById('tun-panel')
+        const sshVisible = tab==='ssh'
+        panes.style.display = sshVisible ? 'block' : 'none'
+        tabsBar.style.display = sshVisible ? 'flex' : 'none'
+        sftpPanel.style.display = tab==='sftp' ? 'block' : 'none'
+        tunPanel.style.display = tab==='tun' ? 'block' : 'none'
+        if (sshVisible) resize()
+      }
+      document.getElementById('tab-ssh').onclick = () => setTopTab('ssh')
+      document.getElementById('tab-sftp').onclick = () => setTopTab('sftp')
+      document.getElementById('tab-tun').onclick = () => setTopTab('tun')
+      setTopTab('ssh')
 
       window.api.sshOnData(payload => {
         try {
@@ -428,7 +484,77 @@
       window.api.onSessionsUpdated(() => refreshSessions())
 
 
-      // Removed inline auth/SFTP UI
+      // ===== SFTP UI =====
+      const sftpListEl = document.getElementById('sftp-list')
+      const sftpPathEl = document.getElementById('sftp-path')
+      const sftpUpBtn = document.getElementById('sftp-up')
+      const sftpRefreshBtn = document.getElementById('sftp-refresh')
+      const sftpConnectBtn = document.getElementById('sftp-connect')
+
+      function renderSftpList(items) {
+        sftpListEl.innerHTML = ''
+        const rows = document.createDocumentFragment()
+        const upRow = document.createElement('div')
+        upRow.className = 'sftp-row'
+        upRow.innerHTML = '<span class="icon"><svg viewBox="0 0 24 24"><path d="M12 5l6 6h-4v6h-4v-6H6l6-6z"/></svg></span><div class="sftp-name">..</div><div class="sftp-type"></div>'
+        upRow.onclick = () => goUp()
+        rows.appendChild(upRow)
+        for (const it of items || []) {
+          const row = document.createElement('div')
+          row.className = 'sftp-row'
+          const isDir = (it.type === 'd' || it.type === 'directory' || it.type === 'DIR')
+          row.innerHTML = `${isDir ? '<span class="icon"><svg viewBox=\"0 0 24 24\"><path d=\"M10 4l2 2h8a2 2 0 012 2v1H4V6a2 2 0 012-2h4zm12 6v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8h18z\"/></svg></span>' : '<span class=\"icon\"><svg viewBox=\"0 0 24 24\"><path d=\"M4 3h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2zm3 4v2h10V7H7zm0 4v2h6v-2H7z\"/></svg></span>'}<div class="sftp-name" title="${it.name}">${it.name}</div><div class="sftp-type">${isDir?'dir':'file'}</div>`
+          row.onclick = () => { if (isDir) navigateTo(joinPath(sftpPathEl.value, it.name)); }
+          rows.appendChild(row)
+        }
+        sftpListEl.appendChild(rows)
+      }
+
+      function joinPath(a, b) {
+        if (!a || a === '/') return '/' + (b||'').replace(/^\/+/, '')
+        return (a.replace(/\/+$/,'') + '/' + (b||'').replace(/^\/+/, ''))
+      }
+      function dirname(p) {
+        if (!p || p === '/') return '/'
+        const parts = p.replace(/\/+$/,'').split('/')
+        parts.pop()
+        const out = parts.join('/')
+        return out ? (out.startsWith('/') ? out : '/' + out) : '/'
+      }
+
+      async function listPath(p) {
+        try {
+          const list = await window.api.sftpList(p)
+          renderSftpList(list)
+        } catch (e) {
+          alert('SFTP list error: ' + (e?.message||e))
+        }
+      }
+      async function navigateTo(p) {
+        sftpPathEl.value = p
+        await listPath(p)
+      }
+      function goUp() {
+        const up = dirname(sftpPathEl.value)
+        navigateTo(up)
+      }
+
+      sftpRefreshBtn.onclick = () => navigateTo(sftpPathEl.value)
+      sftpUpBtn.onclick = () => goUp()
+      sftpPathEl.addEventListener('keydown', (e) => { if (e.key==='Enter') navigateTo(sftpPathEl.value) })
+      sftpConnectBtn.onclick = async () => {
+        try {
+          // Attempt to connect using the currently selected session in the tree
+          const selInfo = selectedId ? findNodeById(sessionTree, selectedId, null) : null
+          const sess = selInfo && selInfo.node && selInfo.node.type==='session' ? selInfo.node.session : null
+          if (!sess) { alert('Select a session in the left tree first.'); return }
+          const cfg = Object.assign({}, sess, { id: selInfo.node.id })
+          await window.api.sftpConnect(cfg)
+          await navigateTo('/')
+        } catch (e) {
+          alert('SFTP connect error: ' + (e?.message||e))
+        }
+      }
     </script>
   </body>
   </html>
