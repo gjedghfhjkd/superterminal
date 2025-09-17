@@ -170,10 +170,25 @@
         close.onclick = async (e) => {
           e.stopPropagation()
           try { await window.api.sftpDisconnect?.(id) } catch {}
+          // If there is a terminal for the same session id, dispose it too
+          if (terminals.has(id)) {
+            const rec = terminals.get(id)
+            try { rec.term.dispose() } catch {}
+            try { rec.el.remove() } catch {}
+            terminals.delete(id)
+            const tTab = tabs.get(id); if (tTab) { tTab.remove(); tabs.delete(id) }
+          }
           const t = tabs.get(id); if (t) { t.remove(); tabs.delete(id) }
           // Activate another tab if any
           const next = [...tabs.keys()][0]
           if (next != null) activateTab(next)
+          else {
+            // No tabs left: hide both SSH panes and SFTP panel
+            document.getElementById('panes').style.display = 'none'
+            document.getElementById('tabs').style.display = 'flex'
+            document.getElementById('sftp-panel').style.display = 'none'
+            document.getElementById('tun-panel').style.display = 'none'
+          }
         }
         tab.appendChild(close)
         tab.onclick = () => { activateTab(id); showSftpView() }
@@ -667,7 +682,8 @@
           row.className = 'sftp-row'
           const isDir = (it.type === 'd' || it.type === 'directory' || it.type === 'DIR')
           row.innerHTML = `${isDir ? '<span class="icon"><svg viewBox=\"0 0 24 24\"><path d=\"M10 4l2 2h8a2 2 0 012 2v1H4V6a2 2 0 012-2h4zm12 6v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8h18z\"/></svg></span>' : '<span class=\"icon\"><svg viewBox=\"0 0 24 24\"><path d=\"M4 3h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2zm3 4v2h10V7H7zm0 4v2h6v-2H7z\"/></svg></span>'}<div class=\"sftp-name\" title=\"${it.name}\">${it.name}</div><div class=\"sftp-type\">${isDir?'dir':'file'}</div>`
-          row.onclick = () => { if (isDir) onEnterDir(joinPath(basePath, it.name)); }
+          // Navigate by double click
+          row.ondblclick = () => { if (isDir) onEnterDir(joinPath(basePath, it.name)); }
           // Context menu
           row.oncontextmenu = (e) => { e.preventDefault(); openSftpCtxMenu(e.clientX, e.clientY, { basePath, name: it.name, isDir, ownerEl: el }) }
           // Drag support
