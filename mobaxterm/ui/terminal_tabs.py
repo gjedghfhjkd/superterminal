@@ -92,6 +92,12 @@ class TerminalTab(QWidget):
         self._mouse_press_pos = None
         self._dragging_selection = False
         self._double_click_active = False
+
+        # Throttled rendering for pyte to keep full-screen apps (vim) smooth
+        self._render_pending = False
+        self._render_timer = QTimer(self)
+        self._render_timer.setSingleShot(True)
+        self._render_timer.timeout.connect(self._do_render_pyte)
         
         # Only the terminal area is shown; input happens inline
         layout.addWidget(self.terminal_output)
@@ -132,104 +138,16 @@ class TerminalTab(QWidget):
         self.terminal_output.setReadOnly(True)
         
     def append_output(self, text):
-        # Preferred path: use pyte when available for correct terminal emulation
+        # Preferred path: use pyte when available; throttle rendering to keep vim responsive
         if self._pyte_stream is not None:
             try:
                 self._pyte_stream.feed(text)
-                # Render entire screen to the QTextEdit
-                # Ensure number of lines equals screen height for consistent positioning
-                lines = list(self._pyte_screen.display)
-                height = getattr(self._pyte_screen, 'lines', len(lines))
-                if len(lines) < height:
-                    lines += [""] * (height - len(lines))
-                # Render buffer with ANSI colors via pyte attributes
-                content = "\n".join(lines)
-                # Cleanup tail: collapse excessive blank lines and duplicate prompts
-                try:
-                    def _cleanup_tail(text: str) -> str:
-                        tail_lines = text.split('\n')
-                        # Collapse trailing blanks to at most one
-                        while len(tail_lines) >= 3 and tail_lines[-1].strip() == '' and tail_lines[-2].strip() == '':
-                            tail_lines.pop()
-                        # Deduplicate duplicate prompts at the very end, allowing one optional blank between
-                        prompt_re = re.compile(r"(^.+@.+:.*[#$]\s*$|^\[[^\n]*\][#$]\s*$)")
-                        # Prompt prefix extractor: capture the prompt part without trailing spaces and without user input
-                        prompt_prefix_re = re.compile(r"^(?:(?P<p1>.+@.+:.*[#$])|(?P<p2>\[[^\n]*\][#$]))(?:\s.*)?$")
-                        # Find last prompt line index
-                        def find_last_prompt_index(lines):
-                            for idx in range(len(lines) - 1, -1, -1):
-                                if prompt_re.search(lines[idx] or ''):
-                                    return idx
-                            return -1
-                        last_idx = find_last_prompt_index(tail_lines)
-                        if last_idx >= 0:
-                            # Skip optional trailing blanks after last prompt
-                            prev_idx = last_idx - 1
-                            if prev_idx >= 0 and tail_lines[prev_idx].strip() == '':
-                                prev_idx -= 1
-                            # If another prompt is just before (ignoring a blank), and equal ignoring trailing spaces, drop the earlier one
-                            if prev_idx >= 0 and prompt_re.search(tail_lines[prev_idx] or ''):
-                                if (tail_lines[prev_idx].rstrip() == tail_lines[last_idx].rstrip()):
-                                    tail_lines.pop(prev_idx)
-                        # If the last two non-empty lines are (1) prompt-only and (2) same prompt with typed text, drop the prompt-only line
-                        # Find last non-empty index
-                        j = len(tail_lines) - 1
-                        while j >= 0 and tail_lines[j].strip() == '':
-                            j -= 1
-                        if j >= 0:
-                            i = j - 1
-                            while i >= 0 and tail_lines[i].strip() == '':
-                                i -= 1
-                            if i >= 0:
-                                m_last = prompt_prefix_re.match(tail_lines[j] or '')
-                                m_prev = prompt_prefix_re.match(tail_lines[i] or '')
-                                if m_last and m_prev:
-                                    last_prefix = (m_last.group('p1') or m_last.group('p2') or '').rstrip()
-                                    prev_prefix = (m_prev.group('p1') or m_prev.group('p2') or '').rstrip()
-                                    # Last line has more than just the prompt?
-                                    if last_prefix and prev_prefix and last_prefix == prev_prefix and tail_lines[j].rstrip() != prev_prefix:
-                                        # Remove previous prompt-only line
-                                        tail_lines.pop(i)
-                        # If content ends with a blank line after a prompt, drop that blank to keep caret on prompt
-                        if len(tail_lines) >= 2 and tail_lines[-1].strip() == '' and prompt_re.search(tail_lines[-2] or ''):
-                            tail_lines.pop()
-                        return '\n'.join(tail_lines)
-                    content = _cleanup_tail(content)
-                except Exception:
-                    pass
                 self._first_connect_cleanup = False
-                # Use rich rendering with QTextCharFormat based on pyte cell attributes
-                try:
-                    self._render_pyte_screen()
-                except Exception:
-                    # Fallback to plain text if rich render fails
-                    self.terminal_output.setPlainText(content)
-                # Compute caret by moving cursor to row/col (0-based)
-                # Use document blocks to avoid landing on an implicit trailing empty block
-                doc = self.terminal_output.document()
-                block_count = doc.blockCount()
-                # Desired row from emulator
-                desired_row = max(0, min(self._pyte_screen.cursor.y, block_count - 1))
-                block = doc.findBlockByNumber(desired_row)
-                # If target block is empty and there is a previous non-empty line (typical after prompt), move up one
-                if block.isValid() and not block.text() and desired_row > 0:
-                    prev_block = doc.findBlockByNumber(desired_row - 1)
-                    if prev_block.isValid() and prev_block.text():
-                        block = prev_block
-                        desired_row -= 1
-                line_text = block.text() if block.isValid() else ""
-                col0 = max(0, min(self._pyte_screen.cursor.x, len(line_text)))
-                cursor = self.terminal_output.textCursor()
-                # Place cursor at exact position within the chosen block
-                if block.isValid():
-                    cursor.setPosition(block.position() + col0)
-                else:
-                    cursor.movePosition(QTextCursor.End)
-                self.terminal_output.setTextCursor(cursor)
-                try:
-                    self._insertion_pos = cursor.position()
-                except Exception:
-                    pass
+                # Schedule a render shortly; coalesce bursts
+                if not self._render_pending:
+                    self._render_pending = True
+                    # ~30 FPS max
+                    self._render_timer.start(33)
                 return
             except Exception:
                 # Fallback to minimal logic below
@@ -731,6 +649,8 @@ class TerminalTab(QWidget):
     def _render_pyte_screen(self):
         if self._pyte_screen is None:
             return
+        # Clear pending flag
+        self._render_pending = False
         doc = self.terminal_output.document()
         cursor = self.terminal_output.textCursor()
         cursor.movePosition(QTextCursor.Start)
@@ -814,6 +734,22 @@ class TerminalTab(QWidget):
             flush_segment()
             if y < getattr(self._pyte_screen, 'lines', 0) - 1:
                 cursor.insertText('\n')
+        # Position caret to emulator cursor
+        try:
+            lines = doc.blockCount()
+            desired_row = max(0, min(self._pyte_screen.cursor.y, lines - 1))
+            block = doc.findBlockByNumber(desired_row)
+            line_text = block.text() if block.isValid() else ''
+            col0 = max(0, min(self._pyte_screen.cursor.x, len(line_text)))
+            c = self.terminal_output.textCursor()
+            if block.isValid():
+                c.setPosition(block.position() + col0)
+            else:
+                c.movePosition(QTextCursor.End)
+            self.terminal_output.setTextCursor(c)
+            self._insertion_pos = c.position()
+        except Exception:
+            pass
 
     def _strip_ansi(self, s: str) -> str:
         """Remove ANSI control sequences (CSI, OSC, etc.) so QTextEdit shows clean text."""
