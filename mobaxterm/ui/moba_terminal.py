@@ -152,6 +152,17 @@ class MobaTerminal(QWidget):
             if len(lines) < height:
                 lines += [""] * (height - len(lines))
         else:
+            # Drop leading blank rows (vim often positions prompt at bottom)
+            try:
+                first_idx = 0
+                for idx, ln in enumerate(lines):
+                    if (ln or '').strip():
+                        first_idx = idx
+                        break
+                lines = lines[first_idx:]
+            except Exception:
+                pass
+            # Trim trailing blanks
             while lines and not (lines[-1] or '').strip():
                 lines.pop()
         self.view.setPlainText("\n".join(lines))
