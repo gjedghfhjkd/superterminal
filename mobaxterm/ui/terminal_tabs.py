@@ -751,6 +751,12 @@ class TerminalTab(QWidget):
         except Exception:
             pass
 
+    def _do_render_pyte(self):
+        try:
+            self._render_pyte_screen()
+        except Exception:
+            pass
+
     def _strip_ansi(self, s: str) -> str:
         """Remove ANSI control sequences (CSI, OSC, etc.) so QTextEdit shows clean text."""
         # OSC sequences: ESC ] ... BEL or ESC \
