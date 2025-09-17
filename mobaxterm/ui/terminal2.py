@@ -72,6 +72,13 @@ class Terminal2(QWidget):
         except Exception:
             pass
 
+    # Compatibility with existing SSHThread wiring
+    def append_output(self, text: str):
+        try:
+            self.feed(text)
+        except Exception:
+            pass
+
     def _render(self):
         self._pending = False
         try:
