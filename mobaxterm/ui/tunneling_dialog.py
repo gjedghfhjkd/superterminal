@@ -110,11 +110,11 @@ class TunnelingDialog(QDialog):
 		actions_layout.setContentsMargins(0, 0, 0, 0)
 		actions_layout.setSpacing(6)
 
-		self.btn_start = QPushButton("Start Selected")
-		self.btn_stop = QPushButton("Stop Selected")
+		self.btn_start = QPushButton("▶ Start All")
+		self.btn_stop = QPushButton("⏹ Stop All")
 		self.btn_close = QPushButton("Close")
-		self.btn_start.clicked.connect(self._start_selected)
-		self.btn_stop.clicked.connect(self._stop_selected)
+		self.btn_start.clicked.connect(self._start_all)
+		self.btn_stop.clicked.connect(self._stop_all)
 		self.btn_close.clicked.connect(self.accept)
 
 		actions_layout.addWidget(self.btn_start)
@@ -311,13 +311,8 @@ class TunnelingDialog(QDialog):
 		except Exception:
 			pass
 
-	def _start_selected(self):
-		rows = self._selected_rows()
-		if not rows:
-			QMessageBox.information(self, "Tunneling", "Select at least one row")
-			return
-		# Start each selected forward via backend
-		for r in rows:
+	def _start_all(self):
+		for r in range(len(self._forwards)):
 			f = self._forwards[r]
 			try:
 				if f.get("status") == "running" and f.get("id"):
@@ -336,13 +331,8 @@ class TunnelingDialog(QDialog):
 				QMessageBox.warning(self, "Tunneling", f"Failed to start: {e}")
 		self._refresh_table()
 
-	def _stop_selected(self):
-		rows = self._selected_rows()
-		if not rows:
-			QMessageBox.information(self, "Tunneling", "Select at least one row")
-			return
-		# Stop each selected forward via backend
-		for r in rows:
+	def _stop_all(self):
+		for r in range(len(self._forwards)):
 			f = self._forwards[r]
 			fid = f.get("id")
 			if not fid:
