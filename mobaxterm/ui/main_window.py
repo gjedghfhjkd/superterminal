@@ -9,7 +9,7 @@ from PyQt5.QtGui import QTextCursor, QColor, QFont
 from .session_dialog import SessionDialog
 from .session_tree_widget import SessionTreeWidget
 from .terminal_tabs import TerminalTabs
-from .terminal2 import Terminal2
+from .moba_terminal import MobaTerminal
 from .terminal_js import TerminalJS
 from ..core.session_manager import SessionManager
 from ..core.ssh2 import SSH2
@@ -797,11 +797,7 @@ class MobaXtermClone(QMainWindow):
             # Создаем новую вкладку терминала
             # Choose terminal implementation via feature flag
             if getattr(session, 'use_terminal2', False):
-                # Prefer JS terminal if available for better full-screen app support
-                try:
-                    terminal_widget = TerminalJS()
-                except Exception:
-                    terminal_widget = Terminal2()
+                terminal_widget = MobaTerminal()
                 # Add as a tab with display name
                 display_name = getattr(session, 'name', None) or session.host
                 tab_index = self.terminal_tabs.addTab(terminal_widget, f"🖥️ {display_name}")
@@ -835,6 +831,9 @@ class MobaXtermClone(QMainWindow):
                     terminal_tab.set_key_sender(lambda data, t=ssh_thread: t.send_raw(data))
                 elif hasattr(terminal_tab, 'set_sender'):
                     terminal_tab.set_sender(lambda data, t=ssh_thread: t.send_raw(data))
+                # Wire resize for experimental terminal
+                if hasattr(terminal_tab, 'set_resizer'):
+                    terminal_tab.set_resizer(lambda cols, rows, t=ssh_thread: t.ssh_client.resize_pty(cols, rows))
             except Exception:
                 pass
 
