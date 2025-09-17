@@ -881,8 +881,7 @@
         if (!sessNode) { alert('Select a session in the left tree.'); return }
         const localPortStr = await showInputModal('Local port', 'Enter local port', '8080')
         if (!localPortStr) return
-        const remoteHost = await showInputModal('Remote host', 'Enter remote host', '127.0.0.1')
-        if (!remoteHost) return
+        const remoteHost = (sessNode.session && (sessNode.session.host || sessNode.session.hostname)) || '127.0.0.1'
         const remotePortStr = await showInputModal('Remote port', 'Enter remote port', '80')
         if (!remotePortStr) return
         const localPort = Number(localPortStr)
