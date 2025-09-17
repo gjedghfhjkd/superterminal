@@ -473,6 +473,14 @@ class TerminalTab(QWidget):
                 if self.local_echo_enabled:
                     self._write(text)
                 self._send(text)
+                # Keep caret visually at the right side of input for SSH sessions
+                try:
+                    if getattr(self.session, 'type', None) == 'SSH':
+                        cursor = self.terminal_output.textCursor()
+                        cursor.movePosition(QTextCursor.End)
+                        self.terminal_output.setTextCursor(cursor)
+                except Exception:
+                    pass
                 return True
         return super().eventFilter(obj, event)
 
