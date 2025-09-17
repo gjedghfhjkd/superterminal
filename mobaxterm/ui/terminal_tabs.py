@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QTabWidget, QWidget, QVBoxLayout, QTextEdit, 
-                             QHBoxLayout, QLineEdit, QLabel, QPushButton, QTabBar, QShortcut, QMenu, QAction)
+                             QHBoxLayout, QLineEdit, QLabel, QPushButton, QTabBar, QShortcut, QMenu, QAction, QApplication)
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QTextCursor, QKeySequence
 from .custom_tab_widget import CloseButton
@@ -91,6 +91,7 @@ class TerminalTab(QWidget):
         self._insertion_pos = 0
         self._mouse_press_pos = None
         self._dragging_selection = False
+        self._double_click_active = False
         
         # Only the terminal area is shown; input happens inline
         layout.addWidget(self.terminal_output)
@@ -405,11 +406,19 @@ class TerminalTab(QWidget):
                 if event.type() == QEvent.ContextMenu:
                     try:
                         menu = QMenu(self)
+                        act_paste = QAction("Paste", menu)
                         act_copy = QAction("Copy", menu)
                         act_select_all = QAction("Select All", menu)
                         act_copy_all = QAction("Copy All", menu)
                         act_clear_sel = QAction("Clear Selection", menu)
+                        # Enable/disable actions
                         act_copy.setEnabled(self.terminal_output.textCursor().hasSelection())
+                        try:
+                            cb_text = QApplication.clipboard().text()
+                            act_paste.setEnabled(bool(cb_text))
+                        except Exception:
+                            act_paste.setEnabled(False)
+                        menu.addAction(act_paste)
                         menu.addAction(act_copy)
                         menu.addSeparator()
                         menu.addAction(act_select_all)
@@ -418,6 +427,16 @@ class TerminalTab(QWidget):
                         menu.addAction(act_clear_sel)
 
                         chosen = menu.exec_(event.globalPos())
+                        if chosen is act_paste:
+                            try:
+                                text = QApplication.clipboard().text()
+                                if text:
+                                    if self.local_echo_enabled:
+                                        self._write(text)
+                                    self._send(text)
+                            except Exception:
+                                pass
+                            return True
                         if chosen is act_copy:
                             self.terminal_output.copy()
                             # Restore insertion caret
@@ -455,8 +474,12 @@ class TerminalTab(QWidget):
                         pass
                     return True
 
-                # Track left-button press/move/release to differentiate click vs drag
+                # Track left-button press/move/release to differentiate click vs drag and handle double-click
                 try:
+                    if event.type() == QEvent.MouseButtonDblClick and event.button() == Qt.LeftButton:
+                        # Let Qt select the word on double-click; remember it's a double-click to avoid clearing on release
+                        self._double_click_active = True
+                        return False
                     if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
                         self._mouse_press_pos = event.pos()
                         self._dragging_selection = False
@@ -470,6 +493,11 @@ class TerminalTab(QWidget):
                     if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
                         # If it was a simple click (no drag), restore caret and consume
                         if not self._dragging_selection:
+                            if self._double_click_active:
+                                # Keep the word selection; do not clear selection or move caret
+                                self._double_click_active = False
+                                self._mouse_press_pos = None
+                                return False
                             try:
                                 c = self.terminal_output.textCursor()
                                 c.clearSelection()
