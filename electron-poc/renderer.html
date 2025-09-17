@@ -700,7 +700,9 @@
           const it = document.createElement('div'); it.className='ctx-item'; it.textContent=label; it.onmousedown=(e)=>{ e.preventDefault(); e.stopPropagation(); hideCtx(); handler() }; menu.appendChild(it)
         }
         const { basePath, name, pathName, isDir, ownerEl } = info
-        const fullPath = joinPath(basePath, (pathName || name))
+          const fullPath = (ownerEl && ownerEl.id === 'sftp-remote-list')
+            ? joinPath(basePath, (pathName || name))
+            : await window.api.pathJoin(basePath, (pathName || name))
         const isRemote = ownerEl && ownerEl.id === 'sftp-remote-list'
         add('Rename…', async () => {
           const newName = await showInputModal('Rename', 'New name', name)
@@ -710,7 +712,7 @@
             await window.api.sftpRename(id, fullPath, joinPath(basePath, newName))
             await navigateRemote(basePath)
           } else {
-            await window.api.localRename(fullPath, joinPath(basePath, newName))
+            await window.api.localRename(fullPath, await window.api.pathJoin(basePath, newName))
             await navigateLocal(basePath)
           }
         })
@@ -735,7 +737,7 @@
             await window.api.sftpMkdir(id, joinPath(targetDir, newName))
             await navigateRemote(targetDir)
           } else {
-            await window.api.localMkdir(joinPath(targetDir, newName))
+            await window.api.localMkdir(await window.api.pathJoin(targetDir, newName))
             await navigateLocal(targetDir)
           }
         })
@@ -771,10 +773,12 @@
       })
 
       function joinPath(a, b) {
-        if (!a || a === '/') return '/' + (b||'').replace(/^\/+/, '')
-        return (a.replace(/\/+$/,'') + '/' + (b||'').replace(/^\/+/, ''))
+        // Use main process to handle OS-specific separators for local paths only when called for local area
+        // For remote SFTP we keep POSIX join in navigateRemote
+        return (a && a.includes('\\')) ? null : ( (!a || a === '/') ? ('/' + (b||'').replace(/^\/+/, '')) : (a.replace(/\/+$/,'') + '/' + (b||'').replace(/^\/+/, '')) )
       }
       function dirname(p) {
+        if (p && p.includes('\\')) return null
         if (!p || p === '/') return '/'
         const parts = p.replace(/\/+$/,'').split('/')
         parts.pop()
@@ -816,8 +820,12 @@
       // connection is established on double-click of SFTP session in the tree
 
       sftpLocalRefreshBtn.onclick = () => navigateLocal(sftpLocalPathEl.value)
-      sftpLocalUpBtn.onclick = () => navigateLocal(dirname(sftpLocalPathEl.value))
-      sftpLocalPathEl.addEventListener('keydown', (e) => { if (e.key==='Enter') navigateLocal(sftpLocalPathEl.value) })
+      sftpLocalUpBtn.onclick = async () => {
+        const p = sftpLocalPathEl.value
+        const up = await window.api.pathDirname(p)
+        await navigateLocal(up)
+      }
+      sftpLocalPathEl.addEventListener('keydown', async (e) => { if (e.key==='Enter') { await navigateLocal(sftpLocalPathEl.value) } })
     </script>
   </body>
   </html>

@@ -39,6 +39,9 @@ contextBridge.exposeInMainWorld('api', {
   localRename: (from, to) => ipcRenderer.invoke('local-rename', { from, to }),
   localMkdir: (localPath) => ipcRenderer.invoke('local-mkdir', { path: localPath }),
   getHome: () => ipcRenderer.invoke('get-home'),
-  sftpDisconnect: (id) => ipcRenderer.invoke('sftp-disconnect', id)
+  sftpDisconnect: (id) => ipcRenderer.invoke('sftp-disconnect', id),
+  // OS-aware path helpers (local)
+  pathJoin: (a, b) => ipcRenderer.invoke('path-join', { a, b }),
+  pathDirname: (p) => ipcRenderer.invoke('path-dirname', { p })
 })
 

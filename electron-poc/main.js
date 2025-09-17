@@ -340,6 +340,25 @@ ipcMain.handle('get-home', async () => {
   try { return app.getPath('home') } catch { return '/' }
 })
 
+// OS-aware path helpers for renderer (local FS only)
+ipcMain.handle('path-join', async (evt, payload) => {
+  try {
+    const a = (payload && payload.a) || ''
+    const b = (payload && payload.b) || ''
+    return path.join(a, b)
+  } catch (e) {
+    return ''
+  }
+})
+ipcMain.handle('path-dirname', async (evt, payload) => {
+  try {
+    const p = (payload && payload.p) || ''
+    return path.dirname(p)
+  } catch (e) {
+    return ''
+  }
+})
+
 ipcMain.handle('sftp-disconnect', async (evt, id) => {
   const rec = connections.get(id)
   if (rec) {
