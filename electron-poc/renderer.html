@@ -7,8 +7,8 @@
     <style>
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       #left { width:320px; padding:12px; border-right:1px solid #ddd; box-sizing:border-box; }
-      #right { flex:1; }
-      #term { background:#0f111a; width:100%; height:100%; }
+      #right { flex:1; position:relative; overflow:hidden; }
+      #term { position:absolute; inset:0; background:#0f111a; }
       label { display:block; font-size:12px; margin-top:8px; }
       input, select { width:100%; box-sizing:border-box; }
       ul { list-style:none; padding:0; margin:0; height:180px; overflow:auto; border-top:1px solid #eee; }
