@@ -50,10 +50,9 @@
       /* Tunneling placeholder */
       #tun-panel { position:relative; flex:1; display:none; background:#0f111a; color:#cfd3dc; padding:12px; }
       #tun-controls { display:flex; gap:8px; margin-bottom:10px; align-items:center }
-      .wizard { display:flex; gap:8px; align-items:center }
-      .wizard .step { display:none; gap:8px; align-items:center }
-      .wizard .step.active { display:flex }
-      .wizard .input { width:120px }
+      .tun-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#2fbf71; margin-left:6px }
+      @keyframes pulse { 0% { opacity:.5; transform:scale(1) } 50% { opacity:1; transform:scale(1.3) } 100% { opacity:.5; transform:scale(1) } }
+      .tun-dot.active { animation:pulse 1.2s ease-in-out infinite }
       .icon-btn { background:transparent; border:1px solid #2a3040; border-radius:8px; padding:6px; cursor:pointer; color:#cfd3dc }
       .icon-btn:hover { background:#22283a }
       .spin { animation:spin 1s linear infinite }
@@ -124,23 +123,7 @@
       </div>
       <div id="tun-panel">
         <div id="tun-controls">
-          <div id="tun-wizard" class="wizard">
-            <div class="step active" data-step="1">
-              <span>Local port</span>
-              <input id="wiz-local-port" class="input" placeholder="8080" value="8080" />
-              <button id="wiz-next-1" class="btn">Next</button>
-            </div>
-            <div class="step" data-step="2">
-              <span>Remote port</span>
-              <input id="wiz-remote-port" class="input" placeholder="80" value="80" />
-              <button id="wiz-next-2" class="btn">Next</button>
-            </div>
-            <div class="step" data-step="3">
-              <span>Name (optional)</span>
-              <input id="wiz-name" class="input" placeholder="My tunnel" />
-              <button id="wiz-create" class="btn primary">Create</button>
-            </div>
-          </div>
+          <button id="tun-create" class="btn primary">Create Tunnel</button>
         </div>
         <div id="tun-list"></div>
       </div>
@@ -873,13 +856,7 @@
 
       // ===== Tunneling UI =====
       const tunListEl = document.getElementById('tun-list')
-      const wizardEl = document.getElementById('tun-wizard')
-      const wizLocalEl = document.getElementById('wiz-local-port')
-      const wizRemoteEl = document.getElementById('wiz-remote-port')
-      const wizNameEl = document.getElementById('wiz-name')
-      const wizNext1 = document.getElementById('wiz-next-1')
-      const wizNext2 = document.getElementById('wiz-next-2')
-      const wizCreate = document.getElementById('wiz-create')
+      const tunCreateBtn = document.getElementById('tun-create')
       let tunnels = [] // persisted list: { id, sessionId, name, localHost, localPort, remoteHost, remotePort, active }
 
       function renderTunnels() {
@@ -920,30 +897,63 @@
         }
       }
 
-      function setWizardStep(n) {
-        wizardEl.querySelectorAll('.step').forEach(s => s.classList.remove('active'))
-        const step = wizardEl.querySelector(`.step[data-step="${n}"]`)
-        if (step) step.classList.add('active')
-      }
+      tunCreateBtn.onclick = async () => {
+        // Modal wizard
+        const overlay = document.createElement('div'); overlay.className='modal-overlay'
+        const modal = document.createElement('div'); modal.className='modal'
+        const header = document.createElement('div'); header.className='modal-header'; header.textContent='Create Tunnel'
+        const body = document.createElement('div'); body.className='modal-body'
+        const step1 = document.createElement('div'); step1.style.display='flex'; step1.style.gap='8px'; step1.style.alignItems='center'
+        step1.innerHTML = '<span>Local port</span>'
+        const inLocal = document.createElement('input'); inLocal.className='input'; inLocal.placeholder='8080'; inLocal.value='8080'
+        step1.appendChild(inLocal)
+        const step2 = document.createElement('div'); step2.style.display='none'; step2.style.gap='8px'; step2.style.alignItems='center'
+        step2.innerHTML = '<span>Remote port</span>'
+        const inRemote = document.createElement('input'); inRemote.className='input'; inRemote.placeholder='80'; inRemote.value='80'
+        step2.appendChild(inRemote)
+        const step3 = document.createElement('div'); step3.style.display='none'; step3.style.gap='8px'; step3.style.alignItems='center'
+        step3.innerHTML = '<span>Name (optional)</span>'
+        const inName = document.createElement('input'); inName.className='input'; inName.placeholder='My tunnel'
+        step3.appendChild(inName)
+        body.appendChild(step1); body.appendChild(step2); body.appendChild(step3)
+        const actions = document.createElement('div'); actions.className='modal-actions'
+        const btnCancel = document.createElement('button'); btnCancel.className='btn'; btnCancel.textContent='Cancel'
+        const btnNext = document.createElement('button'); btnNext.className='btn'; btnNext.textContent='Next'
+        const btnCreate = document.createElement('button'); btnCreate.className='btn primary'; btnCreate.textContent='Create'; btnCreate.style.display='none'
+        actions.appendChild(btnCancel); actions.appendChild(btnNext); actions.appendChild(btnCreate)
+        modal.appendChild(header); modal.appendChild(body); modal.appendChild(actions); overlay.appendChild(modal); document.body.appendChild(overlay)
 
-      wizNext1.onclick = () => setWizardStep(2)
-      wizNext2.onclick = () => setWizardStep(3)
-      wizCreate.onclick = async () => {
+        let step = 1
+        function update() {
+          step1.style.display = step===1?'flex':'none'
+          step2.style.display = step===2?'flex':'none'
+          step3.style.display = step===3?'flex':'none'
+          btnNext.style.display = step<3?'':'none'
+          btnCreate.style.display = step===3?'':'none'
+        }
+        update()
+
+        function close() { try { document.body.removeChild(overlay) } catch {} }
+        btnCancel.onclick = close
+        btnNext.onclick = () => { step = Math.min(3, step+1); update() }
+
+        btnCreate.onclick = async () => {
         // Use selected session
         const selInfo = selectedId ? findNodeById(sessionTree, selectedId, null) : null
         const sessNode = selInfo && selInfo.node && selInfo.node.type==='session' ? selInfo.node : null
         if (!sessNode) { alert('Select a session in the left tree.'); return }
         const remoteHost = (sessNode.session && (sessNode.session.host || sessNode.session.hostname)) || '127.0.0.1'
-        const localPort = Number(wizLocalEl.value || '0')
-        const remotePort = Number(wizRemoteEl.value || '0')
+        const localPort = Number(inLocal.value || '0')
+        const remotePort = Number(inRemote.value || '0')
         if (!localPort || !remotePort) { alert('Ports are required'); return }
-        const name = (wizNameEl.value || '').trim()
+        const name = (inName.value || '').trim()
         // Add tunnel inactive by default
         const entry = { id: genId('tun'), sessionId: sessNode.session.id || sessNode.id, name, localHost:'127.0.0.1', localPort, remoteHost, remotePort, active:false }
         tunnels.push(entry)
         await window.api.tunnelsSave(tunnels)
         renderTunnels()
-        setWizardStep(1)
+          close()
+        }
       }
 
       // Load persisted tunnels
