@@ -872,11 +872,13 @@
           startBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>'
           const stopBtn = document.createElement('button'); stopBtn.className='icon-btn'; stopBtn.title='Stop'
           stopBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 6h12v12H6z"/></svg>'
+          const delBtn = document.createElement('button'); delBtn.className='icon-btn'; delBtn.title='Delete'
+          delBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 7h12l-1 12H7L6 7zm3-3h6l1 2H8l1-2z"/></svg>'
           if (t.active) startBtn.style.opacity = '0.4'; else stopBtn.style.opacity = '0.4'
           startBtn.onclick = async () => {
             if (t.active) return
             try {
-              await window.api.tunnelStart(t.sessionId, t.localHost||'127.0.0.1', t.localPort, t.remoteHost, t.remotePort)
+              await window.api.tunnelStart(t.sessionId, t.localHost||'127.0.0.1', t.localPort, t.remoteHost||'127.0.0.1', t.remotePort)
               t.active = true
               await window.api.tunnelsSave(tunnels)
               renderTunnels()
@@ -885,13 +887,22 @@
           stopBtn.onclick = async () => {
             if (!t.active) return
             try {
-              await window.api.tunnelStop(t.sessionId, t.localPort)
+              await window.api.tunnelStop(t.sessionId, t.remoteHost||'127.0.0.1', t.remotePort)
               t.active = false
               await window.api.tunnelsSave(tunnels)
               renderTunnels()
             } catch (e) { alert('Stop error: ' + (e?.message||e)) }
           }
-          colC.appendChild(startBtn); colC.appendChild(stopBtn)
+          delBtn.onclick = async () => {
+            const ok = await showConfirmModal('Delete tunnel', `Delete ${t.name||''}?`, 'Delete', 'Cancel')
+            if (!ok) return
+            try { if (t.active) { await window.api.tunnelStop(t.sessionId, t.remoteHost||'127.0.0.1', t.remotePort) } } catch {}
+            const idx = tunnels.indexOf(t)
+            if (idx >= 0) tunnels.splice(idx,1)
+            await window.api.tunnelsSave(tunnels)
+            renderTunnels()
+          }
+          colC.appendChild(startBtn); colC.appendChild(stopBtn); colC.appendChild(delBtn)
           row.appendChild(colA); row.appendChild(colB); row.appendChild(colC)
           tunListEl.appendChild(row)
         }
@@ -941,7 +952,7 @@
         // Use selected session
         const selInfo = selectedId ? findNodeById(sessionTree, selectedId, null) : null
         const sessNode = selInfo && selInfo.node && selInfo.node.type==='session' ? selInfo.node : null
-        if (!sessNode) { alert('Select a session in the left tree.'); return }
+        if (!sessNode) { await showConfirmModal('Error', 'Select a session in the left tree first.', 'OK', ''); return }
         const remoteHost = (sessNode.session && (sessNode.session.host || sessNode.session.hostname)) || '127.0.0.1'
         const localPort = Number(inLocal.value || '0')
         const remotePort = Number(inRemote.value || '0')

@@ -43,7 +43,7 @@ contextBridge.exposeInMainWorld('api', {
   ,
   // Tunneling
   tunnelStart: (id, localHost, localPort, remoteHost, remotePort) => ipcRenderer.invoke('tunnel-start', { id, localHost, localPort, remoteHost, remotePort }),
-  tunnelStop: (id, localPort) => ipcRenderer.invoke('tunnel-stop', { id, localPort })
+  tunnelStop: (id, remoteHost, remotePort) => ipcRenderer.invoke('tunnel-stop', { id, remoteHost, remotePort })
   ,
   tunnelsLoad: () => ipcRenderer.invoke('tunnels-load'),
   tunnelsSave: (list) => ipcRenderer.invoke('tunnels-save', list)
