@@ -79,6 +79,10 @@ class TunnelingDialog(QDialog):
 
 		layout.addWidget(row)
 
+		# React to type changes to hide/show Target Host for Local/Remote
+		self.cmb_type.currentTextChanged.connect(self._on_type_changed)
+		self._on_type_changed(self.cmb_type.currentText())
+
 		# Actions
 		actions = QWidget()
 		actions_layout = QHBoxLayout(actions)
@@ -105,9 +109,13 @@ class TunnelingDialog(QDialog):
 			session = self.session_manager.get_session(idx)
 			bind_host = self.ed_bind_host.text().strip() or "127.0.0.1"
 			bind_port = int(self.ed_bind_port.text().strip())
-			target_host = self.ed_target_host.text().strip()
+			# For Local forwarding, use selected session host as target host
+			if forward_type == "Local":
+				target_host = getattr(session, 'host', '')
+			else:
+				target_host = self.ed_target_host.text().strip()
 			target_port = int(self.ed_target_port.text().strip())
-			if not target_host:
+			if forward_type == "Remote" and not target_host:
 				QMessageBox.warning(self, "Validation", "Target host is required")
 				return
 			if bind_port <= 0 or target_port <= 0:
@@ -125,6 +133,11 @@ class TunnelingDialog(QDialog):
 			self._refresh_table()
 		except ValueError:
 			QMessageBox.warning(self, "Validation", "Ports must be integers")
+
+	def _on_type_changed(self, text: str):
+		# Hide Target Host for Local tunnels; show for Remote
+		is_local = (text == "Local")
+		self.ed_target_host.setVisible(not is_local)
 
 	def _refresh_table(self):
 		self.table.setRowCount(len(self._forwards))
