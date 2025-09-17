@@ -4,8 +4,7 @@
   "main": "main.js",
   "type": "module",
   "scripts": {
-    "start": "electron .",
-    "postinstall": "electron-builder install-app-deps"
+    "start": "electron ."
   },
   "devDependencies": {
     "electron": "^30.0.0"
