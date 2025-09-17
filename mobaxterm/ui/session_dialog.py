@@ -307,6 +307,18 @@ class SessionDialog(QDialog):
         folder_view.setItemDelegate(SolidHighlightDelegate(parent=folder_view))
         self.folder_combo.setView(folder_view)
         
+        # Row 5: Terminal font size
+        font_label = QLabel("Font size:")
+        font_label.setMinimumWidth(100)
+        basic_layout.addWidget(font_label, 5, 0, Qt.AlignRight)
+
+        self.ssh_font_size_input = QSpinBox()
+        self.ssh_font_size_input.setRange(8, 48)
+        self.ssh_font_size_input.setValue(12)
+        self.ssh_font_size_input.setSuffix(" pt")
+        self.ssh_font_size_input.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        basic_layout.addWidget(self.ssh_font_size_input, 5, 1)
+
         layout.addWidget(basic_group)
         
         # Authentication group
@@ -660,6 +672,14 @@ class SessionDialog(QDialog):
                 index = self.folder_combo.findData(session.folder)
                 if index >= 0:
                     self.folder_combo.setCurrentIndex(index)
+            # Load terminal font size (fallback 12 if provided, else default 12)
+            try:
+                if getattr(session, 'terminal_font_size', None):
+                    self.ssh_font_size_input.setValue(int(session.terminal_font_size))
+                else:
+                    self.ssh_font_size_input.setValue(12)
+            except Exception:
+                self.ssh_font_size_input.setValue(12)
             
             # Load auth
             if hasattr(session, 'auth_method'):
@@ -700,6 +720,13 @@ class SessionDialog(QDialog):
             
             self.sftp_bookmark_check.setChecked(session.bookmark_settings)
         
+        # Ensure font size has a sensible default for any legacy sessions
+        if session.type == 'SSH' and getattr(session, 'terminal_font_size', None) is None:
+            try:
+                self.ssh_font_size_input.setValue(12)
+            except Exception:
+                pass
+        
     def get_session_data(self) -> Session:
         if self.current_tab == "SSH":
             session = Session(
@@ -716,6 +743,10 @@ class SessionDialog(QDialog):
             if self.auth_method_combo.currentData() == 'password':
                 session.password = self.auth_password_input.text()
             session.folder = self.folder_combo.currentData()
+            try:
+                session.terminal_font_size = int(self.ssh_font_size_input.value())
+            except Exception:
+                session.terminal_font_size = None
             return session
         else:
             session = Session(

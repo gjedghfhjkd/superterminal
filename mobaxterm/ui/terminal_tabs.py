@@ -39,9 +39,12 @@ class TerminalTab(QWidget):
         default_font = QFont('Consolas')
         default_font.setStyleHint(QFont.Monospace)
         default_font.setFixedPitch(True)
-        # Use a slightly smaller initial font for SSH sessions
+        # Use session-configured font size when available; else SSH=12, others=14
         try:
-            base_point_size = 12 if getattr(self.session, 'type', None) == 'SSH' else 14
+            if getattr(self.session, 'terminal_font_size', None):
+                base_point_size = int(self.session.terminal_font_size)
+            else:
+                base_point_size = 12 if getattr(self.session, 'type', None) == 'SSH' else 14
         except Exception:
             base_point_size = 14
         default_font.setPointSize(base_point_size)
