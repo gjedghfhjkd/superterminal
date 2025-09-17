@@ -141,7 +141,14 @@ class Terminal2(QWidget):
             lines = list(self._screen.display)
         except Exception:
             lines = []
-        # Do not pad with blank lines; render exactly available display lines
+        # Keep viewport stable in alt-screen; outside alt-screen trim trailing blanks
+        if self._using_alt:
+            height = getattr(self._screen, 'lines', len(lines))
+            if len(lines) < height:
+                lines += [""] * (height - len(lines))
+        else:
+            while lines and not (lines[-1] or '').strip():
+                lines.pop()
         self.view.setPlainText("\n".join(lines))
         # caret
         try:
