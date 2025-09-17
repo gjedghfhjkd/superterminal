@@ -159,8 +159,14 @@ ipcMain.handle('sftp-list', async (evt, remotePath) => {
   for (const rec of connections.values()) { if (rec.sftp) { first = rec.sftp; break } }
   if (!first) throw new Error('No SFTP connection')
   const list = await first.list(remotePath)
-  // Keep it simple and robust: treat symlinks as directories for navigation
-  return list.map(e => ({ name: e.name, size: e.size, type: (e.type === 'l' ? 'd' : (e.type === 'd' ? 'd' : 'file')) }))
+  // Normalize: ensure basename-only names and stable types
+  return list.map(e => {
+    const raw = String(e.name || '')
+    const normalized = raw.replace(/\\+/g, '/').split('/').filter(Boolean)
+    const base = normalized.length ? normalized[normalized.length - 1] : raw
+    const type = (e.type === 'd') ? 'd' : (e.type === 'l' ? 'd' : 'file')
+    return { name: base, displayName: base, pathName: base, size: e.size, type }
+  })
 })
 
 // Per-connection SFTP list
@@ -169,13 +175,13 @@ ipcMain.handle('sftp-list-id', async (evt, payload) => {
   const rec = connections.get(id)
   if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
   const list = await rec.sftp.list(remotePath)
-  return list.map(e => ({
-    name: e.name,
-    displayName: e.name,
-    pathName: e.name,
-    size: e.size,
-    type: (e.type === 'l' ? 'd' : (e.type === 'd' ? 'd' : 'file'))
-  }))
+  return list.map(e => {
+    const raw = String(e.name || '')
+    const normalized = raw.replace(/\\+/g, '/').split('/').filter(Boolean)
+    const base = normalized.length ? normalized[normalized.length - 1] : raw
+    const type = (e.type === 'd') ? 'd' : (e.type === 'l' ? 'd' : 'file')
+    return { name: base, displayName: base, pathName: base, size: e.size, type }
+  })
 })
 
 // SFTP file operations
