@@ -15,7 +15,8 @@
       .item.selected { background:#1a1f2d; outline:1px solid #2a3040; }
       .caret { width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:6px solid #8b90a0; transform:rotate(-90deg); transition:transform .15s ease; margin-right:2px; }
       .expanded > .caret { transform:rotate(0deg); }
-      .icon { width:14px; height:14px; display:inline-block; background:#2a3040; border-radius:3px; }
+      .icon { width:14px; height:14px; display:inline-block; }
+      .icon svg { width:14px; height:14px; display:block; fill:#8b90a0 }
       .label { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; }
       .children { margin-left:16px; }
       .ctx-menu { position:fixed; z-index:1000; background:#0f111a; border:1px solid #2a3040; border-radius:8px; padding:6px 0; min-width:180px; box-shadow:0 6px 18px rgba(0,0,0,.4); }
@@ -169,6 +170,8 @@
         root.addEventListener('dragover', (e) => { e.preventDefault() })
         root.addEventListener('drop', async (e) => {
           e.preventDefault()
+          // If dropping on an item subtree, let the item's handler manage it
+          if (e.target && e.target.closest && e.target.closest('.item')) return
           if (!draggingId) return
           await moveNode(draggingId, { id:'__root__', type:'folder' })
           draggingId = null
@@ -186,6 +189,9 @@
             row.appendChild(caret)
             const icon = document.createElement('span')
             icon.className = 'icon'
+            icon.innerHTML = n.type === 'folder'
+              ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4l2 2h8a2 2 0 012 2v1H4V6a2 2 0 012-2h4zm12 6v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8h18z"/></svg>'
+              : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18a2 2 0 012 2v10a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2zm3 3v2h12V8H6zm0 4v2h8v-2H6z"/></svg>'
             row.appendChild(icon)
             const label = document.createElement('div')
             label.className = 'label'
@@ -232,12 +238,12 @@
             row.addEventListener('dragend', () => { draggingId = null })
             row.addEventListener('dragover', (e) => {
               if (!draggingId || draggingId === n.id) return
-              e.preventDefault()
+              e.preventDefault(); e.stopPropagation()
               row.classList.add('drop-target')
             })
             row.addEventListener('dragleave', () => row.classList.remove('drop-target'))
             row.addEventListener('drop', async (e) => {
-              e.preventDefault(); row.classList.remove('drop-target')
+              e.preventDefault(); e.stopPropagation(); row.classList.remove('drop-target')
               const dragId = draggingId
               if (!dragId || dragId === n.id) return
               await moveNode(dragId, n)
