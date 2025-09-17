@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="https://unpkg.com/xterm@5.3.0/css/xterm.css" />
+    <link rel="stylesheet" href="https://unpkg.com/@xterm/xterm@5.3.0/css/xterm.css" />
     <style>
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       #left { width:320px; padding:12px; border-right:1px solid #ddd; box-sizing:border-box; }
@@ -42,7 +42,7 @@
     <div id="right">
       <div id="term"></div>
     </div>
-    <script src="https://unpkg.com/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://unpkg.com/@xterm/xterm@5.3.0/lib/xterm.js"></script>
     <script>
       const term = new Terminal({ cursorBlink:true, theme:{ background:'#0f111a', foreground:'#e6e6e6' } })
       term.open(document.getElementById('term'))
