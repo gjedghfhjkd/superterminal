@@ -521,6 +521,17 @@ class TerminalTab(QWidget):
                 key = event.key()
                 modifiers = event.modifiers()
                 if (modifiers & Qt.ControlModifier):
+                    # Paste with Ctrl+Shift+V
+                    if (modifiers & Qt.ShiftModifier) and key == Qt.Key_V:
+                        try:
+                            text = QApplication.clipboard().text()
+                            if text:
+                                if self.local_echo_enabled:
+                                    self._write(text)
+                                self._send(text)
+                        except Exception:
+                            pass
+                        return True
                     # Ctrl + : zoom in (requires Shift on many layouts)
                     if key == Qt.Key_Plus:
                         self.terminal_output.zoomIn(1)
