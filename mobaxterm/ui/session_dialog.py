@@ -1,7 +1,26 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QLineEdit, QCheckBox, QSpinBox, QGroupBox,
-                             QDialogButtonBox, QGridLayout, QStackedWidget, QWidget, QComboBox)
+
+                             QDialogButtonBox, QGridLayout, QStackedWidget, QWidget, QComboBox,
+                             QFileDialog, QInputDialog, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QAbstractItemView, QStyleOptionViewItem)
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPalette, QColor
+
+class SolidHighlightDelegate(QStyledItemDelegate):
+    def __init__(self, highlight_color="#0078d7", text_color="#ffffff", parent=None):
+        super().__init__(parent)
+        self.highlight_color = QColor(highlight_color)
+        self.text_color = QColor(text_color)
+
+    def paint(self, painter, option, index):
+        option_clone = QStyleOptionViewItem(option)
+        painter.save()
+        if option_clone.state & QStyle.State_Selected:
+            painter.fillRect(option_clone.rect, self.highlight_color)
+            option_clone.palette.setColor(QPalette.Text, self.text_color)
+            option_clone.palette.setColor(QPalette.HighlightedText, self.text_color)
+        super().paint(painter, option_clone, index)
+        painter.restore()
 from ..models.session import Session
 
 class SessionDialog(QDialog):
@@ -9,7 +28,7 @@ class SessionDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Session settings")
         self.setModal(True)
-        self.setMinimumSize(650, 550)
+        self.setMinimumSize(800, 600)
         self.current_tab = "SSH"
         self.editing_session = session is not None
         self.session_to_edit = session
@@ -36,6 +55,7 @@ class SessionDialog(QDialog):
                 border: 1px solid #ccc;
                 border-radius: 3px;
                 background-color: white;
+                min-height: 28px;
             }
             QLineEdit:focus, QSpinBox:focus, QComboBox:focus {
                 border-color: #0078d7;
@@ -93,6 +113,25 @@ class SessionDialog(QDialog):
             QDialogButtonBox QPushButton[text="Cancel"]:hover {
                 background-color: #545b62;
             }
+            /* Improve dropdown (popup) visibility for all combo boxes */
+            QComboBox QAbstractItemView {
+                background-color: white;
+                border: 1px solid #ccc;
+                outline: none;
+            }
+            QComboBox QAbstractItemView::item {
+                height: 28px;
+                padding: 6px;
+                color: #333;
+            }
+            QComboBox QAbstractItemView::item:hover {
+                background-color: #e9f3ff;
+                color: #0a58ca;
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background-color: #0078d7;
+                color: white;
+            }
         """)
         
         main_layout = QVBoxLayout(self)
@@ -132,21 +171,7 @@ class SessionDialog(QDialog):
         
         main_layout.addWidget(self.stacked_widget)
         
-        # Session type label
-        self.session_label = QLabel("Secure Shell (SSH) session")
-        self.session_label.setStyleSheet("""
-            QLabel {
-                font-weight: bold;
-                color: #0078d7;
-                font-size: 13px;
-                padding: 8px;
-                background-color: #f0f8ff;
-                border-radius: 4px;
-                border: 1px solid #cce5ff;
-            }
-        """)
-        self.session_label.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(self.session_label)
+        # Removed bottom session type label per requirements
         
         # Buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -190,9 +215,12 @@ class SessionDialog(QDialog):
         
         # Basic SSH settings group
         basic_group = QGroupBox("Basic SSH settings")
+        basic_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         basic_layout = QGridLayout(basic_group)
         basic_layout.setSpacing(8)
         basic_layout.setContentsMargins(12, 15, 12, 12)
+        basic_layout.setColumnStretch(0, 0)
+        basic_layout.setColumnStretch(1, 1)
         
         # Row 0: Remote host
         host_label = QLabel("Remote host:")
@@ -201,41 +229,48 @@ class SessionDialog(QDialog):
         
         self.ssh_host_input = QLineEdit()
         self.ssh_host_input.setPlaceholderText("hostname or IP")
+        self.ssh_host_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         basic_layout.addWidget(self.ssh_host_input, 0, 1)
         
-        # Row 1: Username checkbox
-        self.ssh_username_check = QCheckBox("Specify username")
-        basic_layout.addWidget(self.ssh_username_check, 1, 0, 1, 2)
+        # Row 1: Session name (optional, defaults to Remote host)
+        name_label = QLabel("Session name:")
+        name_label.setMinimumWidth(100)
+        basic_layout.addWidget(name_label, 1, 0, Qt.AlignRight)
         
-        # Row 2: Username label and input
+        self.ssh_name_input = QLineEdit()
+        self.ssh_name_input.setPlaceholderText("defaults to Remote host")
+        self.ssh_name_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        basic_layout.addWidget(self.ssh_name_input, 1, 1)
+        
+        # Row 2: Username label and input (always enabled)
         username_label = QLabel("Username:")
         username_label.setMinimumWidth(100)
         basic_layout.addWidget(username_label, 2, 0, Qt.AlignRight)
         
         self.ssh_username_input = QLineEdit()
         self.ssh_username_input.setPlaceholderText("username")
-        self.ssh_username_input.setEnabled(False)
+        self.ssh_username_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # Default username to root
+        self.ssh_username_input.setText("root")
         basic_layout.addWidget(self.ssh_username_input, 2, 1)
         
-        # Row 3: Port checkbox
-        self.ssh_port_check = QCheckBox("Custom port")
-        basic_layout.addWidget(self.ssh_port_check, 3, 0, 1, 2)
         
-        # Row 4: Port label and input
+        # Row 3: Port label and input
         port_label = QLabel("Port:")
         port_label.setMinimumWidth(100)
-        basic_layout.addWidget(port_label, 4, 0, Qt.AlignRight)
+        basic_layout.addWidget(port_label, 3, 0, Qt.AlignRight)
         
         self.ssh_port_input = QSpinBox()
         self.ssh_port_input.setRange(1, 65535)
         self.ssh_port_input.setValue(22)
-        self.ssh_port_input.setEnabled(False)
-        basic_layout.addWidget(self.ssh_port_input, 4, 1)
+        self.ssh_port_input.setEnabled(True)
+        self.ssh_port_input.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        basic_layout.addWidget(self.ssh_port_input, 3, 1)
         
-        # Row 5: Folder label and combo
+        # Row 4: Folder label and combo
         folder_label = QLabel("Folder:")
         folder_label.setMinimumWidth(100)
-        basic_layout.addWidget(folder_label, 5, 0, Qt.AlignRight)
+        basic_layout.addWidget(folder_label, 4, 0, Qt.AlignRight)
         
         self.folder_combo = QComboBox()
         self.folder_combo.addItem("(No folder)", None)
@@ -247,31 +282,137 @@ class SessionDialog(QDialog):
                 self.folder_combo.addItem(folder, folder)
         
         self.folder_combo.addItem("+ Create new folder...", "new")
-        basic_layout.addWidget(self.folder_combo, 5, 1)
+        basic_layout.addWidget(self.folder_combo, 4, 1)
+        # Ensure dropdown selection is visible for folder combo
+        folder_view = QListView()
+        folder_view.setUniformItemSizes(True)
+        folder_view.setStyleSheet("""
+            QListView {
+                background-color: white;
+                color: #333;
+                border: 1px solid #ccc;
+                selection-background-color: #0078d7;
+                selection-color: white;
+                outline: 0;
+            }
+            QListView::item { height: 28px; padding: 6px; }
+            QListView::item:hover { background-color: #e9f3ff; color: #0a58ca; }
+            QListView::item:selected { background-color: #0078d7; color: white; }
+        """)
+        folder_palette = folder_view.palette()
+        for group in (QPalette.Active, QPalette.Inactive, QPalette.Disabled):
+            folder_palette.setColor(group, QPalette.Highlight, QColor("#0078d7"))
+            folder_palette.setColor(group, QPalette.HighlightedText, QColor("#ffffff"))
+        folder_view.setPalette(folder_palette)
+        folder_view.setItemDelegate(SolidHighlightDelegate(parent=folder_view))
+        self.folder_combo.setView(folder_view)
         
+        # Row 5: Terminal font size
+        font_label = QLabel("Font size:")
+        font_label.setMinimumWidth(100)
+        basic_layout.addWidget(font_label, 5, 0, Qt.AlignRight)
+
+        self.ssh_font_size_input = QSpinBox()
+        self.ssh_font_size_input.setRange(8, 48)
+        self.ssh_font_size_input.setValue(12)
+        self.ssh_font_size_input.setSuffix(" pt")
+        self.ssh_font_size_input.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        basic_layout.addWidget(self.ssh_font_size_input, 5, 1)
+
+        # Row 6: Use experimental terminal
+        self.use_term2_check = QCheckBox("Use new Terminal2 (experimental)")
+        basic_layout.addWidget(self.use_term2_check, 6, 1)
+
         layout.addWidget(basic_group)
         
-        # Advanced SSH settings group
-        advanced_group = QGroupBox("Advanced SSH settings")
-        advanced_layout = QVBoxLayout(advanced_group)
-        advanced_layout.setSpacing(8)
-        advanced_layout.setContentsMargins(12, 15, 12, 12)
-        
-        self.ssh_terminal_check = QCheckBox("Terminal settings")
-        self.ssh_network_check = QCheckBox("Network settings")
-        self.ssh_bookmark_check = QCheckBox("Bookmark settings")
-        
-        advanced_layout.addWidget(self.ssh_terminal_check)
-        advanced_layout.addWidget(self.ssh_network_check)
-        advanced_layout.addWidget(self.ssh_bookmark_check)
-        
-        layout.addWidget(advanced_group)
+        # Authentication group
+        auth_group = QGroupBox("Authentication")
+        auth_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        auth_layout = QGridLayout(auth_group)
+        auth_layout.setSpacing(8)
+        auth_layout.setContentsMargins(12, 15, 12, 12)
+        auth_layout.setColumnStretch(0, 0)
+        auth_layout.setColumnStretch(1, 1)
+
+        # Row 0: Method
+        auth_method_label = QLabel("Method:")
+        auth_method_label.setMinimumWidth(100)
+        auth_layout.addWidget(auth_method_label, 0, 0, Qt.AlignRight)
+
+        self.auth_method_combo = QComboBox()
+        self.auth_method_combo.addItem("Password", "password")
+        self.auth_method_combo.addItem("SSH key", "key")
+        auth_layout.addWidget(self.auth_method_combo, 0, 1)
+        # Ensure dropdown selection is visible for auth method combo
+        auth_view = QListView()
+        auth_view.setUniformItemSizes(True)
+        auth_view.setStyleSheet("""
+            QListView {
+                background-color: white;
+                color: #333;
+                border: 1px solid #ccc;
+                selection-background-color: #0078d7;
+                selection-color: white;
+                outline: 0;
+            }
+            QListView::item { height: 28px; padding: 6px; }
+            QListView::item:hover { background-color: #e9f3ff; color: #0a58ca; }
+            QListView::item:selected { background-color: #0078d7; color: white; }
+        """)
+        auth_palette = auth_view.palette()
+        for group in (QPalette.Active, QPalette.Inactive, QPalette.Disabled):
+            auth_palette.setColor(group, QPalette.Highlight, QColor("#0078d7"))
+            auth_palette.setColor(group, QPalette.HighlightedText, QColor("#ffffff"))
+        auth_view.setPalette(auth_palette)
+        auth_view.setItemDelegate(SolidHighlightDelegate(parent=auth_view))
+        self.auth_method_combo.setView(auth_view)
+
+        # Row 1: Password (for password auth)
+        self.auth_password_label = QLabel("Password:")
+        self.auth_password_label.setMinimumWidth(100)
+        auth_layout.addWidget(self.auth_password_label, 1, 0, Qt.AlignRight)
+        self.auth_password_input = QLineEdit()
+        self.auth_password_input.setEchoMode(QLineEdit.Password)
+        auth_layout.addWidget(self.auth_password_input, 1, 1)
+
+        # Row 2: Private key path (for key auth)
+        self.key_path_label = QLabel("Private key:")
+        self.key_path_label.setMinimumWidth(100)
+        auth_layout.addWidget(self.key_path_label, 2, 0, Qt.AlignRight)
+
+        key_path_container = QWidget()
+        key_path_h = QHBoxLayout(key_path_container)
+        key_path_h.setContentsMargins(0, 0, 0, 0)
+        key_path_h.setSpacing(6)
+        self.key_path_input = QLineEdit()
+        self.key_path_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.key_path_browse = QPushButton("Browse…")
+        self.key_path_browse.setFixedWidth(90)
+        key_path_h.addWidget(self.key_path_input)
+        key_path_h.addWidget(self.key_path_browse)
+        auth_layout.addWidget(key_path_container, 2, 1)
+
+        # Row 3: Passphrase (for key auth)
+        self.passphrase_label = QLabel("Passphrase:")
+        self.passphrase_label.setMinimumWidth(100)
+        auth_layout.addWidget(self.passphrase_label, 3, 0, Qt.AlignRight)
+
+        self.passphrase_input = QLineEdit()
+        self.passphrase_input.setEchoMode(QLineEdit.Password)
+        auth_layout.addWidget(self.passphrase_input, 3, 1)
+
+        layout.addWidget(auth_group)
+
+        # Removed Advanced SSH settings group per requirements
         layout.addStretch()
         
         # Connect signals
-        self.ssh_username_check.toggled.connect(self.toggle_username_field)
-        self.ssh_port_check.toggled.connect(self.toggle_port_field)
         self.folder_combo.currentIndexChanged.connect(self.on_folder_changed)
+        self.auth_method_combo.currentIndexChanged.connect(self.on_auth_method_changed)
+        self.key_path_browse.clicked.connect(self.on_browse_key)
+
+        # Initialize auth controls state
+        self.on_auth_method_changed(self.auth_method_combo.currentIndex())
         
     def on_folder_changed(self, index):
         if self.folder_combo.currentData() == "new":
@@ -290,15 +431,6 @@ class SessionDialog(QDialog):
                 else:
                     self.folder_combo.setCurrentIndex(0)
         
-    def toggle_username_field(self, checked):
-        self.ssh_username_input.setEnabled(checked)
-        if not checked:
-            self.ssh_username_input.clear()
-    
-    def toggle_port_field(self, checked):
-        self.ssh_port_input.setEnabled(checked)
-        if not checked:
-            self.ssh_port_input.setValue(22)
     
     def init_sftp_page(self):
         layout = QVBoxLayout(self.sftp_page)
@@ -309,6 +441,8 @@ class SessionDialog(QDialog):
         basic_layout = QGridLayout(basic_group)
         basic_layout.setSpacing(8)
         basic_layout.setContentsMargins(12, 15, 12, 12)
+        basic_layout.setColumnStretch(0, 0)
+        basic_layout.setColumnStretch(1, 1)
         
         # Row 0: Remote host
         host_label = QLabel("Remote host:")
@@ -317,31 +451,46 @@ class SessionDialog(QDialog):
         
         self.sftp_host_input = QLineEdit()
         self.sftp_host_input.setPlaceholderText("hostname or IP")
+        self.sftp_host_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         basic_layout.addWidget(self.sftp_host_input, 0, 1)
         
-        # Row 1: Username
+        # Row 1: Session name (optional, defaults to Remote host)
+        sftp_name_label = QLabel("Session name:")
+        sftp_name_label.setMinimumWidth(100)
+        basic_layout.addWidget(sftp_name_label, 1, 0, Qt.AlignRight)
+        
+        self.sftp_name_input = QLineEdit()
+        self.sftp_name_input.setPlaceholderText("defaults to Remote host")
+        self.sftp_name_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        basic_layout.addWidget(self.sftp_name_input, 1, 1)
+        
+        # Row 2: Username
         username_label = QLabel("Username:")
         username_label.setMinimumWidth(100)
-        basic_layout.addWidget(username_label, 1, 0, Qt.AlignRight)
+        basic_layout.addWidget(username_label, 2, 0, Qt.AlignRight)
         
         self.sftp_username_input = QLineEdit()
         self.sftp_username_input.setPlaceholderText("username")
-        basic_layout.addWidget(self.sftp_username_input, 1, 1)
+        self.sftp_username_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # Default username to root
+        self.sftp_username_input.setText("root")
+        basic_layout.addWidget(self.sftp_username_input, 2, 1)
         
-        # Row 2: Port
+        # Row 3: Port
         port_label = QLabel("Port:")
         port_label.setMinimumWidth(100)
-        basic_layout.addWidget(port_label, 2, 0, Qt.AlignRight)
+        basic_layout.addWidget(port_label, 3, 0, Qt.AlignRight)
         
         self.sftp_port_input = QSpinBox()
         self.sftp_port_input.setRange(1, 65535)
         self.sftp_port_input.setValue(22)
-        basic_layout.addWidget(self.sftp_port_input, 2, 1)
+        self.sftp_port_input.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        basic_layout.addWidget(self.sftp_port_input, 3, 1)
         
-        # Row 3: Folder
+        # Row 4: Folder
         folder_label = QLabel("Folder:")
         folder_label.setMinimumWidth(100)
-        basic_layout.addWidget(folder_label, 3, 0, Qt.AlignRight)
+        basic_layout.addWidget(folder_label, 4, 0, Qt.AlignRight)
         
         self.sftp_folder_combo = QComboBox()
         self.sftp_folder_combo.addItem("(No folder)", None)
@@ -352,9 +501,110 @@ class SessionDialog(QDialog):
                 self.sftp_folder_combo.addItem(folder, folder)
         
         self.sftp_folder_combo.addItem("+ Create new folder...", "new")
-        basic_layout.addWidget(self.sftp_folder_combo, 3, 1)
+        basic_layout.addWidget(self.sftp_folder_combo, 4, 1)
+        # Ensure dropdown selection is visible for sftp folder combo
+        sftp_view = QListView()
+        sftp_view.setUniformItemSizes(True)
+        sftp_view.setStyleSheet("""
+            QListView {
+                background-color: white;
+                color: #333;
+                border: 1px solid #ccc;
+                selection-background-color: #0078d7;
+                selection-color: white;
+                outline: 0;
+            }
+            QListView::item { height: 28px; padding: 6px; }
+            QListView::item:hover { background-color: #e9f3ff; color: #0a58ca; }
+            QListView::item:selected { background-color: #0078d7; color: white; }
+        """)
+        sftp_palette = sftp_view.palette()
+        for group in (QPalette.Active, QPalette.Inactive, QPalette.Disabled):
+            sftp_palette.setColor(group, QPalette.Highlight, QColor("#0078d7"))
+            sftp_palette.setColor(group, QPalette.HighlightedText, QColor("#ffffff"))
+        sftp_view.setPalette(sftp_palette)
+        sftp_view.setItemDelegate(SolidHighlightDelegate(parent=sftp_view))
+        self.sftp_folder_combo.setView(sftp_view)
         
         layout.addWidget(basic_group)
+
+        # Authentication group for SFTP
+        sftp_auth_group = QGroupBox("Authentication")
+        sftp_auth_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        sftp_auth_layout = QGridLayout(sftp_auth_group)
+        sftp_auth_layout.setSpacing(8)
+        sftp_auth_layout.setContentsMargins(12, 15, 12, 12)
+        sftp_auth_layout.setColumnStretch(0, 0)
+        sftp_auth_layout.setColumnStretch(1, 1)
+
+        # Row 0: Method
+        sftp_auth_method_label = QLabel("Method:")
+        sftp_auth_method_label.setMinimumWidth(100)
+        sftp_auth_layout.addWidget(sftp_auth_method_label, 0, 0, Qt.AlignRight)
+
+        self.sftp_auth_method_combo = QComboBox()
+        self.sftp_auth_method_combo.addItem("Password", "password")
+        self.sftp_auth_method_combo.addItem("SSH key", "key")
+        sftp_auth_layout.addWidget(self.sftp_auth_method_combo, 0, 1)
+        # Ensure dropdown selection is visible for SFTP auth method combo
+        sftp_auth_view = QListView()
+        sftp_auth_view.setUniformItemSizes(True)
+        sftp_auth_view.setStyleSheet("""
+            QListView {
+                background-color: white;
+                color: #333;
+                border: 1px solid #ccc;
+                selection-background-color: #0078d7;
+                selection-color: white;
+                outline: 0;
+            }
+            QListView::item { height: 28px; padding: 6px; }
+            QListView::item:hover { background-color: #e9f3ff; color: #0a58ca; }
+            QListView::item:selected { background-color: #0078d7; color: white; }
+        """)
+        sftp_auth_palette = sftp_auth_view.palette()
+        for group in (QPalette.Active, QPalette.Inactive, QPalette.Disabled):
+            sftp_auth_palette.setColor(group, QPalette.Highlight, QColor("#0078d7"))
+            sftp_auth_palette.setColor(group, QPalette.HighlightedText, QColor("#ffffff"))
+        sftp_auth_view.setPalette(sftp_auth_palette)
+        sftp_auth_view.setItemDelegate(SolidHighlightDelegate(parent=sftp_auth_view))
+        self.sftp_auth_method_combo.setView(sftp_auth_view)
+
+        # Row 1: Password (for password auth)
+        self.sftp_auth_password_label = QLabel("Password:")
+        self.sftp_auth_password_label.setMinimumWidth(100)
+        sftp_auth_layout.addWidget(self.sftp_auth_password_label, 1, 0, Qt.AlignRight)
+        self.sftp_auth_password_input = QLineEdit()
+        self.sftp_auth_password_input.setEchoMode(QLineEdit.Password)
+        sftp_auth_layout.addWidget(self.sftp_auth_password_input, 1, 1)
+
+        # Row 2: Private key path (for key auth)
+        self.sftp_key_path_label = QLabel("Private key:")
+        self.sftp_key_path_label.setMinimumWidth(100)
+        sftp_auth_layout.addWidget(self.sftp_key_path_label, 2, 0, Qt.AlignRight)
+
+        sftp_key_path_container = QWidget()
+        sftp_key_path_h = QHBoxLayout(sftp_key_path_container)
+        sftp_key_path_h.setContentsMargins(0, 0, 0, 0)
+        sftp_key_path_h.setSpacing(6)
+        self.sftp_key_path_input = QLineEdit()
+        self.sftp_key_path_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.sftp_key_path_browse = QPushButton("Browse…")
+        self.sftp_key_path_browse.setFixedWidth(90)
+        sftp_key_path_h.addWidget(self.sftp_key_path_input)
+        sftp_key_path_h.addWidget(self.sftp_key_path_browse)
+        sftp_auth_layout.addWidget(sftp_key_path_container, 2, 1)
+
+        # Row 3: Passphrase (for key auth)
+        self.sftp_passphrase_label = QLabel("Passphrase:")
+        self.sftp_passphrase_label.setMinimumWidth(100)
+        sftp_auth_layout.addWidget(self.sftp_passphrase_label, 3, 0, Qt.AlignRight)
+
+        self.sftp_passphrase_input = QLineEdit()
+        self.sftp_passphrase_input.setEchoMode(QLineEdit.Password)
+        sftp_auth_layout.addWidget(self.sftp_passphrase_input, 3, 1)
+
+        layout.addWidget(sftp_auth_group)
         
         advanced_group = QGroupBox("Advanced SFTP settings")
         advanced_layout = QVBoxLayout(advanced_group)
@@ -368,6 +618,10 @@ class SessionDialog(QDialog):
         layout.addStretch()
         
         self.sftp_folder_combo.currentIndexChanged.connect(self.on_sftp_folder_changed)
+        self.sftp_auth_method_combo.currentIndexChanged.connect(self.on_sftp_auth_method_changed)
+        self.sftp_key_path_browse.clicked.connect(self.on_sftp_browse_key)
+        # Initialize SFTP auth controls state
+        self.on_sftp_auth_method_changed(self.sftp_auth_method_combo.currentIndex())
         
     def on_sftp_folder_changed(self, index):
         if self.sftp_folder_combo.currentData() == "new":
@@ -395,7 +649,6 @@ class SessionDialog(QDialog):
         self.sftp_btn.setStyleSheet(self.get_tab_style(False))
         
         self.stacked_widget.setCurrentIndex(0)
-        self.session_label.setText("Secure Shell (SSH) session")
         
     def switch_to_sftp(self):
         self.current_tab = "SFTP"
@@ -406,37 +659,67 @@ class SessionDialog(QDialog):
         self.ssh_btn.setStyleSheet(self.get_tab_style(False))
         
         self.stacked_widget.setCurrentIndex(1)
-        self.session_label.setText("SFTP session")
         
     def load_session_data(self, session: Session):
         if session.type == 'SSH':
             self.ssh_btn.click()
             self.ssh_host_input.setText(session.host)
+            # Load session name (fallback to host)
+            self.ssh_name_input.setText(session.name or session.host)
             
             if session.username:
-                self.ssh_username_check.setChecked(True)
                 self.ssh_username_input.setText(session.username)
-                self.ssh_username_input.setEnabled(True)
             
-            if session.port != 22:
-                self.ssh_port_check.setChecked(True)
-                self.ssh_port_input.setValue(session.port)
-                self.ssh_port_input.setEnabled(True)
+            self.ssh_port_input.setValue(session.port)
             
             if session.folder:
                 index = self.folder_combo.findData(session.folder)
                 if index >= 0:
                     self.folder_combo.setCurrentIndex(index)
+            # Load terminal font size (fallback 12 if provided, else default 12)
+            try:
+                if getattr(session, 'terminal_font_size', None):
+                    self.ssh_font_size_input.setValue(int(session.terminal_font_size))
+                else:
+                    self.ssh_font_size_input.setValue(12)
+            except Exception:
+                self.ssh_font_size_input.setValue(12)
+            try:
+                self.use_term2_check.setChecked(bool(getattr(session, 'use_terminal2', False)))
+            except Exception:
+                pass
             
-            self.ssh_terminal_check.setChecked(session.terminal_settings)
-            self.ssh_network_check.setChecked(session.network_settings)
-            self.ssh_bookmark_check.setChecked(session.bookmark_settings)
+            # Load auth
+            if hasattr(session, 'auth_method'):
+                method_index = self.auth_method_combo.findData(session.auth_method)
+                if method_index >= 0:
+                    self.auth_method_combo.setCurrentIndex(method_index)
+            # Populate auth fields
+            if getattr(session, 'auth_method', 'password') == 'password' and getattr(session, 'password', None):
+                self.auth_password_input.setText(session.password)
+            if hasattr(session, 'private_key_path') and session.private_key_path:
+                self.key_path_input.setText(session.private_key_path)
+            if hasattr(session, 'private_key_passphrase') and session.private_key_passphrase:
+                self.passphrase_input.setText(session.private_key_passphrase)
             
         else:
             self.sftp_btn.click()
             self.sftp_host_input.setText(session.host)
+            # Load session name (fallback to host)
+            self.sftp_name_input.setText(session.name or session.host)
             self.sftp_username_input.setText(session.username or "")
             self.sftp_port_input.setValue(session.port)
+            # Load SFTP auth
+            if hasattr(session, 'auth_method'):
+                sftp_method_index = self.sftp_auth_method_combo.findData(session.auth_method)
+                if sftp_method_index >= 0:
+                    self.sftp_auth_method_combo.setCurrentIndex(sftp_method_index)
+            if getattr(session, 'auth_method', 'password') == 'password' and getattr(session, 'password', None):
+                self.sftp_auth_password_input.setText(session.password)
+            if hasattr(session, 'private_key_path') and session.private_key_path:
+                self.sftp_key_path_input.setText(session.private_key_path)
+            if hasattr(session, 'private_key_passphrase') and session.private_key_passphrase:
+                self.sftp_passphrase_input.setText(session.private_key_passphrase)
             
             if session.folder:
                 index = self.sftp_folder_combo.findData(session.folder)
@@ -445,26 +728,90 @@ class SessionDialog(QDialog):
             
             self.sftp_bookmark_check.setChecked(session.bookmark_settings)
         
+        # Ensure font size has a sensible default for any legacy sessions
+        if session.type == 'SSH' and getattr(session, 'terminal_font_size', None) is None:
+            try:
+                self.ssh_font_size_input.setValue(12)
+            except Exception:
+                pass
+        
     def get_session_data(self) -> Session:
         if self.current_tab == "SSH":
             session = Session(
                 type='SSH',
                 host=self.ssh_host_input.text(),
-                port=self.ssh_port_input.value() if self.ssh_port_check.isChecked() else 22,
-                username=self.ssh_username_input.text() if self.ssh_username_check.isChecked() else None,
-                terminal_settings=self.ssh_terminal_check.isChecked(),
-                network_settings=self.ssh_network_check.isChecked(),
-                bookmark_settings=self.ssh_bookmark_check.isChecked()
+                port=self.ssh_port_input.value(),
+                name=(self.ssh_name_input.text().strip() or None),
+                username=(self.ssh_username_input.text() or None),
+                auth_method=self.auth_method_combo.currentData(),
+                private_key_path=self.key_path_input.text() if self.auth_method_combo.currentData() == 'key' and self.key_path_input.text() else None,
+                private_key_passphrase=self.passphrase_input.text() if self.auth_method_combo.currentData() == 'key' and self.passphrase_input.text() else None,
+                use_terminal2=self.use_term2_check.isChecked()
             )
+            # Set password only for password auth
+            if self.auth_method_combo.currentData() == 'password':
+                session.password = self.auth_password_input.text()
             session.folder = self.folder_combo.currentData()
+            try:
+                session.terminal_font_size = int(self.ssh_font_size_input.value())
+            except Exception:
+                session.terminal_font_size = None
             return session
         else:
             session = Session(
                 type='SFTP',
                 host=self.sftp_host_input.text(),
                 port=self.sftp_port_input.value(),
+                name=(self.sftp_name_input.text().strip() or None),
                 username=self.sftp_username_input.text(),
+                auth_method=self.sftp_auth_method_combo.currentData(),
+                private_key_path=self.sftp_key_path_input.text() if self.sftp_auth_method_combo.currentData() == 'key' and self.sftp_key_path_input.text() else None,
+                private_key_passphrase=self.sftp_passphrase_input.text() if self.sftp_auth_method_combo.currentData() == 'key' and self.sftp_passphrase_input.text() else None,
                 bookmark_settings=self.sftp_bookmark_check.isChecked()
             )
+            if self.sftp_auth_method_combo.currentData() == 'password':
+                session.password = self.sftp_auth_password_input.text()
             session.folder = self.sftp_folder_combo.currentData()
             return session
+
+    def on_auth_method_changed(self, index):
+        method = self.auth_method_combo.currentData()
+        is_key = method == 'key'
+        # Toggle visibility between password and key controls
+        self.auth_password_label.setVisible(not is_key)
+        self.auth_password_input.setVisible(not is_key)
+        self.key_path_label.setVisible(is_key)
+        self.key_path_input.setVisible(is_key)
+        self.key_path_browse.setVisible(is_key)
+        self.passphrase_label.setVisible(is_key)
+        self.passphrase_input.setVisible(is_key)
+        # Enable relevant fields
+        self.key_path_input.setEnabled(is_key)
+        self.key_path_browse.setEnabled(is_key)
+        self.passphrase_input.setEnabled(is_key)
+
+    def on_browse_key(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Private Key", "", "All Files (*)")
+        if file_path:
+            self.key_path_input.setText(file_path)
+
+    def on_sftp_auth_method_changed(self, index):
+        method = self.sftp_auth_method_combo.currentData()
+        is_key = method == 'key'
+        # Toggle visibility between password and key controls
+        self.sftp_auth_password_label.setVisible(not is_key)
+        self.sftp_auth_password_input.setVisible(not is_key)
+        self.sftp_key_path_label.setVisible(is_key)
+        self.sftp_key_path_input.setVisible(is_key)
+        self.sftp_key_path_browse.setVisible(is_key)
+        self.sftp_passphrase_label.setVisible(is_key)
+        self.sftp_passphrase_input.setVisible(is_key)
+        # Enable relevant fields
+        self.sftp_key_path_input.setEnabled(is_key)
+        self.sftp_key_path_browse.setEnabled(is_key)
+        self.sftp_passphrase_input.setEnabled(is_key)
+
+    def on_sftp_browse_key(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Private Key", "", "All Files (*)")
+        if file_path:
+            self.sftp_key_path_input.setText(file_path)

@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QTreeWidget, QTreeWidgetItem, QMenu, QAction, 
                              QInputDialog, QMessageBox, QLineEdit, QApplication)
-from PyQt5.QtCore import Qt, pyqtSignal, QMimeData
+from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QTimer
 from PyQt5.QtGui import QKeyEvent, QDrag
 
 class SessionTreeWidget(QTreeWidget):
@@ -8,6 +8,7 @@ class SessionTreeWidget(QTreeWidget):
     session_double_clicked = pyqtSignal(object)
     rename_requested = pyqtSignal(str, object)
     session_moved = pyqtSignal(int, str, str)  # session_index, target_folder, current_folder
+    folder_moved = pyqtSignal(str, object)  # folder_path, target_parent (str or None)
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -44,6 +45,14 @@ class SessionTreeWidget(QTreeWidget):
         self.setDropIndicatorShown(True)
         self.setDragDropMode(QTreeWidget.InternalMove)
         self.setSelectionMode(QTreeWidget.SingleSelection)
+        # Автопрокрутка при DnD
+        self.setAutoScroll(True)
+        self.setAutoScrollMargin(24)
+        self._drag_active = False
+        self._last_drag_pos = None
+        self._auto_scroll_timer = QTimer(self)
+        self._auto_scroll_timer.setInterval(50)
+        self._auto_scroll_timer.timeout.connect(self._perform_auto_scroll)
         
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.on_context_menu)
@@ -103,12 +112,26 @@ class SessionTreeWidget(QTreeWidget):
     def dragEnterEvent(self, event):
         """Разрешаем drag enter"""
         if event.mimeData().hasText():
+            self._drag_active = True
+            self._last_drag_pos = event.pos()
+            if not self._auto_scroll_timer.isActive():
+                self._auto_scroll_timer.start()
             event.acceptProposedAction()
     
     def dragMoveEvent(self, event):
         """Обработка движения при перетаскивании"""
         if event.mimeData().hasText():
+            # Запоминаем последнюю позицию для автопрокрутки
+            self._last_drag_pos = event.pos()
             event.acceptProposedAction()
+    
+    def dragLeaveEvent(self, event):
+        """Остановка автопрокрутки при выходе из области виджета"""
+        self._drag_active = False
+        self._last_drag_pos = None
+        if self._auto_scroll_timer.isActive():
+            self._auto_scroll_timer.stop()
+        super().dragLeaveEvent(event)
     
     def dropEvent(self, event):
         """Обработка drop"""
@@ -128,10 +151,15 @@ class SessionTreeWidget(QTreeWidget):
             self.handle_folder_drop(folder_name, target_item)
             
         event.acceptProposedAction()
+        # Завершаем автопрокрутку
+        self._drag_active = False
+        self._last_drag_pos = None
+        if self._auto_scroll_timer.isActive():
+            self._auto_scroll_timer.stop()
 
     
     def handle_session_drop(self, mime_data, target_item):
-        """Обработка drop сессии"""
+        """Обработка drop сессии для вложенных папок"""
         parts = mime_data.split(":")
         session_index = int(parts[1])
         current_folder = parts[2] if len(parts) > 2 else None
@@ -140,35 +168,75 @@ class SessionTreeWidget(QTreeWidget):
         
         if not target_item:
             # Бросили на пустое место - удаляем из папки
-            print("Dropped on empty space - removing from folder")
             self.session_moved.emit(session_index, None, current_folder)
             return
             
         target_type = target_item.data(0, Qt.UserRole)
-        print(f"Target type: {target_type}")
         
         if target_type == "folder":
             # Бросили на папку - перемещаем в эту папку
-            folder_name = target_item.data(0, Qt.UserRole + 1)
-            print(f"Dropped on folder: {folder_name}")
-            self.session_moved.emit(session_index, folder_name, current_folder)
+            folder_path = target_item.data(0, Qt.UserRole + 1)
+            self.session_moved.emit(session_index, folder_path, current_folder)
         elif target_type == "session":
             # Бросили на сессию - определяем родительскую папку
             parent = target_item.parent()
             if parent and parent.data(0, Qt.UserRole) == "folder":
                 # Целевая сессия находится в папке
-                folder_name = parent.data(0, Qt.UserRole + 1)
-                print(f"Dropped on session in folder: {folder_name}")
-                self.session_moved.emit(session_index, folder_name, current_folder)
+                folder_path = parent.data(0, Qt.UserRole + 1)
+                self.session_moved.emit(session_index, folder_path, current_folder)
             else:
                 # Целевая сессия находится в корне - удаляем из папки
-                print("Dropped on session in root - removing from folder")
                 self.session_moved.emit(session_index, None, current_folder)
 
     def handle_folder_drop(self, folder_name, target_item):
         """Обработка drop папки"""
-        # Для простоты не будем поддерживать перетаскивание папок
-        pass
+        # Определяем родителя по месту броска
+        target_parent = None
+        if target_item:
+            target_type = target_item.data(0, Qt.UserRole)
+            if target_type == "folder":
+                target_parent = target_item.data(0, Qt.UserRole + 1)
+            elif target_type == "session":
+                parent = target_item.parent()
+                if parent and parent.data(0, Qt.UserRole) == "folder":
+                    target_parent = parent.data(0, Qt.UserRole + 1)
+
+        # Текущий родитель перемещаемой папки
+        parts = folder_name.split('/')
+        current_parent = '/'.join(parts[:-1]) if len(parts) > 1 else None
+
+        # Если родитель не меняется — ничего не делаем
+        if (current_parent or None) == (target_parent or None):
+            return
+
+        # Эмитим сигнал перемещения
+        self.folder_moved.emit(folder_name, target_parent)
+    
+    def _perform_auto_scroll(self):
+        """Плавная прокрутка списка при перетаскивании у краев видимой области."""
+        if not self._drag_active or self._last_drag_pos is None:
+            return
+        viewport_rect = self.viewport().rect()
+        margin = 24
+        vertical_delta = 0
+        horizontal_delta = 0
+
+        if self._last_drag_pos.y() < viewport_rect.top() + margin:
+            vertical_delta = -20
+        elif self._last_drag_pos.y() > viewport_rect.bottom() - margin:
+            vertical_delta = 20
+
+        if self._last_drag_pos.x() < viewport_rect.left() + margin:
+            horizontal_delta = -20
+        elif self._last_drag_pos.x() > viewport_rect.right() - margin:
+            horizontal_delta = 20
+
+        if vertical_delta != 0:
+            vbar = self.verticalScrollBar()
+            vbar.setValue(vbar.value() + vertical_delta)
+        if horizontal_delta != 0:
+            hbar = self.horizontalScrollBar()
+            hbar.setValue(hbar.value() + horizontal_delta)
     
     def keyPressEvent(self, event: QKeyEvent):
         """Обработка нажатий клавиш"""
@@ -209,7 +277,8 @@ class SessionTreeWidget(QTreeWidget):
                 add_session_action = QAction("➕ Add Session", self)
                 rename_action = QAction("✏️ Rename Folder", self)
                 delete_folder_action = QAction("🗑️ Delete Folder", self)
-                
+                add_subfolder_action = QAction("📁 Add Subfolder", self)
+                menu.addAction(add_subfolder_action)
                 menu.addAction(toggle_action)
                 menu.addSeparator()
                 menu.addAction(add_session_action)
@@ -222,6 +291,8 @@ class SessionTreeWidget(QTreeWidget):
                     item.setExpanded(not item.isExpanded())
                 elif action == add_session_action:
                     self.context_menu_requested.emit("add_session_to_folder", item)
+                elif action == add_subfolder_action:
+                    self.context_menu_requested.emit("add_subfolder", item)
                 elif action == rename_action:
                     self.rename_requested.emit("folder", item)
                 elif action == delete_folder_action:

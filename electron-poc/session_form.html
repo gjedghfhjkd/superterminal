@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { margin:0; font-family:sans-serif; background:#0b0d14; color:#cfd3dc }
+      .wrap { padding:14px }
+      h3 { margin:0; padding:12px 14px; border-bottom:1px solid #1f2330 }
+      label { display:block; font-size:12px; margin-top:8px }
+      input, select, textarea { width:100%; box-sizing:border-box; background:#121623; color:#e6e6e6; border:1px solid #2a3040; border-radius:8px; padding:8px 10px; outline:none }
+      input:focus, select:focus, textarea:focus { border-color:#3a4160; box-shadow:0 0 0 3px rgba(42,48,64,.35) }
+      button { margin-top:12px; background:#2a5bd7; border:1px solid #2a5bd7; color:#fff; padding:8px 12px; border-radius:8px; cursor:pointer }
+      button:hover { background:#2f66ef }
+    </style>
+  </head>
+  <body>
+    <h3>Create Session</h3>
+    <div class="wrap">
+    <!-- Type removed per requirement; default to SSH -->
+    <label>Name</label>
+    <input id="name" placeholder="Optional name (defaults to host)" />
+    <label>Host</label>
+    <input id="host" value="localhost" />
+    <label>Port</label>
+    <input id="port" value="22" />
+    <label>User</label>
+    <input id="user" value="root" />
+    <label>Auth</label>
+    <select id="auth">
+      <option value="password">Password</option>
+      <option value="key">SSH key</option>
+    </select>
+    <label id="lbl-password">Password</label>
+    <input id="password" type="password" />
+      <label id="lbl-key">Private key (paste or choose)</label>
+      <div id="filepick" style="display:flex; gap:8px; align-items:center">
+        <input id="keyfile" type="file" accept=".pem,.ppk,.key,.rsa,*/*" style="display:none" />
+        <button id="choose" type="button" style="margin:0">Choose file…</button>
+        <span id="fname" style="font-size:12px; color:#8b90a0"></span>
+      </div>
+      <textarea id="pkey" style="height:100px"></textarea>
+    <label id="lbl-passphrase">Passphrase</label>
+    <input id="passphrase" type="password" />
+    <button id="btn-save">Save</button>
+    </div>
+    <script>
+      function updateAuth() {
+        const isKey = document.getElementById('auth').value === 'key'
+        document.getElementById('lbl-password').style.display = isKey ? 'none' : ''
+        document.getElementById('password').style.display = isKey ? 'none' : ''
+        document.getElementById('lbl-key').style.display = isKey ? '' : 'none'
+        document.getElementById('filepick').style.display = isKey ? 'flex' : 'none'
+        document.getElementById('pkey').style.display = isKey ? '' : 'none'
+        document.getElementById('lbl-passphrase').style.display = isKey ? '' : 'none'
+        document.getElementById('passphrase').style.display = isKey ? '' : 'none'
+      }
+      document.getElementById('auth').addEventListener('change', updateAuth)
+      updateAuth()
+      document.getElementById('choose').addEventListener('click', () => document.getElementById('keyfile').click())
+      document.getElementById('keyfile').addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0]
+        if (!file) return
+        const text = await file.text().catch(() => '')
+        if (text) document.getElementById('pkey').value = text
+        document.getElementById('fname').textContent = file ? file.name : ''
+      })
+      document.getElementById('btn-save').onclick = async () => {
+        const sess = {
+          type: 'SSH',
+          name: (document.getElementById('name').value || document.getElementById('host').value || '').trim(),
+          host: document.getElementById('host').value,
+          port: Number(document.getElementById('port').value),
+          username: document.getElementById('user').value,
+          auth: document.getElementById('auth').value,
+          password: document.getElementById('password').value,
+          privateKey: document.getElementById('pkey').value,
+          passphrase: document.getElementById('passphrase').value
+        }
+        try { window.api.sessionFormSubmit(sess) } catch {}
+      }
+    </script>
+  </body>
+  </html>
