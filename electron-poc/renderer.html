@@ -50,6 +50,14 @@
       /* Tunneling placeholder */
       #tun-panel { position:relative; flex:1; display:none; background:#0f111a; color:#cfd3dc; padding:12px; }
       #tun-controls { display:flex; gap:8px; margin-bottom:10px; align-items:center }
+      .wizard { display:flex; gap:8px; align-items:center }
+      .wizard .step { display:none; gap:8px; align-items:center }
+      .wizard .step.active { display:flex }
+      .wizard .input { width:120px }
+      .icon-btn { background:transparent; border:1px solid #2a3040; border-radius:8px; padding:6px; cursor:pointer; color:#cfd3dc }
+      .icon-btn:hover { background:#22283a }
+      .spin { animation:spin 1s linear infinite }
+      @keyframes spin { from { transform:rotate(0) } to { transform:rotate(360deg) } }
       #tun-list { border-top:1px solid #1f2330; padding-top:8px }
       .tun-row { display:flex; gap:10px; padding:6px 8px; border-radius:6px; align-items:center }
       .tun-row:hover { background:#121623 }
@@ -116,7 +124,23 @@
       </div>
       <div id="tun-panel">
         <div id="tun-controls">
-          <button id="tun-add" class="btn">Add forward</button>
+          <div id="tun-wizard" class="wizard">
+            <div class="step active" data-step="1">
+              <span>Local port</span>
+              <input id="wiz-local-port" class="input" placeholder="8080" value="8080" />
+              <button id="wiz-next-1" class="btn">Next</button>
+            </div>
+            <div class="step" data-step="2">
+              <span>Remote port</span>
+              <input id="wiz-remote-port" class="input" placeholder="80" value="80" />
+              <button id="wiz-next-2" class="btn">Next</button>
+            </div>
+            <div class="step" data-step="3">
+              <span>Name (optional)</span>
+              <input id="wiz-name" class="input" placeholder="My tunnel" />
+              <button id="wiz-create" class="btn primary">Create</button>
+            </div>
+          </div>
         </div>
         <div id="tun-list"></div>
       </div>
@@ -849,55 +873,88 @@
 
       // ===== Tunneling UI =====
       const tunListEl = document.getElementById('tun-list')
-      const tunAddBtn = document.getElementById('tun-add')
-      const activeForwards = [] // { id, localHost, localPort, remoteHost, remotePort }
+      const wizardEl = document.getElementById('tun-wizard')
+      const wizLocalEl = document.getElementById('wiz-local-port')
+      const wizRemoteEl = document.getElementById('wiz-remote-port')
+      const wizNameEl = document.getElementById('wiz-name')
+      const wizNext1 = document.getElementById('wiz-next-1')
+      const wizNext2 = document.getElementById('wiz-next-2')
+      const wizCreate = document.getElementById('wiz-create')
+      let tunnels = [] // persisted list: { id, sessionId, name, localHost, localPort, remoteHost, remotePort, active }
 
       function renderTunnels() {
         tunListEl.innerHTML = ''
-        for (let i=0;i<activeForwards.length;i++) {
-          const t = activeForwards[i]
+        for (let i=0;i<tunnels.length;i++) {
+          const t = tunnels[i]
           const row = document.createElement('div')
           row.className = 'tun-row'
-          const colA = document.createElement('div'); colA.className='tun-col small'; colA.textContent = t.id
+          const colA = document.createElement('div'); colA.className='tun-col small'; colA.textContent = t.name || '(no name)'
           const colB = document.createElement('div'); colB.className='tun-col'; colB.textContent = `${t.localHost||'127.0.0.1'}:${t.localPort} -> ${t.remoteHost}:${t.remotePort}`
           const colC = document.createElement('div'); colC.className='tun-col small'
-          const stop = document.createElement('button'); stop.className='btn'; stop.textContent='Stop'
-          stop.onclick = async () => {
-            try { await window.api.tunnelStop(t.id, t.localPort) } catch {}
-            const idx = activeForwards.findIndex(x => x.id===t.id && x.localPort===t.localPort)
-            if (idx>=0) activeForwards.splice(idx,1)
-            renderTunnels()
+          const startBtn = document.createElement('button'); startBtn.className='icon-btn'; startBtn.title='Start'
+          startBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>'
+          const stopBtn = document.createElement('button'); stopBtn.className='icon-btn'; stopBtn.title='Stop'
+          stopBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 6h12v12H6z"/></svg>'
+          if (t.active) startBtn.style.opacity = '0.4'; else stopBtn.style.opacity = '0.4'
+          startBtn.onclick = async () => {
+            if (t.active) return
+            try {
+              await window.api.tunnelStart(t.sessionId, t.localHost||'127.0.0.1', t.localPort, t.remoteHost, t.remotePort)
+              t.active = true
+              await window.api.tunnelsSave(tunnels)
+              renderTunnels()
+            } catch (e) { alert('Start error: ' + (e?.message||e)) }
           }
-          colC.appendChild(stop)
+          stopBtn.onclick = async () => {
+            if (!t.active) return
+            try {
+              await window.api.tunnelStop(t.sessionId, t.localPort)
+              t.active = false
+              await window.api.tunnelsSave(tunnels)
+              renderTunnels()
+            } catch (e) { alert('Stop error: ' + (e?.message||e)) }
+          }
+          colC.appendChild(startBtn); colC.appendChild(stopBtn)
           row.appendChild(colA); row.appendChild(colB); row.appendChild(colC)
           tunListEl.appendChild(row)
         }
       }
 
-      tunAddBtn.onclick = async () => {
+      function setWizardStep(n) {
+        wizardEl.querySelectorAll('.step').forEach(s => s.classList.remove('active'))
+        const step = wizardEl.querySelector(`.step[data-step="${n}"]`)
+        if (step) step.classList.add('active')
+      }
+
+      wizNext1.onclick = () => setWizardStep(2)
+      wizNext2.onclick = () => setWizardStep(3)
+      wizCreate.onclick = async () => {
         // Use selected session
         const selInfo = selectedId ? findNodeById(sessionTree, selectedId, null) : null
         const sessNode = selInfo && selInfo.node && selInfo.node.type==='session' ? selInfo.node : null
         if (!sessNode) { alert('Select a session in the left tree.'); return }
-        const localPortStr = await showInputModal('Local port', 'Enter local port', '8080')
-        if (!localPortStr) return
         const remoteHost = (sessNode.session && (sessNode.session.host || sessNode.session.hostname)) || '127.0.0.1'
-        const remotePortStr = await showInputModal('Remote port', 'Enter remote port', '80')
-        if (!remotePortStr) return
-        const localPort = Number(localPortStr)
-        const remotePort = Number(remotePortStr)
-        const rid = genId('tun')
-        try {
-          // ensure ssh connected for this forward id
-          const cfg = Object.assign({}, sessNode.session, { id: rid })
-          await window.api.sshConnect(cfg)
-          await window.api.tunnelStart(rid, '127.0.0.1', localPort, remoteHost, remotePort)
-          activeForwards.push({ id: rid, localHost: '127.0.0.1', localPort, remoteHost, remotePort })
-          renderTunnels()
-        } catch (e) {
-          alert('Tunnel error: ' + (e?.message||e))
-        }
+        const localPort = Number(wizLocalEl.value || '0')
+        const remotePort = Number(wizRemoteEl.value || '0')
+        if (!localPort || !remotePort) { alert('Ports are required'); return }
+        const name = (wizNameEl.value || '').trim()
+        // Add tunnel inactive by default
+        const entry = { id: genId('tun'), sessionId: sessNode.session.id || sessNode.id, name, localHost:'127.0.0.1', localPort, remoteHost, remotePort, active:false }
+        tunnels.push(entry)
+        await window.api.tunnelsSave(tunnels)
+        renderTunnels()
+        setWizardStep(1)
       }
+
+      // Load persisted tunnels
+      async function loadTunnelsUI() {
+        try {
+          const res = await window.api.tunnelsLoad()
+          tunnels = Array.isArray(res?.tunnels) ? res.tunnels : []
+          renderTunnels()
+        } catch {}
+      }
+      loadTunnelsUI()
     </script>
   </body>
   </html>

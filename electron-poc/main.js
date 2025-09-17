@@ -48,6 +48,22 @@ async function saveSessionsTree(tree) {
   await writeFile(sessionsFile(), JSON.stringify(payload, null, 2))
 }
 
+// Tunnels persistence
+const tunnelsFile = () => path.join(app.getPath('userData'), 'tunnels.json')
+async function loadTunnels() {
+  try {
+    const txt = await readFile(tunnelsFile(), 'utf-8')
+    const data = JSON.parse(txt)
+    if (Array.isArray(data)) return data
+    if (data && Array.isArray(data.tunnels)) return data.tunnels
+    return []
+  } catch { return [] }
+}
+async function saveTunnels(tunnels) {
+  const payload = { version: 1, tunnels: Array.isArray(tunnels) ? tunnels : [] }
+  await writeFile(tunnelsFile(), JSON.stringify(payload, null, 2))
+}
+
 ipcMain.handle('sessions-load', async () => {
   const data = await loadSessions()
   // normalize to { tree }
@@ -63,6 +79,17 @@ ipcMain.handle('sessions-load', async () => {
 ipcMain.handle('sessions-save', async (evt, tree) => {
   await saveSessionsTree(tree || [])
   try { win.webContents.send('sessions-updated') } catch {}
+  return { ok: true }
+})
+
+// Tunnels load/save
+ipcMain.handle('tunnels-load', async () => {
+  const tunnels = await loadTunnels()
+  return { ok: true, tunnels }
+})
+ipcMain.handle('tunnels-save', async (evt, tunnels) => {
+  await saveTunnels(tunnels || [])
+  try { win.webContents.send('tunnels-updated') } catch {}
   return { ok: true }
 })
 // legacy handlers kept as no-ops to avoid errors if called
