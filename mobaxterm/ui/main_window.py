@@ -800,6 +800,11 @@ class MobaXtermClone(QMainWindow):
                 # Add as a tab with display name
                 display_name = getattr(session, 'name', None) or session.host
                 tab_index = self.terminal_tabs.addTab(terminal_widget, f"🖥️ {display_name}")
+                # Add close button to this Terminal2 tab as well
+                try:
+                    self.terminal_tabs._add_close_button_to_tab(tab_index)
+                except Exception:
+                    pass
                 self.terminal_tabs.setCurrentIndex(tab_index)
                 terminal_tab = terminal_widget
             else:
