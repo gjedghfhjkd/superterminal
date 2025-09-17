@@ -382,7 +382,21 @@ class TerminalTab(QWidget):
                 self._send_queue.append(data)
 
     def eventFilter(self, obj, event):
-        if obj in (self.terminal_output, self.terminal_output.viewport()) and event.type() == QEvent.KeyPress:
+        if obj in (self.terminal_output, self.terminal_output.viewport()):
+            # For SSH sessions, block mouse interactions from changing caret/selection
+            if getattr(self.session, 'type', None) == 'SSH':
+                if event.type() in (QEvent.MouseButtonPress, QEvent.MouseButtonRelease, QEvent.MouseButtonDblClick, QEvent.MouseMove, QEvent.ContextMenu):
+                    try:
+                        # Restore focus and keep caret where our render logic placed it
+                        self.terminal_output.setFocus()
+                        # Optionally ensure caret stays at current programmatic position
+                        cursor = self.terminal_output.textCursor()
+                        self.terminal_output.setTextCursor(cursor)
+                    except Exception:
+                        pass
+                    return True
+
+            if event.type() == QEvent.KeyPress:
             # Handle zoom shortcuts regardless of input mode
             key = event.key()
             modifiers = event.modifiers()
