@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QApplication, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QListWidget, QLineEdit, QLabel, QTextEdit, QShortcut
+from PyQt5.QtWidgets import QApplication, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QListWidget, QLineEdit, QLabel, QTextEdit, QShortcut, QFileDialog, QComboBox
 from PyQt5.QtCore import Qt, QEvent
 from PyQt5.QtGui import QFont, QKeySequence, QTextCursor
 import sys
@@ -17,8 +17,17 @@ class Demo(QWidget):
         self.ed_host = QLineEdit('localhost')
         self.ed_port = QLineEdit('22')
         self.ed_user = QLineEdit('root')
+        # Auth controls
+        self.auth_method = QComboBox()
+        self.auth_method.addItem('Password', 'password')
+        self.auth_method.addItem('SSH key', 'key')
         self.ed_pass = QLineEdit('')
         self.ed_pass.setEchoMode(QLineEdit.Password)
+        self.ed_key = QLineEdit('')
+        self.btn_browse = QPushButton('Browse…')
+        self.btn_browse.clicked.connect(self.on_browse_key)
+        self.ed_passphrase = QLineEdit('')
+        self.ed_passphrase.setEchoMode(QLineEdit.Password)
         btn_connect = QPushButton('Connect SSH')
         btn_connect.clicked.connect(self.on_connect)
         left.addWidget(QLabel('Host'))
@@ -27,8 +36,17 @@ class Demo(QWidget):
         left.addWidget(self.ed_port)
         left.addWidget(QLabel('User'))
         left.addWidget(self.ed_user)
+        left.addWidget(QLabel('Auth method'))
+        left.addWidget(self.auth_method)
         left.addWidget(QLabel('Password'))
         left.addWidget(self.ed_pass)
+        left.addWidget(QLabel('Private key'))
+        row_key = QHBoxLayout()
+        row_key.addWidget(self.ed_key)
+        row_key.addWidget(self.btn_browse)
+        left.addLayout(row_key)
+        left.addWidget(QLabel('Passphrase'))
+        left.addWidget(self.ed_passphrase)
         left.addWidget(btn_connect)
         left.addStretch()
 
@@ -65,14 +83,24 @@ class Demo(QWidget):
         self.sftp = SFTPBackend()
         self.sftp.status.connect(lambda ok,msg: print('SFTP:',msg))
         self.sftp.listing.connect(self.on_listing)
+        # initialize auth fields visibility
+        self.auth_method.currentIndexChanged.connect(self.on_auth_changed)
+        self.on_auth_changed()
 
     def on_connect(self):
         host = self.ed_host.text().strip()
         port = int(self.ed_port.text().strip() or '22')
         user = self.ed_user.text().strip()
-        pwd = self.ed_pass.text()
-        self.ssh.connect(host, port, user, password=pwd, auth_method='password')
-        self.sftp.connect(host, port, user, password=pwd, auth_method='password')
+        method = self.auth_method.currentData()
+        if method == 'password':
+            pwd = self.ed_pass.text()
+            self.ssh.connect(host, port, user, password=pwd, auth_method='password')
+            self.sftp.connect(host, port, user, password=pwd, auth_method='password')
+        else:
+            key_path = self.ed_key.text().strip() or None
+            passphrase = self.ed_passphrase.text() or None
+            self.ssh.connect(host, port, user, auth_method='key', key_filename=key_path, passphrase=passphrase)
+            self.sftp.connect(host, port, user, auth_method='key', key_filename=key_path, passphrase=passphrase)
 
     def on_ls(self):
         self.sftp.listdir('/root')
@@ -81,6 +109,20 @@ class Demo(QWidget):
         self.sftp_list.clear()
         for e in entries:
             self.sftp_list.addItem(f"{e['filename']}  {e['st_size']}")
+
+    def on_browse_key(self):
+        path, _ = QFileDialog.getOpenFileName(self, 'Select Private Key', '', 'All Files (*)')
+        if path:
+            self.ed_key.setText(path)
+
+    def on_auth_changed(self):
+        is_key = (self.auth_method.currentData() == 'key')
+        # Toggle visibility
+        self.ed_pass.setVisible(not is_key)
+        self.ed_key.parent().layout().parent().update() if hasattr(self.ed_key.parent(), 'layout') else None
+        self.ed_key.setVisible(is_key)
+        self.btn_browse.setVisible(is_key)
+        self.ed_passphrase.setVisible(is_key)
 
 class TerminalStub(QWidget):
     def __init__(self, parent=None):
