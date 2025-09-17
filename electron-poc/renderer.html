@@ -8,8 +8,14 @@
       html, body { height:100%; overflow:hidden; }
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       #left { width:320px; padding:12px; border-right:1px solid #ddd; box-sizing:border-box; }
-      #right { flex:1; position:relative; overflow:hidden; }
-      #term { position:absolute; inset:0; background:#0f111a; }
+      #right { flex:1; display:flex; flex-direction:column; min-width:0; }
+      #tabs { height:36px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:flex-end; gap:6px; padding:0 8px; box-sizing:border-box; }
+      .tab { cursor:pointer; padding:6px 10px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .tab.active { background:#0f111a; color:#ffffff; }
+      .tab .close { margin-left:8px; color:#8b90a0; }
+      #panes { position:relative; flex:1; overflow:hidden; background:#0f111a; min-height:0; }
+      .pane { position:absolute; inset:0; display:none; }
+      .pane.active { display:block; }
       label { display:block; font-size:12px; margin-top:8px; }
       input, select { width:100%; box-sizing:border-box; }
       ul { list-style:none; padding:0; margin:0; height:180px; overflow:auto; border-top:1px solid #eee; }
@@ -24,22 +30,76 @@
       <h3>Sessions</h3>
       <ul id="sessions"></ul>
     </div>
-    <div id="right"><div id="term"></div></div>
+    <div id="right">
+      <div id="tabs"></div>
+      <div id="panes"></div>
+    </div>
     <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
     <script>
-      const term = new Terminal({ cursorBlink:true, theme:{ background:'#0f111a', foreground:'#e6e6e6' } })
-      term.open(document.getElementById('term'))
-      term.focus()
+      const terminals = new Map() // id -> { term, el }
+      const tabs = new Map() // id -> tab element
+      const panesEl = document.getElementById('panes')
+      const tabsEl = document.getElementById('tabs')
       let currentId = null
+
+      function createTerminalFor(id, title) {
+        const pane = document.createElement('div')
+        pane.className = 'pane'
+        panesEl.appendChild(pane)
+        const term = new Terminal({ cursorBlink:true, theme:{ background:'#0f111a', foreground:'#e6e6e6' } })
+        term.open(pane)
+        term.focus()
+        term.onData(data => { if (currentId != null) window.api.sshSendId(currentId, data) })
+        terminals.set(id, { term, el: pane })
+
+        const tab = document.createElement('div')
+        tab.className = 'tab'
+        tab.title = title
+        tab.textContent = title
+        const close = document.createElement('span')
+        close.textContent = '✕'
+        close.className = 'close'
+        close.onclick = async (e) => {
+          e.stopPropagation()
+          if (currentId === id) { currentId = null }
+          try { await window.api.sshDisconnect?.(id) } catch {}
+          const rec = terminals.get(id)
+          if (rec) { try { rec.term.dispose() } catch {}; rec.el.remove(); terminals.delete(id) }
+          const t = tabs.get(id); if (t) { t.remove(); tabs.delete(id) }
+          // Activate another tab if any
+          const next = [...tabs.keys()][0]
+          if (next != null) activateTab(next)
+        }
+        tab.appendChild(close)
+        tab.onclick = () => activateTab(id)
+        tabsEl.appendChild(tab)
+        tabs.set(id, tab)
+      }
+
+      function activateTab(id) {
+        currentId = id
+        for (const [tid, { el }] of terminals.entries()) { el.classList.toggle('active', tid === id) }
+        for (const [tid, tab] of tabs.entries()) { tab.classList.toggle('active', tid === id) }
+        resize()
+        const rec = terminals.get(id)
+        try { rec?.term?.focus() } catch {}
+      }
+
       window.api.sshOnData(payload => {
         try {
-          if (typeof payload === 'string') { term.write(payload); return }
-          if (payload && payload.id === currentId) { term.write(payload.data) }
+          if (typeof payload === 'string') {
+            const rec = currentId != null ? terminals.get(currentId) : null
+            if (rec) rec.term.write(payload)
+            return
+          }
+          const rec = payload && terminals.get(payload.id)
+          if (rec) rec.term.write(payload.data)
         } catch {}
       })
-      term.onData(data => { if (currentId != null) window.api.sshSendId(currentId, data) })
       function resize() {
-        const rect = document.getElementById('term').getBoundingClientRect()
+        const active = currentId != null ? terminals.get(currentId) : null
+        if (!active) return
+        const rect = active.el.getBoundingClientRect()
         const cw = 9; const ch = 18; // rough; good enough for POC
         const cols = Math.max(20, Math.floor(rect.width / cw))
         const rows = Math.max(5, Math.floor(rect.height / ch))
@@ -63,13 +123,17 @@
           btn.textContent = `${s.type || 'SSH'} ${s.username}@${s.host}:${s.port}`
           btn.onclick = async () => {
             try {
-              currentId = idx
-              const cfg = Object.assign({}, s, { id: idx })
-              await window.api.sshConnect(cfg)
-              await window.api.sshOpenPtyId(idx)
-              resize()
-              try { await window.api.sftpConnect(cfg) } catch {}
-              term.write('\r\n[Connected]\r\n')
+              const title = `${s.type || 'SSH'} ${s.username}@${s.host}:${s.port}`
+              if (!terminals.has(idx)) {
+                createTerminalFor(idx, title)
+                const cfg = Object.assign({}, s, { id: idx })
+                await window.api.sshConnect(cfg)
+                await window.api.sshOpenPtyId(idx)
+                try { await window.api.sftpConnect(cfg) } catch {}
+                const rec = terminals.get(idx)
+                rec.term.write('\r\n[Connected]\r\n')
+              }
+              activateTab(idx)
             } catch (e) { alert('Connect error: ' + (e?.message||e)) }
           }
           const del = document.createElement('button')

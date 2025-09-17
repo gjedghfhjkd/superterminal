@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('api', {
   sshSend: (data) => ipcRenderer.send('ssh-send', data),
   sshOnData: (cb) => ipcRenderer.on('ssh-data', (_, d) => cb(d)),
   sshResize: (size) => ipcRenderer.send('ssh-resize', size),
+  sshDisconnect: (id) => ipcRenderer.invoke('ssh-disconnect', id),
 
   sftpConnect: (cfg) => ipcRenderer.invoke('sftp-connect', cfg),
   sftpList: (remotePath) => ipcRenderer.invoke('sftp-list', remotePath),
