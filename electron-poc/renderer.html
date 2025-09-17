@@ -68,6 +68,7 @@
       const panesEl = document.getElementById('panes')
       const tabsEl = document.getElementById('tabs')
       let currentId = null
+      let draggingId = null
 
       function createTerminalFor(id, title) {
         const pane = document.createElement('div')
@@ -164,6 +165,15 @@
       function renderTree() {
         const root = document.getElementById('tree')
         root.innerHTML = ''
+        // enable dropping to root to move to top level
+        root.addEventListener('dragover', (e) => { e.preventDefault() })
+        root.addEventListener('drop', async (e) => {
+          e.preventDefault()
+          if (!draggingId) return
+          await moveNode(draggingId, { id:'__root__', type:'folder' })
+          draggingId = null
+        })
+
         function renderList(list, container) {
           list.forEach(n => {
             const row = document.createElement('div')
@@ -210,21 +220,23 @@
 
             // Drag and drop
             row.addEventListener('dragstart', (e) => {
-              e.dataTransfer.setData('text/plain', n.id)
+              draggingId = n.id
+              try { e.dataTransfer.setData('text/plain', n.id) } catch {}
               e.dataTransfer.effectAllowed = 'move'
             })
+            row.addEventListener('dragend', () => { draggingId = null })
             row.addEventListener('dragover', (e) => {
-              const dragId = e.dataTransfer.getData('text/plain')
-              if (!dragId || dragId === n.id) return
+              if (!draggingId || draggingId === n.id) return
               e.preventDefault()
               row.classList.add('drop-target')
             })
             row.addEventListener('dragleave', () => row.classList.remove('drop-target'))
             row.addEventListener('drop', async (e) => {
               e.preventDefault(); row.classList.remove('drop-target')
-              const dragId = e.dataTransfer.getData('text/plain')
+              const dragId = draggingId
               if (!dragId || dragId === n.id) return
-              moveNode(dragId, n)
+              await moveNode(dragId, n)
+              draggingId = null
             })
 
             if (n.type === 'folder' && n.expanded) {
@@ -257,9 +269,9 @@
         // Determine drop target container
         let container = null
         if (targetNode.type === 'folder') {
-          if (isDescendant(srcNode, targetNode.id)) return // prevent cycling
+          if (targetNode.id !== '__root__' && isDescendant(srcNode, targetNode.id)) return // prevent cycling
           targetNode.expanded = true
-          container = targetNode.children || (targetNode.children = [])
+          container = targetNode.id === '__root__' ? sessionTree : (targetNode.children || (targetNode.children = []))
         } else {
           // drop onto item -> insert after in the same parent
           const tgtInfo = findNodeById(sessionTree, targetNode.id, null)
