@@ -31,9 +31,13 @@
     </select>
     <label id="lbl-password">Password</label>
     <input id="password" type="password" />
-    <label id="lbl-key">Private key (paste or choose)</label>
-    <input id="keyfile" type="file" accept=".pem,.ppk,.key,.rsa,*/*" />
-    <textarea id="pkey" style="height:100px"></textarea>
+      <label id="lbl-key">Private key (paste or choose)</label>
+      <div id="filepick" style="display:flex; gap:8px; align-items:center">
+        <input id="keyfile" type="file" accept=".pem,.ppk,.key,.rsa,*/*" style="display:none" />
+        <button id="choose" type="button" style="margin:0">Choose file…</button>
+        <span id="fname" style="font-size:12px; color:#8b90a0"></span>
+      </div>
+      <textarea id="pkey" style="height:100px"></textarea>
     <label id="lbl-passphrase">Passphrase</label>
     <input id="passphrase" type="password" />
     <button id="btn-save">Save</button>
@@ -51,11 +55,13 @@
       }
       document.getElementById('auth').addEventListener('change', updateAuth)
       updateAuth()
+      document.getElementById('choose').addEventListener('click', () => document.getElementById('keyfile').click())
       document.getElementById('keyfile').addEventListener('change', async (e) => {
         const file = e.target.files && e.target.files[0]
         if (!file) return
         const text = await file.text().catch(() => '')
         if (text) document.getElementById('pkey').value = text
+        document.getElementById('fname').textContent = file ? file.name : ''
       })
       document.getElementById('btn-save').onclick = async () => {
         const sess = {
