@@ -185,9 +185,14 @@
         currentId = id
         for (const [tid, { el }] of terminals.entries()) { el.classList.toggle('active', tid === id) }
         for (const [tid, tab] of tabs.entries()) { tab.classList.toggle('active', tid === id) }
-        resize()
-        const rec = terminals.get(id)
-        try { rec?.term?.focus() } catch {}
+        if (terminals.has(id)) {
+          showSshView()
+          const rec = terminals.get(id)
+          try { rec?.term?.focus() } catch {}
+          resize()
+        } else {
+          showSftpView()
+        }
       }
 
       // View toggling between SSH (terminal panes) and SFTP panel
@@ -208,7 +213,7 @@
         const sftpPanel = document.getElementById('sftp-panel')
         const tunPanel = document.getElementById('tun-panel')
         panes.style.display = 'none'
-        tabsBar.style.display = 'none'
+        tabsBar.style.display = 'flex'
         sftpPanel.style.display = 'block'
         tunPanel.style.display = 'none'
       }
