@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
-import { readFile, writeFile, readdir, stat } from 'fs/promises'
+import { readFile, writeFile, readdir, stat, rm as fsrm, mkdir as fsmkdir, rename as fsrename } from 'fs/promises'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { Client as SSHClient } from 'ssh2'
@@ -160,6 +160,86 @@ ipcMain.handle('sftp-list', async (evt, remotePath) => {
   if (!first) throw new Error('No SFTP connection')
   const list = await first.list(remotePath)
   return list.map(e => ({ name: e.name, size: e.size, type: e.type }))
+})
+
+// Per-connection SFTP list
+ipcMain.handle('sftp-list-id', async (evt, payload) => {
+  const { id, path: remotePath } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  const list = await rec.sftp.list(remotePath)
+  return list.map(e => ({ name: e.name, size: e.size, type: e.type }))
+})
+
+// SFTP file operations
+ipcMain.handle('sftp-delete', async (evt, payload) => {
+  const { id, path: remotePath, isDir, recursive=true } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  if (isDir) { await rec.sftp.rmdir(remotePath, recursive) } else { await rec.sftp.delete(remotePath) }
+  return { ok: true }
+})
+ipcMain.handle('sftp-rename', async (evt, payload) => {
+  const { id, from, to } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  await rec.sftp.rename(from, to)
+  return { ok: true }
+})
+ipcMain.handle('sftp-mkdir', async (evt, payload) => {
+  const { id, path: remotePath } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  await rec.sftp.mkdir(remotePath, true)
+  return { ok: true }
+})
+ipcMain.handle('sftp-upload', async (evt, payload) => {
+  const { id, local, remote } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  await rec.sftp.fastPut(local, remote)
+  return { ok: true }
+})
+ipcMain.handle('sftp-download', async (evt, payload) => {
+  const { id, remote, local } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  await rec.sftp.fastGet(remote, local)
+  return { ok: true }
+})
+ipcMain.handle('sftp-upload-dir', async (evt, payload) => {
+  const { id, localDir, remoteDir } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  if (!rec.sftp.uploadDir) throw new Error('uploadDir not supported in ssh2-sftp-client version')
+  await rec.sftp.uploadDir(localDir, remoteDir)
+  return { ok: true }
+})
+ipcMain.handle('sftp-download-dir', async (evt, payload) => {
+  const { id, remoteDir, localDir } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  if (!rec.sftp.downloadDir) throw new Error('downloadDir not supported in ssh2-sftp-client version')
+  await rec.sftp.downloadDir(remoteDir, localDir)
+  return { ok: true }
+})
+
+// Local FS operations
+ipcMain.handle('local-delete', async (evt, payload) => {
+  const { path: localPath, isDir, recursive=true } = payload || {}
+  if (isDir) await fsrm(localPath, { recursive, force: true })
+  else await fsrm(localPath, { force: true })
+  return { ok: true }
+})
+ipcMain.handle('local-rename', async (evt, payload) => {
+  const { from, to } = payload || {}
+  await fsrename(from, to)
+  return { ok: true }
+})
+ipcMain.handle('local-mkdir', async (evt, payload) => {
+  const { path: localPath } = payload || {}
+  await fsmkdir(localPath, { recursive: true })
+  return { ok: true }
 })
 
 ipcMain.on('ssh-send', (e, payload) => {

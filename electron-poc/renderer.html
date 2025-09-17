@@ -666,12 +666,98 @@
           const row = document.createElement('div')
           row.className = 'sftp-row'
           const isDir = (it.type === 'd' || it.type === 'directory' || it.type === 'DIR')
-          row.innerHTML = `${isDir ? '<span class="icon"><svg viewBox=\"0 0 24 24\"><path d=\"M10 4l2 2h8a2 2 0 012 2v1H4V6a2 2 0 012-2h4zm12 6v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8h18z\"/></svg></span>' : '<span class=\"icon\"><svg viewBox=\"0 0 24 24\"><path d=\"M4 3h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2zm3 4v2h10V7H7zm0 4v2h6v-2H7z\"/></svg></span>'}<div class="sftp-name" title="${it.name}">${it.name}</div><div class="sftp-type">${isDir?'dir':'file'}</div>`
+          row.innerHTML = `${isDir ? '<span class="icon"><svg viewBox=\"0 0 24 24\"><path d=\"M10 4l2 2h8a2 2 0 012 2v1H4V6a2 2 0 012-2h4zm12 6v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8h18z\"/></svg></span>' : '<span class=\"icon\"><svg viewBox=\"0 0 24 24\"><path d=\"M4 3h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2zm3 4v2h10V7H7zm0 4v2h6v-2H7z\"/></svg></span>'}<div class=\"sftp-name\" title=\"${it.name}\">${it.name}</div><div class=\"sftp-type\">${isDir?'dir':'file'}</div>`
           row.onclick = () => { if (isDir) onEnterDir(joinPath(basePath, it.name)); }
+          // Context menu
+          row.oncontextmenu = (e) => { e.preventDefault(); openSftpCtxMenu(e.clientX, e.clientY, { basePath, name: it.name, isDir, ownerEl: el }) }
+          // Drag support
+          row.draggable = true
+          row.addEventListener('dragstart', (e) => {
+            e.dataTransfer.effectAllowed = 'copyMove'
+            const payload = JSON.stringify({ name: it.name, basePath, isDir, areaId: el.id })
+            try { e.dataTransfer.setData('application/json', payload) } catch {}
+          })
           rows.appendChild(row)
         }
         el.appendChild(rows)
       }
+
+      function openSftpCtxMenu(x, y, info) {
+        const menu = document.getElementById('ctx')
+        menu.innerHTML = ''
+        function add(label, handler) {
+          const it = document.createElement('div'); it.className='ctx-item'; it.textContent=label; it.onmousedown=(e)=>{ e.preventDefault(); e.stopPropagation(); hideCtx(); handler() }; menu.appendChild(it)
+        }
+        const { basePath, name, isDir, ownerEl } = info
+        const fullPath = joinPath(basePath, name)
+        const isRemote = ownerEl && ownerEl.id === 'sftp-remote-list'
+        add('Rename…', async () => {
+          const newName = await showInputModal('Rename', 'New name', name)
+          if (!newName) return
+          if (isRemote) {
+            const id = currentId
+            await window.api.sftpRename(id, fullPath, joinPath(basePath, newName))
+            await navigateRemote(basePath)
+          } else {
+            await window.api.localRename(fullPath, joinPath(basePath, newName))
+            await navigateLocal(basePath)
+          }
+        })
+        add('Delete…', async () => {
+          const ok = await showConfirmModal('Delete', `Delete ${name}?`, 'Delete', 'Cancel')
+          if (!ok) return
+          if (isRemote) {
+            const id = currentId
+            await window.api.sftpDelete(id, fullPath, isDir)
+            await navigateRemote(basePath)
+          } else {
+            await window.api.localDelete(fullPath, isDir)
+            await navigateLocal(basePath)
+          }
+        })
+        add('New Folder…', async () => {
+          const newName = await showInputModal('New Folder', 'Folder name', 'New Folder')
+          if (!newName) return
+          const targetDir = basePath
+          if (isRemote) {
+            const id = currentId
+            await window.api.sftpMkdir(id, joinPath(targetDir, newName))
+            await navigateRemote(targetDir)
+          } else {
+            await window.api.localMkdir(joinPath(targetDir, newName))
+            await navigateLocal(targetDir)
+          }
+        })
+        menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.style.display = 'block'
+        setTimeout(() => { const onDoc = (e) => { if (!menu.contains(e.target)) { hideCtx(); document.removeEventListener('mousedown', onDoc) } }; document.addEventListener('mousedown', onDoc) }, 0)
+      }
+
+      ;['sftp-local-list','sftp-remote-list'].forEach((id) => {
+        const el = document.getElementById(id)
+        el.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' })
+        el.addEventListener('drop', async (e) => {
+          e.preventDefault()
+          let data = null
+          try { data = JSON.parse(e.dataTransfer.getData('application/json')) } catch {}
+          if (!data || !data.name || !data.basePath) return
+          const srcFull = joinPath(data.basePath, data.name)
+          const dstIsRemote = id === 'sftp-remote-list'
+          const srcIsRemote = data.areaId === 'sftp-remote-list'
+          const dstBase = dstIsRemote ? sftpRemotePathEl.value : sftpLocalPathEl.value
+          const dstFull = joinPath(dstBase, data.name)
+          try {
+            if (srcIsRemote && !dstIsRemote) {
+              await window.api.sftpDownload(currentId, srcFull, dstFull)
+              await navigateLocal(dstBase)
+            } else if (!srcIsRemote && dstIsRemote) {
+              await window.api.sftpUpload(currentId, srcFull, dstFull)
+              await navigateRemote(dstBase)
+            } else {
+              // same side drop: skip for now
+            }
+          } catch (e2) { alert('Transfer error: ' + (e2?.message||e2)) }
+        })
+      })
 
       function joinPath(a, b) {
         if (!a || a === '/') return '/' + (b||'').replace(/^\/+/, '')
