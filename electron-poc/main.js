@@ -49,7 +49,13 @@ async function saveSessionsTree(tree) {
 ipcMain.handle('sessions-load', async () => {
   const data = await loadSessions()
   // normalize to { tree }
-  const tree = Array.isArray(data) ? data.map((s, i) => ({ id: String(i), type:'session', name: `${s.username||'user'}@${s.host||'host'}:${s.port||22}`, session: s })) : data
+  let tree
+  if (Array.isArray(data)) {
+    const looksLikeTree = data.some(e => e && typeof e === 'object' && 'type' in e)
+    tree = looksLikeTree ? data : data.map((s, i) => ({ id: String(i), type:'session', name: `${s.username||'user'}@${s.host||'host'}:${s.port||22}`, session: s }))
+  } else {
+    tree = data
+  }
   return { ok: true, tree }
 })
 ipcMain.handle('sessions-save', async (evt, tree) => {

@@ -220,7 +220,13 @@
       function openCtxMenu(x, y, targetNode=null) {
         const menu = document.getElementById('ctx')
         menu.innerHTML = ''
-        function add(label, handler) { const it = document.createElement('div'); it.className='ctx-item'; it.textContent=label; it.onclick=() => { hideCtx(); handler() }; menu.appendChild(it) }
+        function add(label, handler) {
+          const it = document.createElement('div');
+          it.className='ctx-item';
+          it.textContent=label;
+          it.onmousedown=(e)=>{ e.preventDefault(); e.stopPropagation(); hideCtx(); handler() };
+          menu.appendChild(it)
+        }
         const isFolder = targetNode && targetNode.type==='folder'
         add('New Folder', async () => {
           const name = await showInputModal('New Folder', 'Folder name', 'New Folder')
