@@ -31,14 +31,20 @@
       const term = new Terminal({ cursorBlink:true, theme:{ background:'#0f111a', foreground:'#e6e6e6' } })
       term.open(document.getElementById('term'))
       term.focus()
-      window.api.sshOnData(data => term.write(data))
-      term.onData(data => window.api.sshSend(data))
+      let currentId = null
+      window.api.sshOnData(payload => {
+        try {
+          if (typeof payload === 'string') { term.write(payload); return }
+          if (payload && payload.id === currentId) { term.write(payload.data) }
+        } catch {}
+      })
+      term.onData(data => { if (currentId != null) window.api.sshSendId(currentId, data) })
       function resize() {
         const rect = document.getElementById('term').getBoundingClientRect()
         const cw = 9; const ch = 18; // rough; good enough for POC
         const cols = Math.max(20, Math.floor(rect.width / cw))
         const rows = Math.max(5, Math.floor(rect.height / ch))
-        window.api.sshResize({ cols, rows })
+        if (currentId != null) window.api.sshResizeId(currentId, cols, rows)
       }
       window.addEventListener('resize', resize)
 
@@ -58,10 +64,12 @@
           btn.textContent = `${s.type || 'SSH'} ${s.username}@${s.host}:${s.port}`
           btn.onclick = async () => {
             try {
-              await window.api.sshConnect(s)
-              await window.api.sshOpenPty()
+              currentId = idx
+              const cfg = Object.assign({}, s, { id: idx })
+              await window.api.sshConnect(cfg)
+              await window.api.sshOpenPtyId(idx)
               resize()
-              try { await window.api.sftpConnect(s) } catch {}
+              try { await window.api.sftpConnect(cfg) } catch {}
               term.write('\r\n[Connected]\r\n')
             } catch (e) { alert('Connect error: ' + (e?.message||e)) }
           }
