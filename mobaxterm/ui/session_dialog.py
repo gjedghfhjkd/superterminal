@@ -319,6 +319,10 @@ class SessionDialog(QDialog):
         self.ssh_font_size_input.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         basic_layout.addWidget(self.ssh_font_size_input, 5, 1)
 
+        # Row 6: Use experimental terminal
+        self.use_term2_check = QCheckBox("Use new Terminal2 (experimental)")
+        basic_layout.addWidget(self.use_term2_check, 6, 1)
+
         layout.addWidget(basic_group)
         
         # Authentication group
@@ -680,6 +684,10 @@ class SessionDialog(QDialog):
                     self.ssh_font_size_input.setValue(12)
             except Exception:
                 self.ssh_font_size_input.setValue(12)
+            try:
+                self.use_term2_check.setChecked(bool(getattr(session, 'use_terminal2', False)))
+            except Exception:
+                pass
             
             # Load auth
             if hasattr(session, 'auth_method'):
@@ -737,7 +745,8 @@ class SessionDialog(QDialog):
                 username=(self.ssh_username_input.text() or None),
                 auth_method=self.auth_method_combo.currentData(),
                 private_key_path=self.key_path_input.text() if self.auth_method_combo.currentData() == 'key' and self.key_path_input.text() else None,
-                private_key_passphrase=self.passphrase_input.text() if self.auth_method_combo.currentData() == 'key' and self.passphrase_input.text() else None
+                private_key_passphrase=self.passphrase_input.text() if self.auth_method_combo.currentData() == 'key' and self.passphrase_input.text() else None,
+                use_terminal2=self.use_term2_check.isChecked()
             )
             # Set password only for password auth
             if self.auth_method_combo.currentData() == 'password':

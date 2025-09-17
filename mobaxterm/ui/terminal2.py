@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QShortcut
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QKeySequence, QTextCursor
 
 try:
@@ -28,7 +28,7 @@ class Terminal2(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.view = QTextEdit()
-        self.view.setReadOnly(True)
+        self.view.setReadOnly(False)
         self.view.setLineWrapMode(QTextEdit.NoWrap)
         self.view.setStyleSheet("QTextEdit{background:#0f111a;color:#e6e6e6;border:none;padding:6px}")
         font = QFont('Consolas')
@@ -37,6 +37,9 @@ class Terminal2(QWidget):
         font.setPointSize(12)
         self.view.setFont(font)
         layout.addWidget(self.view)
+        # input handling
+        self.view.installEventFilter(self)
+        self.view.viewport().installEventFilter(self)
         # shortcuts
         try:
             sc_in = QShortcut(QKeySequence.ZoomIn, self)
@@ -48,6 +51,12 @@ class Terminal2(QWidget):
 
     def set_sender(self, sender):
         self._send_key = sender
+    def _send(self, data: str):
+        if self._send_key and data is not None:
+            try:
+                self._send_key(data)
+            except Exception:
+                pass
 
     def feed(self, data: str):
         if self._stream is None:
@@ -88,4 +97,55 @@ class Terminal2(QWidget):
             self.view.setTextCursor(c)
         except Exception:
             pass
+
+    def eventFilter(self, obj, event):
+        if obj in (self.view, self.view.viewport()):
+            if event.type() == QEvent.KeyPress:
+                key = event.key()
+                mods = event.modifiers()
+                # Paste Ctrl+Shift+V
+                if (mods & Qt.ControlModifier) and (mods & Qt.ShiftModifier) and key == Qt.Key_V:
+                    try:
+                        from PyQt5.QtWidgets import QApplication
+                        text = QApplication.clipboard().text()
+                        if text:
+                            self._send(text)
+                    except Exception:
+                        pass
+                    return True
+                # ESC
+                if key == Qt.Key_Escape:
+                    self._send("\x1b")
+                    return True
+                # Ctrl combos
+                if (mods & Qt.ControlModifier) and key == Qt.Key_C:
+                    self._send("\x03"); return True
+                if (mods & Qt.ControlModifier) and key == Qt.Key_D:
+                    self._send("\x04"); return True
+                if (mods & Qt.ControlModifier) and key == Qt.Key_L:
+                    self._send("\x0c"); return True
+                # Enter
+                if key in (Qt.Key_Return, Qt.Key_Enter):
+                    self._send("\r"); return True
+                # Backspace
+                if key == Qt.Key_Backspace:
+                    self._send("\x7f"); return True
+                # Tab
+                if key == Qt.Key_Tab:
+                    self._send("\t"); return True
+                # Arrows
+                if key == Qt.Key_Up:
+                    self._send("\x1b[A"); return True
+                if key == Qt.Key_Down:
+                    self._send("\x1b[B"); return True
+                if key == Qt.Key_Right:
+                    self._send("\x1b[C"); return True
+                if key == Qt.Key_Left:
+                    self._send("\x1b[D"); return True
+                # Printable
+                txt = event.text()
+                if txt:
+                    self._send(txt)
+                    return True
+        return super().eventFilter(obj, event)
 

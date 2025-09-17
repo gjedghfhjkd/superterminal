@@ -18,6 +18,7 @@ class Session:
     folder: Optional[str] = None 
     bookmark_settings: bool = False
     folder: Optional[str] = None
+    use_terminal2: bool = False
     def __post_init__(self):
         if self.folder and self.folder.startswith('/'):
             self.folder = self.folder[1:]
@@ -43,7 +44,8 @@ class Session:
             'terminal_settings': self.terminal_settings,
             'network_settings': self.network_settings,
             'bookmark_settings': self.bookmark_settings,
-            'folder': self.folder
+            'folder': self.folder,
+            'use_terminal2': self.use_terminal2
         }
     
     @classmethod
@@ -61,5 +63,6 @@ class Session:
             terminal_settings=data.get('terminal_settings', False),
             network_settings=data.get('network_settings', False),
             bookmark_settings=data.get('bookmark_settings', False),
-            folder=data.get('folder')
+            folder=data.get('folder'),
+            use_terminal2=data.get('use_terminal2', False)
         )

@@ -9,6 +9,7 @@ from PyQt5.QtGui import QTextCursor, QColor, QFont
 from .session_dialog import SessionDialog
 from .session_tree_widget import SessionTreeWidget
 from .terminal_tabs import TerminalTabs
+from .terminal2 import Terminal2
 from ..core.session_manager import SessionManager
 from ..core.ssh_client import SSHClient
 from ..core.sftp_client import SFTPClient
@@ -793,7 +794,16 @@ class MobaXtermClone(QMainWindow):
             self.show_loading(f"Connecting to {session.host}...")
             
             # Создаем новую вкладку терминала
-            terminal_tab = self.terminal_tabs.add_terminal_tab(session)
+            # Choose terminal implementation via feature flag
+            if getattr(session, 'use_terminal2', False):
+                terminal_widget = Terminal2()
+                # Add as a tab with display name
+                display_name = getattr(session, 'name', None) or session.host
+                tab_index = self.terminal_tabs.addTab(terminal_widget, f"🖥️ {display_name}")
+                self.terminal_tabs.setCurrentIndex(tab_index)
+                terminal_tab = terminal_widget
+            else:
+                terminal_tab = self.terminal_tabs.add_terminal_tab(session)
             terminal_tab.session_index = session_index
             terminal_tab.command_submitted.connect(
                 lambda cmd, idx=session_index: self.execute_command(idx, cmd)
@@ -809,10 +819,24 @@ class MobaXtermClone(QMainWindow):
             self.ssh_threads[session_index] = ssh_thread
 
             # Provide terminal with a way to send raw keys to this SSH thread
-            terminal_tab.set_key_sender(lambda data, t=ssh_thread: t.send_raw(data))
+            # Wire sender depending on terminal type
+            try:
+                if hasattr(terminal_tab, 'set_key_sender'):
+                    terminal_tab.set_key_sender(lambda data, t=ssh_thread: t.send_raw(data))
+                elif hasattr(terminal_tab, 'set_sender'):
+                    terminal_tab.set_sender(lambda data, t=ssh_thread: t.send_raw(data))
+            except Exception:
+                pass
 
             # If the user starts typing immediately, ensure input is enabled
-            terminal_tab.enable_input()
+            try:
+                if hasattr(terminal_tab, 'enable_input'):
+                    terminal_tab.enable_input()
+                else:
+                    terminal_tab.view.setReadOnly(False)
+                    terminal_tab.view.setFocus()
+            except Exception:
+                pass
         elif session and session.type == 'SFTP':
             # Check existing SFTP tab
             if session_index in getattr(self, 'sftp_threads', {}):
