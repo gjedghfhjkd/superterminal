@@ -8,6 +8,9 @@
       html, body { height:100%; overflow:hidden; }
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       #left { width:320px; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
+      #left-topnav { padding:6px 8px; border-bottom:1px solid #1f2330; display:flex; gap:6px; align-items:center; }
+      .left-tab { cursor:pointer; padding:6px 10px; border-radius:8px; border:1px solid #2a3040; color:#cfd3dc; background:#1a1f2d; }
+      .left-tab:hover { background:#22283a; }
       #left-header { padding:10px 12px; border-bottom:1px solid #1f2330; font-weight:600; letter-spacing:0.2px; }
       .tree { flex:1; overflow:auto; padding:6px 4px; }
       .item { user-select:none; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:6px; cursor:default; }
@@ -24,9 +27,6 @@
       .ctx-item:hover { background:#1a1f2d; }
       .drop-target { outline:1px dashed #3a4160; background:#141a29; }
       #right { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
-      #topnav { height:38px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:center; gap:6px; padding:0 8px; box-sizing:border-box; }
-      .top-tab { cursor:pointer; padding:6px 10px; border-radius:8px; border:1px solid transparent; color:#cfd3dc; }
-      .top-tab.active { background:#1a1f2d; border-color:#2a3040; color:#ffffff; }
       #tabs { height:36px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:flex-end; gap:6px; padding:0 8px; box-sizing:border-box; }
       .tab { cursor:pointer; padding:6px 10px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
       .tab.active { background:#0f111a; color:#ffffff; }
@@ -69,16 +69,16 @@
   </head>
   <body>
     <div id="left">
+      <div id="left-topnav">
+        <div id="left-ssh" class="left-tab">SSH</div>
+        <div id="left-sftp" class="left-tab">SFTP</div>
+        <div id="left-tun" class="left-tab">Tunneling</div>
+      </div>
       <div id="left-header">Sessions</div>
       <div id="tree" class="tree"></div>
       <div id="ctx" class="ctx-menu" style="display:none"></div>
     </div>
       <div id="right">
-      <div id="topnav">
-        <div id="tab-ssh" class="top-tab active">SSH</div>
-        <div id="tab-sftp" class="top-tab">SFTP</div>
-        <div id="tab-tun" class="top-tab">Tunneling</div>
-      </div>
       <div id="tabs"></div>
       <div id="panes"></div>
       <div id="sftp-panel">
@@ -103,7 +103,6 @@
       const tabsEl = document.getElementById('tabs')
       let currentId = null
       let draggingId = null
-      let activeTopTab = 'ssh'
 
       function createTerminalFor(id, title) {
         const pane = document.createElement('div')
@@ -150,27 +149,55 @@
         try { rec?.term?.focus() } catch {}
       }
 
-      // Top navigation switching
-      function setTopTab(tab) {
-        activeTopTab = tab
-        document.getElementById('tab-ssh').classList.toggle('active', tab==='ssh')
-        document.getElementById('tab-sftp').classList.toggle('active', tab==='sftp')
-        document.getElementById('tab-tun').classList.toggle('active', tab==='tun')
+      // View toggling between SSH (terminal panes) and SFTP panel
+      function showSshView() {
         const panes = document.getElementById('panes')
         const tabsBar = document.getElementById('tabs')
         const sftpPanel = document.getElementById('sftp-panel')
         const tunPanel = document.getElementById('tun-panel')
-        const sshVisible = tab==='ssh'
-        panes.style.display = sshVisible ? 'block' : 'none'
-        tabsBar.style.display = sshVisible ? 'flex' : 'none'
-        sftpPanel.style.display = tab==='sftp' ? 'block' : 'none'
-        tunPanel.style.display = tab==='tun' ? 'block' : 'none'
-        if (sshVisible) resize()
+        panes.style.display = 'block'
+        tabsBar.style.display = 'flex'
+        sftpPanel.style.display = 'none'
+        tunPanel.style.display = 'none'
+        resize()
       }
-      document.getElementById('tab-ssh').onclick = () => setTopTab('ssh')
-      document.getElementById('tab-sftp').onclick = () => setTopTab('sftp')
-      document.getElementById('tab-tun').onclick = () => setTopTab('tun')
-      setTopTab('ssh')
+      function showSftpView() {
+        const panes = document.getElementById('panes')
+        const tabsBar = document.getElementById('tabs')
+        const sftpPanel = document.getElementById('sftp-panel')
+        const tunPanel = document.getElementById('tun-panel')
+        panes.style.display = 'none'
+        tabsBar.style.display = 'none'
+        sftpPanel.style.display = 'block'
+        tunPanel.style.display = 'none'
+      }
+
+      // Left top buttons: open session creation modals
+      document.getElementById('left-ssh').onclick = async () => {
+        try {
+          const res = await window.api.openSessionWindow('SSH')
+          const s = res && res.session
+          if (!s) return
+          const node = { id: genId('sess'), type:'session', name: `${s.name||s.host} (${s.username})`, session: s }
+          sessionTree.push(node)
+          await window.api.sessionsSaveTree(sessionTree)
+          renderTree()
+        } catch (e) { alert('Create SSH session error: ' + (e?.message||e)) }
+      }
+      document.getElementById('left-sftp').onclick = async () => {
+        try {
+          const res = await window.api.openSessionWindow('SFTP')
+          const s = res && res.session
+          if (!s) return
+          const node = { id: genId('sess'), type:'session', name: `${s.name||s.host} (${s.username})`, session: s }
+          sessionTree.push(node)
+          await window.api.sessionsSaveTree(sessionTree)
+          renderTree()
+        } catch (e) { alert('Create SFTP session error: ' + (e?.message||e)) }
+      }
+      document.getElementById('left-tun').onclick = async () => {
+        alert('Tunneling: coming soon')
+      }
 
       window.api.sshOnData(payload => {
         try {
@@ -267,19 +294,28 @@
                 try {
                   const id = n.id
                   const s = n.session
-                  const title = `${s.type || 'SSH'} ${s.name||s.host} (${s.username})`
-                  if (!terminals.has(id)) {
-                    createTerminalFor(id, title)
+                  if ((s.type||'SSH').toUpperCase() === 'SFTP') {
+                    // Open SFTP view and connect
                     const cfg = Object.assign({}, s, { id })
-                    await window.api.sshConnect(cfg)
-                    await window.api.sshOpenPtyId(id)
-                    try { await window.api.sftpConnect(cfg) } catch {}
-                    const rec = terminals.get(id)
-                    try { rec.fit.fit() } catch {}
-                    try { window.api.sshResizeId(id, rec.term.cols, rec.term.rows) } catch {}
-                    rec.term.write('\r\n[Connected]\r\n')
+                    await window.api.sftpConnect(cfg)
+                    showSftpView()
+                    await navigateTo('/')
+                  } else {
+                    const title = `${s.type || 'SSH'} ${s.name||s.host} (${s.username})`
+                    if (!terminals.has(id)) {
+                      createTerminalFor(id, title)
+                      const cfg = Object.assign({}, s, { id })
+                      await window.api.sshConnect(cfg)
+                      await window.api.sshOpenPtyId(id)
+                      try { await window.api.sftpConnect(cfg) } catch {}
+                      const rec = terminals.get(id)
+                      try { rec.fit.fit() } catch {}
+                      try { window.api.sshResizeId(id, rec.term.cols, rec.term.rows) } catch {}
+                      rec.term.write('\r\n[Connected]\r\n')
+                    }
+                    showSshView()
+                    activateTab(id)
                   }
-                  activateTab(id)
                 } catch (e) { alert('Connect error: ' + (e?.message||e)) }
               }
             }

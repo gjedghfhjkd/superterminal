@@ -15,9 +15,9 @@
     </style>
   </head>
   <body>
-    <h3>Create Session</h3>
+    <h3 id="title">Create Session</h3>
     <div class="wrap">
-    <!-- Type removed per requirement; default to SSH -->
+    <!-- Type selected by parent window via query param: SSH or SFTP -->
     <label>Name</label>
     <input id="name" placeholder="Optional name (defaults to host)" />
     <label>Host</label>
@@ -45,6 +45,13 @@
     <button id="btn-save">Save</button>
     </div>
     <script>
+      function getQueryParam(name) {
+        const params = new URLSearchParams(window.location.search)
+        return params.get(name)
+      }
+      const sessionType = (getQueryParam('type') || 'SSH').toUpperCase()
+      document.getElementById('title').textContent = `Create ${sessionType} Session`
+
       function updateAuth() {
         const isKey = document.getElementById('auth').value === 'key'
         document.getElementById('lbl-password').style.display = isKey ? 'none' : ''
@@ -67,7 +74,7 @@
       })
       document.getElementById('btn-save').onclick = async () => {
         const sess = {
-          type: 'SSH',
+          type: sessionType,
           name: (document.getElementById('name').value || document.getElementById('host').value || '').trim(),
           host: document.getElementById('host').value,
           port: Number(document.getElementById('port').value),
