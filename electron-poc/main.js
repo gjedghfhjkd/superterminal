@@ -159,27 +159,8 @@ ipcMain.handle('sftp-list', async (evt, remotePath) => {
   for (const rec of connections.values()) { if (rec.sftp) { first = rec.sftp; break } }
   if (!first) throw new Error('No SFTP connection')
   const list = await first.list(remotePath)
-  const base = (remotePath && typeof remotePath === 'string' && remotePath.length) ? remotePath : '/'
-  const mapped = await Promise.all(list.map(async (e) => {
-    let type = e.type
-    // Normalize types and resolve symlinks to determine if they point to directories
-    if (type === 'd' || /^(dir|directory)$/i.test(String(type))) {
-      type = 'd'
-    } else if (type === 'l') {
-      const full = path.posix.join(base === '/' ? '/' : base.replace(/\/+$/,'/'), e.name)
-      try {
-        const st = await first.stat(full)
-        const isDir = Boolean(st && (st.isDirectory || st.type === 'd' || ((st.mode & 0o170000) === 0o040000)))
-        type = isDir ? 'd' : 'file'
-      } catch {
-        type = 'file'
-      }
-    } else {
-      type = 'file'
-    }
-    return { name: e.name, size: e.size, type }
-  }))
-  return mapped
+  // Keep it simple and robust: treat symlinks as directories for navigation
+  return list.map(e => ({ name: e.name, size: e.size, type: (e.type === 'l' ? 'd' : (e.type === 'd' ? 'd' : 'file')) }))
 })
 
 // Per-connection SFTP list
@@ -188,32 +169,13 @@ ipcMain.handle('sftp-list-id', async (evt, payload) => {
   const rec = connections.get(id)
   if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
   const list = await rec.sftp.list(remotePath)
-  const base = (remotePath && typeof remotePath === 'string' && remotePath.length) ? remotePath : '/'
-  const mapped = await Promise.all(list.map(async (e) => {
-    let type = e.type
-    if (type === 'd' || /^(dir|directory)$/i.test(String(type))) {
-      type = 'd'
-    } else if (type === 'l') {
-      const full = path.posix.join(base === '/' ? '/' : base.replace(/\/+$/,'/'), e.name)
-      try {
-        const st = await rec.sftp.stat(full)
-        const isDir = Boolean(st && (st.isDirectory || st.type === 'd' || ((st.mode & 0o170000) === 0o040000)))
-        type = isDir ? 'd' : 'file'
-      } catch {
-        type = 'file'
-      }
-    } else {
-      type = 'file'
-    }
-    return {
-      name: e.name,
-      displayName: e.name,
-      pathName: e.name,
-      size: e.size,
-      type
-    }
+  return list.map(e => ({
+    name: e.name,
+    displayName: e.name,
+    pathName: e.name,
+    size: e.size,
+    type: (e.type === 'l' ? 'd' : (e.type === 'd' ? 'd' : 'file'))
   }))
-  return mapped
 })
 
 // SFTP file operations
