@@ -7,7 +7,20 @@
     <style>
       html, body { height:100%; overflow:hidden; }
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
-      #left { width:320px; padding:12px; border-right:1px solid #ddd; box-sizing:border-box; }
+      #left { width:320px; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
+      #left-header { padding:10px 12px; border-bottom:1px solid #1f2330; font-weight:600; letter-spacing:0.2px; }
+      .tree { flex:1; overflow:auto; padding:6px 4px; }
+      .item { user-select:none; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:6px; cursor:default; }
+      .item:hover { background:#121623; }
+      .item.selected { background:#1a1f2d; outline:1px solid #2a3040; }
+      .caret { width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:6px solid #8b90a0; transform:rotate(-90deg); transition:transform .15s ease; margin-right:2px; }
+      .expanded > .caret { transform:rotate(0deg); }
+      .icon { width:14px; height:14px; display:inline-block; background:#2a3040; border-radius:3px; }
+      .label { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; }
+      .children { margin-left:16px; }
+      .ctx-menu { position:fixed; z-index:1000; background:#0f111a; border:1px solid #2a3040; border-radius:8px; padding:6px 0; min-width:180px; box-shadow:0 6px 18px rgba(0,0,0,.4); }
+      .ctx-item { padding:6px 12px; cursor:pointer; }
+      .ctx-item:hover { background:#1a1f2d; }
       #right { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
       #tabs { height:36px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:flex-end; gap:6px; padding:0 8px; box-sizing:border-box; }
       .tab { cursor:pointer; padding:6px 10px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -26,12 +39,9 @@
   </head>
   <body>
     <div id="left">
-      <div style="display:flex; gap:8px; margin-bottom:8px">
-        <button id="new-ssh">+ SSH</button>
-        <button id="new-sftp">+ SFTP</button>
-      </div>
-      <h3>Sessions</h3>
-      <ul id="sessions"></ul>
+      <div id="left-header">Sessions</div>
+      <div id="tree" class="tree"></div>
+      <div id="ctx" class="ctx-menu" style="display:none"></div>
     </div>
     <div id="right">
       <div id="tabs"></div>
@@ -115,44 +125,143 @@
       }
       window.addEventListener('resize', resize)
 
-      // New session windows
-      document.getElementById('new-ssh').onclick = async () => { await window.api.openSessionWindow('SSH'); refreshSessions() }
-      document.getElementById('new-sftp').onclick = async () => { await window.api.openSessionWindow('SFTP'); refreshSessions() }
+      // Tree state and helpers
+      let sessionTree = []
+      let selectedId = null
+      function genId(prefix='id') { return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7) }
+      function findNodeById(list, id, parent=null) {
+        for (let i=0;i<list.length;i++) {
+          const n = list[i]
+          if (n.id === id) return { node:n, index:i, parent }
+          if (n.type === 'folder' && Array.isArray(n.children)) {
+            const r = findNodeById(n.children, id, n)
+            if (r) return r
+          }
+        }
+        return null
+      }
+      function removeNodeById(id) {
+        const info = findNodeById(sessionTree, id, null)
+        if (!info) return false
+        if (!info.parent) { sessionTree.splice(info.index, 1) }
+        else { info.parent.children.splice(info.index, 1) }
+        return true
+      }
 
-      // Sessions persistence
+      function renderTree() {
+        const root = document.getElementById('tree')
+        root.innerHTML = ''
+        function renderList(list, container) {
+          list.forEach(n => {
+            const row = document.createElement('div')
+            row.className = 'item' + (n.expanded ? ' expanded' : '') + (selectedId===n.id?' selected':'')
+            row.dataset.id = n.id
+            const caret = document.createElement('div')
+            caret.className = 'caret'
+            caret.style.visibility = n.type==='folder' ? 'visible' : 'hidden'
+            row.appendChild(caret)
+            const icon = document.createElement('span')
+            icon.className = 'icon'
+            row.appendChild(icon)
+            const label = document.createElement('div')
+            label.className = 'label'
+            label.textContent = n.name || (n.type==='session' ? `${n.session?.username||'user'}@${n.session?.host||'host'}:${n.session?.port||22}` : 'Folder')
+            row.appendChild(label)
+            container.appendChild(row)
+
+            row.onclick = (e) => { selectedId = n.id; renderTree() }
+            row.ondblclick = async () => {
+              if (n.type === 'folder') { n.expanded = !n.expanded; renderTree(); return }
+              if (n.type === 'session') {
+                try {
+                  const id = n.id
+                  const s = n.session
+                  const title = `${s.type || 'SSH'} ${s.username}@${s.host}:${s.port}`
+                  if (!terminals.has(id)) {
+                    createTerminalFor(id, title)
+                    const cfg = Object.assign({}, s, { id })
+                    await window.api.sshConnect(cfg)
+                    await window.api.sshOpenPtyId(id)
+                    try { await window.api.sftpConnect(cfg) } catch {}
+                    const rec = terminals.get(id)
+                    try { rec.fit.fit() } catch {}
+                    try { window.api.sshResizeId(id, rec.term.cols, rec.term.rows) } catch {}
+                    rec.term.write('\r\n[Connected]\r\n')
+                  }
+                  activateTab(id)
+                } catch (e) { alert('Connect error: ' + (e?.message||e)) }
+              }
+            }
+            row.oncontextmenu = (e) => { e.preventDefault(); selectedId = n.id; renderTree(); openCtxMenu(e.clientX, e.clientY, n) }
+
+            if (n.type === 'folder' && n.expanded) {
+              const children = document.createElement('div')
+              children.className = 'children'
+              container.appendChild(children)
+              renderList(n.children || [], children)
+            }
+          })
+        }
+        renderList(sessionTree, root)
+      }
+
+      function openCtxMenu(x, y, targetNode=null) {
+        const menu = document.getElementById('ctx')
+        menu.innerHTML = ''
+        function add(label, handler) { const it = document.createElement('div'); it.className='ctx-item'; it.textContent=label; it.onclick=() => { hideCtx(); handler() }; menu.appendChild(it) }
+        const isFolder = targetNode && targetNode.type==='folder'
+        add('New Folder', async () => {
+          const name = prompt('Folder name:','New Folder')
+          if (!name) return
+          const node = { id: genId('fld'), type:'folder', name, expanded:true, children:[] }
+          if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
+          else targetNode.children.push(node)
+          await window.api.sessionsSaveTree(sessionTree)
+          renderTree()
+        })
+        add('New Session', async () => {
+          const res = await window.api.openSessionWindow('SSH')
+          const s = res && res.session
+          if (!s) return
+          const name = `${s.username||'user'}@${s.host||'host'}:${s.port||22}`
+          const node = { id: genId('sess'), type:'session', name, session: s }
+          if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
+          else targetNode.children.push(node)
+          await window.api.sessionsSaveTree(sessionTree)
+          renderTree()
+        })
+        if (targetNode) {
+          add('Delete…', async () => {
+            if (!confirm('Delete selected item?')) return
+            removeNodeById(targetNode.id)
+            selectedId = null
+            await window.api.sessionsSaveTree(sessionTree)
+            renderTree()
+          })
+        }
+        menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.style.display = 'block'
+        setTimeout(() => {
+          const onDoc = (e) => { hideCtx(); document.removeEventListener('mousedown', onDoc) }
+          document.addEventListener('mousedown', onDoc)
+        }, 0)
+      }
+      function hideCtx() { const menu = document.getElementById('ctx'); menu.style.display='none' }
+      document.getElementById('left').oncontextmenu = (e) => { if (e.target && e.target.closest('.item')) return; e.preventDefault(); openCtxMenu(e.clientX, e.clientY, null) }
+      document.addEventListener('keydown', async (e) => {
+        if (e.key === 'Delete' && selectedId) {
+          if (!confirm('Delete selected item?')) return
+          removeNodeById(selectedId)
+          selectedId = null
+          await window.api.sessionsSaveTree(sessionTree)
+          renderTree()
+        }
+      })
+
+      // Load tree
       async function refreshSessions() {
         const res = await window.api.sessionsLoad()
-        const list = document.getElementById('sessions')
-        list.innerHTML = ''
-        if (!res || !res.sessions) return
-        res.sessions.forEach((s, idx) => {
-          const li = document.createElement('li')
-          const btn = document.createElement('button')
-          btn.textContent = `${s.type || 'SSH'} ${s.username}@${s.host}:${s.port}`
-          btn.onclick = async () => {
-            try {
-              const title = `${s.type || 'SSH'} ${s.username}@${s.host}:${s.port}`
-              if (!terminals.has(idx)) {
-                createTerminalFor(idx, title)
-                const cfg = Object.assign({}, s, { id: idx })
-                await window.api.sshConnect(cfg)
-                await window.api.sshOpenPtyId(idx)
-                try { await window.api.sftpConnect(cfg) } catch {}
-                const rec = terminals.get(idx)
-                try { rec.fit.fit() } catch {}
-                try { window.api.sshResizeId(idx, rec.term.cols, rec.term.rows) } catch {}
-                rec.term.write('\r\n[Connected]\r\n')
-              }
-              activateTab(idx)
-            } catch (e) { alert('Connect error: ' + (e?.message||e)) }
-          }
-          const del = document.createElement('button')
-          del.textContent = '✕'
-          del.style.marginLeft = '6px'
-          del.onclick = async () => { await window.api.sessionsDelete(idx); refreshSessions() }
-          li.appendChild(btn); li.appendChild(del)
-          list.appendChild(li)
-        })
+        sessionTree = Array.isArray(res?.tree) ? res.tree : []
+        renderTree()
       }
       refreshSessions()
       window.api.onSessionsUpdated(() => refreshSessions())

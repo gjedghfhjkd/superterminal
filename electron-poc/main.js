@@ -33,34 +33,46 @@ async function loadSessions() {
   try {
     const txt = await readFile(sessionsFile(), 'utf-8')
     const data = JSON.parse(txt)
-    if (Array.isArray(data)) return data
-    return data && Array.isArray(data.sessions) ? data.sessions : []
+    if (Array.isArray(data)) return data // legacy raw array
+    if (data && Array.isArray(data.sessions)) return data.sessions // legacy v1
+    if (data && Array.isArray(data.tree)) return data.tree // v2 tree
+    return []
   } catch {
     return []
   }
 }
-async function saveSessions(sessions) {
-  const payload = { version: 1, sessions }
+async function saveSessionsTree(tree) {
+  const payload = { version: 2, tree }
   await writeFile(sessionsFile(), JSON.stringify(payload, null, 2))
 }
 
 ipcMain.handle('sessions-load', async () => {
-  const sessions = await loadSessions()
-  return { ok: true, sessions }
+  const data = await loadSessions()
+  // normalize to { tree }
+  const tree = Array.isArray(data) ? data.map((s, i) => ({ id: String(i), type:'session', name: `${s.username||'user'}@${s.host||'host'}:${s.port||22}`, session: s })) : data
+  return { ok: true, tree }
 })
-ipcMain.handle('sessions-add', async (evt, session) => {
-  const sessions = await loadSessions()
-  sessions.push(session)
-  await saveSessions(sessions)
+ipcMain.handle('sessions-save', async (evt, tree) => {
+  await saveSessionsTree(tree || [])
   try { win.webContents.send('sessions-updated') } catch {}
-  return { ok: true, sessions }
+  return { ok: true }
+})
+// legacy handlers kept as no-ops to avoid errors if called
+ipcMain.handle('sessions-add', async (evt, session) => {
+  const existing = await loadSessions()
+  const tree = Array.isArray(existing) ? existing.map((s, i) => ({ id:String(i), type:'session', name:`${s.username||'user'}@${s.host||'host'}:${s.port||22}`, session:s })) : existing
+  tree.push({ id: String(Date.now()), type:'session', name: `${session.username||'user'}@${session.host||'host'}:${session.port||22}`, session })
+  await saveSessionsTree(tree)
+  try { win.webContents.send('sessions-updated') } catch {}
+  return { ok: true }
 })
 ipcMain.handle('sessions-delete', async (evt, index) => {
-  const sessions = await loadSessions()
-  if (index >= 0 && index < sessions.length) sessions.splice(index, 1)
-  await saveSessions(sessions)
+  const data = await loadSessions()
+  let tree = Array.isArray(data) ? data.map((s, i) => ({ id:String(i), type:'session', name:`${s.username||'user'}@${s.host||'host'}:${s.port||22}`, session:s })) : data
+  if (index >= 0 && index < tree.length) tree.splice(index, 1)
+  await saveSessionsTree(tree)
   try { win.webContents.send('sessions-updated') } catch {}
-  return { ok: true, sessions }
+  return { ok: true }
 })
 
 ipcMain.handle('ssh-connect', async (evt, cfg) => {
@@ -184,7 +196,15 @@ ipcMain.handle('open-session-window', async (evt, payload) => {
       webPreferences: { contextIsolation: true, nodeIntegration: false, preload: path.join(__dirname, 'preload.js') }
     })
     try { child.setMenu(null) } catch {}
+    let resolved = false
+    const handler = (_, sess) => {
+      if (resolved) return
+      resolved = true
+      try { child.close() } catch {}
+      resolve({ ok: true, session: sess })
+    }
+    ipcMain.once('session-form-submit', handler)
     await child.loadFile('session_form.html', { query: { type } })
-    child.on('closed', () => resolve({ ok: true }))
+    child.on('closed', () => { if (!resolved) resolve({ ok: false }) })
   })
 })

@@ -62,8 +62,7 @@
           privateKey: document.getElementById('pkey').value,
           passphrase: document.getElementById('passphrase').value
         }
-        try { await window.api.sessionsAdd(sess) } catch {}
-        window.close()
+        try { window.api.sessionFormSubmit(sess) } catch {}
       }
     </script>
   </body>
