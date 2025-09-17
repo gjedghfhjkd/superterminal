@@ -39,8 +39,8 @@ class TunnelingDialog(QDialog):
 		layout.addWidget(header)
 
 		# Table of forwards
-		self.table = QTableWidget(0, 8)
-		self.table.setHorizontalHeaderLabels(["Name", "Type", "Start/Stop", "Session", "Bind Host", "Bind Port", "Target Host", "Target Port"])
+		self.table = QTableWidget(0, 6)
+		self.table.setHorizontalHeaderLabels(["Name", "Type", "Start/Stop", "Session", "Local Host", "Target Server"])
 		self.table.horizontalHeader().setStretchLastSection(True)
 		layout.addWidget(self.table)
 
@@ -63,22 +63,31 @@ class TunnelingDialog(QDialog):
 		self.cmb_session = QComboBox()
 		sessions = self.session_manager.get_all_sessions()
 		for i, s in enumerate(sessions):
+			# Only allow SSH sessions in tunneling
+			try:
+				stype = getattr(s, 'type', None)
+				if stype != 'SSH':
+					continue
+			except Exception:
+				continue
 			name = getattr(s, 'name', None) or s.host
 			self.cmb_session.addItem(f"{name}", i)
 		row_layout.addWidget(self.cmb_session)
 
+		# Local host (bind) inputs
 		self.ed_bind_host = QLineEdit("127.0.0.1")
-		self.ed_bind_host.setPlaceholderText("Bind host")
+		self.ed_bind_host.setPlaceholderText("Local host")
 		self.ed_bind_host.setFixedWidth(120)
 		row_layout.addWidget(self.ed_bind_host)
 
 		self.ed_bind_port = QLineEdit("")
-		self.ed_bind_port.setPlaceholderText("Bind port")
+		self.ed_bind_port.setPlaceholderText("Local port")
 		self.ed_bind_port.setFixedWidth(90)
 		row_layout.addWidget(self.ed_bind_port)
 
+		# Target server inputs
 		self.ed_target_host = QLineEdit("")
-		self.ed_target_host.setPlaceholderText("Target host")
+		self.ed_target_host.setPlaceholderText("Target server")
 		self.ed_target_host.setFixedWidth(160)
 		row_layout.addWidget(self.ed_target_host)
 
@@ -93,8 +102,9 @@ class TunnelingDialog(QDialog):
 
 		layout.addWidget(row)
 
-		# React to type changes to hide/show Target Host for Local/Remote
+		# React to type changes to adjust Target for Local/Remote
 		self.cmb_type.currentTextChanged.connect(self._on_type_changed)
+		self.cmb_session.currentIndexChanged.connect(self._on_session_changed)
 		self._on_type_changed(self.cmb_type.currentText())
 
 		# Actions
@@ -103,11 +113,11 @@ class TunnelingDialog(QDialog):
 		actions_layout.setContentsMargins(0, 0, 0, 0)
 		actions_layout.setSpacing(6)
 
-		self.btn_start = QPushButton("Start Selected")
-		self.btn_stop = QPushButton("Stop Selected")
+		self.btn_start = QPushButton("▶ Start All")
+		self.btn_stop = QPushButton("⏹ Stop All")
 		self.btn_close = QPushButton("Close")
-		self.btn_start.clicked.connect(self._start_selected)
-		self.btn_stop.clicked.connect(self._stop_selected)
+		self.btn_start.clicked.connect(self._start_all)
+		self.btn_stop.clicked.connect(self._stop_all)
 		self.btn_close.clicked.connect(self.accept)
 
 		actions_layout.addWidget(self.btn_start)
@@ -126,9 +136,10 @@ class TunnelingDialog(QDialog):
 			# For Local forwarding, use selected session host as target host
 			if forward_type == "Local":
 				target_host = getattr(session, 'host', '')
+				target_port = int(self.ed_target_port.text().strip())
 			else:
 				target_host = self.ed_target_host.text().strip()
-			target_port = int(self.ed_target_port.text().strip())
+				target_port = int(self.ed_target_port.text().strip())
 			if forward_type == "Remote" and not target_host:
 				QMessageBox.warning(self, "Validation", "Target host is required")
 				return
@@ -153,9 +164,23 @@ class TunnelingDialog(QDialog):
 			QMessageBox.warning(self, "Validation", "Ports must be integers")
 
 	def _on_type_changed(self, text: str):
-		# Hide Target Host for Local tunnels; show for Remote
+		# For Local, hide target host input and use session host; for Remote, show it
 		is_local = (text == "Local")
-		self.ed_target_host.setVisible(not is_local)
+		try:
+			self.ed_target_host.setVisible(not is_local)
+			if is_local:
+				idx = self.cmb_session.currentData()
+				s = self.session_manager.get_session(idx)
+				h = getattr(s, 'host', '') if s else ''
+				self.ed_target_host.setText(h)
+		except Exception:
+			pass
+
+	def _on_session_changed(self, _):
+		# When Local selected, keep target host synced to session host
+		if self.cmb_type.currentText() == "Local":
+			self._on_type_changed("Local")
+
 
 	def _refresh_table(self):
 		self.table.setRowCount(len(self._forwards))
@@ -171,12 +196,10 @@ class TunnelingDialog(QDialog):
 			s = self.session_manager.get_session(fwd["session_index"]) or Session(host="?")
 			s_name = getattr(s, 'name', None) or s.host
 			self.table.setItem(r, 3, QTableWidgetItem(s_name))
-			# Bind host/port
-			self.table.setItem(r, 4, QTableWidgetItem(fwd["bind_host"]))
-			self.table.setItem(r, 5, QTableWidgetItem(str(fwd["bind_port"])))
-			# Target host/port
-			self.table.setItem(r, 6, QTableWidgetItem(fwd["target_host"]))
-			self.table.setItem(r, 7, QTableWidgetItem(str(fwd["target_port"])))
+			# Bind host:port
+			self.table.setItem(r, 4, QTableWidgetItem(f"{fwd['bind_host']}:{fwd['bind_port']}"))
+			# Target server:port
+			self.table.setItem(r, 5, QTableWidgetItem(f"{fwd['target_host']}:{fwd['target_port']}"))
 
 	def _selected_rows(self):
 		rows = set()
@@ -304,13 +327,8 @@ class TunnelingDialog(QDialog):
 		except Exception:
 			pass
 
-	def _start_selected(self):
-		rows = self._selected_rows()
-		if not rows:
-			QMessageBox.information(self, "Tunneling", "Select at least one row")
-			return
-		# Start each selected forward via backend
-		for r in rows:
+	def _start_all(self):
+		for r in range(len(self._forwards)):
 			f = self._forwards[r]
 			try:
 				if f.get("status") == "running" and f.get("id"):
@@ -329,13 +347,8 @@ class TunnelingDialog(QDialog):
 				QMessageBox.warning(self, "Tunneling", f"Failed to start: {e}")
 		self._refresh_table()
 
-	def _stop_selected(self):
-		rows = self._selected_rows()
-		if not rows:
-			QMessageBox.information(self, "Tunneling", "Select at least one row")
-			return
-		# Stop each selected forward via backend
-		for r in rows:
+	def _stop_all(self):
+		for r in range(len(self._forwards)):
 			f = self._forwards[r]
 			fid = f.get("id")
 			if not fid:
