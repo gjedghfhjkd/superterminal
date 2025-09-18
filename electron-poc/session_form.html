@@ -135,7 +135,7 @@
       function selectCustom() {
         const toggle = document.getElementById('userDropdown')
         toggle.textContent = 'Custom username…'
-        toggle.style.display = 'none'
+        toggle.style.display = 'block'
         document.getElementById('userCustom').style.display = ''
         selectedUser = null
         forcedAuth = null
@@ -298,6 +298,9 @@
         function outside(e) { if (!menu.contains(e.target) && !toggle.contains(e.target)) { hideDropdown(); document.removeEventListener('mousedown', outside) } }
         toggle.addEventListener('click', () => { const open = menu.style.display!=='none'; if (open) hideDropdown(); else { showDropdown(); setTimeout(()=>document.addEventListener('mousedown', outside), 0) } })
         toggle.addEventListener('keydown', (e) => { if (e.key==='Enter' || e.key===' ') { e.preventDefault(); toggle.click() } })
+        // When in custom mode (input visible), clicking on label should still open menu to switch back
+        document.getElementById('userCustom').addEventListener('contextmenu', (e) => { e.preventDefault(); toggle.click() })
+        document.getElementById('userCustom').addEventListener('mousedown', (e) => { if (e.button===2) { e.preventDefault(); toggle.click() } })
       })()
 
       function updateAuth() {
