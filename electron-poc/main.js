@@ -14,12 +14,16 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1200,
     height: 800,
+    title: 'SuperTerminal',
+    icon: path.join(__dirname, 'assets', 'icon.svg'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false
     }
   })
+  try { app.setName('SuperTerminal') } catch {}
+  try { win.setTitle('SuperTerminal') } catch {}
   win.loadFile('renderer.html')
 }
 

@@ -5,17 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
     <style>
+      :root { }
       html, body { height:100%; overflow:hidden; }
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
+      a, button, input, select, .tab, .left-tab { cursor: pointer }
       #left { width:320px; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
+      /* Set document title to app name */
+      /* Title also set from main, but ensure consistency */
       #left-topnav { padding:6px 8px; border-bottom:1px solid #1f2330; display:flex; gap:6px; align-items:center; }
       .left-tab { cursor:pointer; padding:6px 10px; border-radius:8px; border:1px solid #2a3040; color:#cfd3dc; background:#1a1f2d; display:flex; align-items:center; gap:6px; }
       .left-tab:hover { background:#22283a; }
       #left-header { padding:10px 12px; border-bottom:1px solid #1f2330; font-weight:600; letter-spacing:0.2px; }
       .tree { flex:1; overflow:auto; padding:6px 4px; }
-      .item { user-select:none; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:6px; cursor:default; }
-      .item:hover { background:#121623; }
+      .item { user-select:none; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:6px; cursor: default; position:relative; transition: background .15s ease, transform .12s ease, box-shadow .15s ease; }
+      .item:hover { background:#121623; transform: translateX(2px); }
+      .item.folder { cursor:pointer }
+      .item.session:hover { cursor:pointer }
       .item.selected { background:#1a1f2d; outline:1px solid #2a3040; }
+      .item .icon svg, .item .label { transition: color .15s ease, fill .15s ease, opacity .15s ease; }
+      .item:hover .icon svg { fill:#aab0c0 }
+      .item:hover .label { color:#e6e6e6 }
+      /* Mouse-follow highlight */
+      .item::after { content:""; position:absolute; inset:0; pointer-events:none; opacity:0; background: radial-gradient(120px circle at var(--mx, -20px) var(--my, -20px), rgba(255,255,255,.08), transparent 40%); transition: opacity .18s ease; border-radius:6px; }
+      .item:hover::after { opacity:1 }
+      /* Colored folders and nested sessions in tree */
+      .item[data-color] { --tree-color: var(--tree-color, #0b0d14); background: var(--tree-color); }
+      .item[data-color]:hover { background: color-mix(in srgb, var(--tree-color) 92%, #ffffff 8%); }
+      .item[data-color].selected { background: color-mix(in srgb, var(--tree-color) 85%, #ffffff 15%); outline-color: transparent; }
       .caret { width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:6px solid #8b90a0; transform:rotate(-90deg); transition:transform .15s ease; margin-right:2px; }
       .expanded > .caret { transform:rotate(0deg); }
       .icon { width:14px; height:14px; display:inline-block; }
@@ -24,32 +40,29 @@
       .children { margin-left:16px; }
       .ctx-menu { position:fixed; z-index:1000; background:#0f111a; border:1px solid #2a3040; border-radius:8px; padding:6px 0; min-width:180px; box-shadow:0 6px 18px rgba(0,0,0,.4); }
       .ctx-item { padding:6px 12px; cursor:pointer; }
+      .btn, .icon-btn, .left-tab, .ctx-item { cursor: pointer }
       .ctx-item:hover { background:#1a1f2d; }
       .drop-target { outline:1px dashed #3a4160; background:#141a29; }
       #right { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
       #tabs { height:36px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:flex-end; gap:6px; padding:0 8px; box-sizing:border-box; }
-      .tab { cursor:pointer; padding:6px 10px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; position:relative; transition:background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease; }
+      .tab { cursor: pointer; padding:6px 10px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; position:relative; transition:background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease; }
       .tab:hover { background:#22283a; border-color:#3a4160; }
       .tab.active { background:#0b0d14; color:#ffffff; border-color:#3a4160; box-shadow:0 0 0 1px #3a4160 inset; font-weight:600; }
       .tab.active::after { content:""; position:absolute; left:8px; right:8px; bottom:-1px; height:3px; border-radius:3px 3px 0 0; background:linear-gradient(90deg,#2f66ef,#7a5cf0); }
       .tab .title { pointer-events:none; }
-      .tab .close { margin-left:8px; color:#8b90a0; opacity:.8; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; transition:background .15s ease, color .15s ease, opacity .15s ease, box-shadow .15s ease; }
+      .tab .close { margin-left:8px; color:#8b90a0; opacity:.8; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; transition:background .15s ease, color .15s ease, opacity .15s ease, box-shadow .15s ease; cursor:pointer; }
       .tab:hover .close { opacity:.95; color:#a0a6b8; }
       .tab .close:hover { color:#e6e6e6; background:#2a3040; opacity:1; box-shadow:0 0 0 2px rgba(58,65,96,.35) inset; }
 
       /* Colored tabs */
       .tab[data-color] {
-        --tab-color-fallback: #3a4160;
+        --tab-color-fallback: #0b0d14;
         --tab-color: var(--tab-color, var(--tab-color-fallback));
-        /* Blend chosen color with base surfaces; color-mix is supported in modern Chromium */
-        --tab-bg-normal: color-mix(in srgb, var(--tab-color) 18%, #1a1f2d);
-        --tab-bg-hover: color-mix(in srgb, var(--tab-color) 24%, #22283a);
-        --tab-bg-active: color-mix(in srgb, var(--tab-color) 30%, #0b0d14);
-        background: var(--tab-bg-normal);
+        background: var(--tab-color);
         border-color: transparent;
       }
-      .tab[data-color]:hover { background: var(--tab-bg-hover); border-color: transparent; }
-      .tab[data-color].active { background: var(--tab-bg-active); color:#ffffff; border-color: transparent; box-shadow: none; }
+      .tab[data-color]:hover { background: color-mix(in srgb, var(--tab-color) 92%, #ffffff 8%); border-color: transparent; }
+      .tab[data-color].active { background: color-mix(in srgb, var(--tab-color) 85%, #ffffff 15%); color:#ffffff; border-color: transparent; box-shadow: none; }
       .tab[data-color]::before { content:none; display:none; }
       .tab[data-color].active::after { background: var(--tab-color); }
       #panes { position:relative; flex:1; overflow:hidden; background:#0f111a; min-height:0; }
@@ -158,6 +171,21 @@
       const tabsEl = document.getElementById('tabs')
       let currentId = null
       let draggingId = null
+      const THEME_BASE = '#0b0d14'
+      const THEME_ACCENT = '#2a5bd7'
+      const DEFAULT_FOLDER_COLOR = THEME_BASE
+
+      function closeTabById(id) {
+        try {
+          const rec = terminals.get(id)
+          if (rec) { try { rec.term.dispose() } catch {}; try { rec.el.remove() } catch {}; terminals.delete(id) }
+          const t = tabs.get(id)
+          if (t) { try { t.remove() } catch {}; tabs.delete(id) }
+          if (currentId === id) currentId = null
+          const next = [...tabs.keys()][0]
+          if (next != null) activateTab(next)
+        } catch {}
+      }
 
       function createTerminalFor(id, title) {
         const pane = document.createElement('div')
@@ -334,6 +362,18 @@
         }
         return null
       }
+      function findParentFolderColor(list, id) {
+        const info = findNodeById(list, id, null)
+        if (!info) return null
+        let p = info.parent
+        while (p) {
+          if (p.type === 'folder' && typeof p.color === 'string' && p.color) return p.color
+          // climb up
+          const parentInfo = findNodeById(sessionTree, p.id, null)
+          p = parentInfo ? parentInfo.parent : null
+        }
+        return null
+      }
       function removeNodeById(id) {
         const info = findNodeById(sessionTree, id, null)
         if (!info) return false
@@ -356,12 +396,14 @@
           draggingId = null
         })
 
-        function renderList(list, container) {
+        function renderList(list, container, inheritedColor) {
           list.forEach(n => {
             const row = document.createElement('div')
-            row.className = 'item' + (n.expanded ? ' expanded' : '') + (selectedId===n.id?' selected':'')
+            row.className = 'item ' + (n.type==='folder'?'folder':'session') + (n.expanded ? ' expanded' : '') + (selectedId===n.id?' selected':'')
             row.dataset.id = n.id
             row.draggable = true
+            const effectiveColor = n.type === 'folder' ? (n.color || inheritedColor) : inheritedColor
+            if (effectiveColor) { row.dataset.color = '1'; row.style.setProperty('--tree-color', effectiveColor) } else { delete row.dataset.color; row.style.removeProperty('--tree-color') }
             const caret = document.createElement('div')
             caret.className = 'caret'
             caret.style.visibility = n.type==='folder' ? 'visible' : 'hidden'
@@ -386,28 +428,46 @@
             row.appendChild(label)
             container.appendChild(row)
 
-            row.onclick = (e) => { selectedId = n.id; renderTree() }
+            row.onclick = (e) => {
+              selectedId = n.id
+              if (n.type === 'folder') { n.expanded = !n.expanded }
+              renderTree()
+            }
             row.ondblclick = async () => {
-              if (n.type === 'folder') { n.expanded = !n.expanded; renderTree(); return }
+              if (n.type === 'folder') { return }
               if (n.type === 'session') {
-                try {
-                  const s = n.session
-                  if ((s.type||'SSH').toUpperCase() === 'SFTP') {
-                    // Always create a new SFTP connection/tab
-                    const rid = genId('sftp')
-                    const cfg = Object.assign({}, s, { id: rid })
+                const s = n.session
+                if ((s.type||'SSH').toUpperCase() === 'SFTP') {
+                  // Create SFTP connection first, then tab
+                  const rid = genId('sftp')
+                  const cfg = Object.assign({}, s, { id: rid })
+                  try {
                     await window.api.sftpConnect(cfg)
                     const title = `${s.type || 'SFTP'} ${s.name||s.host} (${s.username})`
+                    const parentColor = findParentFolderColor(sessionTree, n.id)
                     createSftpTab(rid, title)
+                    if (parentColor) {
+                      const tabEl = tabs.get(rid)
+                      if (tabEl) { tabEl.dataset.color = '1'; tabEl.style.setProperty('--tab-color', parentColor) }
+                    }
                     activateTab(rid)
                     await initSftpSplitIfNeeded(rid)
                     await navigateRemote('/')
-                  } else {
-                    // Always create a new SSH terminal/tab
-                    const rid = genId('ssh')
-                    const title = `${s.type || 'SSH'} ${s.name||s.host} (${s.username})`
-                    createTerminalFor(rid, title)
-                    const cfg = Object.assign({}, s, { id: rid })
+                  } catch (e) {
+                    await showErrorModal('Connection error', String(e?.message||e))
+                  }
+                } else {
+                  // Create SSH tab, attempt connect; on failure close tab and show styled error
+                  const rid = genId('ssh')
+                  const title = `${s.type || 'SSH'} ${s.name||s.host} (${s.username})`
+                  const parentColor = findParentFolderColor(sessionTree, n.id)
+                  createTerminalFor(rid, title)
+                  if (parentColor) {
+                    const tabEl = tabs.get(rid)
+                    if (tabEl) { tabEl.dataset.color = '1'; tabEl.style.setProperty('--tab-color', parentColor) }
+                  }
+                  const cfg = Object.assign({}, s, { id: rid })
+                  try {
                     await window.api.sshConnect(cfg)
                     await window.api.sshOpenPtyId(rid)
                     try { await window.api.sftpConnect(cfg) } catch {}
@@ -417,8 +477,11 @@
                     rec.term.write('\r\n[Connected]\r\n')
                     showSshView()
                     activateTab(rid)
+                  } catch (e) {
+                    closeTabById(rid)
+                    await showErrorModal('Connection error', String(e?.message||e))
                   }
-                } catch (e) { alert('Connect error: ' + (e?.message||e)) }
+                }
               }
             }
             row.oncontextmenu = (e) => { e.preventDefault(); selectedId = n.id; renderTree(); openCtxMenu(e.clientX, e.clientY, n) }
@@ -430,6 +493,13 @@
               e.dataTransfer.effectAllowed = 'move'
             })
             row.addEventListener('dragend', () => { draggingId = null })
+            row.addEventListener('mousemove', (e) => {
+              const rect = row.getBoundingClientRect()
+              const x = Math.round(e.clientX - rect.left)
+              const y = Math.round(e.clientY - rect.top)
+              row.style.setProperty('--mx', x + 'px')
+              row.style.setProperty('--my', y + 'px')
+            })
             row.addEventListener('dragover', (e) => {
               if (!draggingId || draggingId === n.id) return
               e.preventDefault(); e.stopPropagation()
@@ -448,11 +518,11 @@
               const children = document.createElement('div')
               children.className = 'children'
               container.appendChild(children)
-              renderList(n.children || [], children)
+              renderList(n.children || [], children, (n.color || effectiveColor || inheritedColor))
             }
           })
         }
-        renderList(sessionTree, root)
+        renderList(sessionTree, root, null)
       }
 
       function isDescendant(potentialParent, childId) {
@@ -510,7 +580,6 @@
         container.splice(insertIndex, 0, srcNode)
 
         await window.api.sessionsSaveTree(sessionTree)
-        renderTree()
       }
 
       function openCtxMenu(x, y, targetNode=null) {
@@ -525,13 +594,13 @@
         }
         const isFolder = targetNode && targetNode.type==='folder'
         add('New Folder', async () => {
-          const name = await showInputModal('New Folder', 'Folder name', 'New Folder')
-          if (!name) return
-          const node = { id: genId('fld'), type:'folder', name, expanded:true, children:[] }
+          const res = await showFolderModal('New Folder', 'New Folder', DEFAULT_FOLDER_COLOR, 'Create')
+          if (!res) return
+          const node = { id: genId('fld'), type:'folder', name: res.name, expanded:true, children:[] }
+          if (res.color) node.color = res.color
           if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
           else targetNode.children.push(node)
           await window.api.sessionsSaveTree(sessionTree)
-          renderTree()
         })
         add('New Session', async () => {
           const res = await window.api.openSessionWindow('SSH')
@@ -541,22 +610,23 @@
           if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
           else targetNode.children.push(node)
           await window.api.sessionsSaveTree(sessionTree)
-          renderTree()
         })
         add('Edit…', async () => {
           if (!targetNode) return
-          const present = targetNode.type==='session' ? (targetNode.session || {}) : { name: targetNode.name }
-          const res = await window.api.openSessionWindowPreset((present.type||'SSH'), present)
-          const s = res && res.session
-          if (!s) return
           if (targetNode.type==='session') {
+            const present = targetNode.session || {}
+            const res = await window.api.openSessionWindowPreset((present.type||'SSH'), present)
+            const s = res && res.session
+            if (!s) return
             targetNode.session = s
             targetNode.name = `${s.name||s.host} (${s.username})`
           } else if (targetNode.type==='folder') {
-            targetNode.name = s.name || targetNode.name
+            const res = await showFolderModal('Edit Folder', targetNode.name || 'Folder', (typeof targetNode.color==='string' && targetNode.color) ? targetNode.color : DEFAULT_FOLDER_COLOR, 'Save')
+            if (!res) return
+            targetNode.name = res.name || targetNode.name
+            if (res.color) targetNode.color = res.color
           }
           await window.api.sessionsSaveTree(sessionTree)
-          renderTree()
         })
         if (targetNode) {
           add('Delete…', async () => {
@@ -565,7 +635,6 @@
             removeNodeById(targetNode.id)
             selectedId = null
             await window.api.sessionsSaveTree(sessionTree)
-            renderTree()
           })
         }
         menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.style.display = 'block'
@@ -781,6 +850,79 @@
         })
       }
 
+      function showFolderModal(title, initialName='New Folder', initialColor=DEFAULT_FOLDER_COLOR, okLabel='Create') {
+        return new Promise((resolve) => {
+          const overlay = document.createElement('div')
+          overlay.className = 'modal-overlay'
+          const modal = document.createElement('div')
+          modal.className = 'modal'
+          const header = document.createElement('div')
+          header.className = 'modal-header'
+          header.textContent = title || 'Folder'
+          const body = document.createElement('div')
+          body.className = 'modal-body'
+
+          const nameLabel = document.createElement('label')
+          nameLabel.textContent = 'Name'
+          const nameInput = document.createElement('input')
+          nameInput.className = 'input'
+          nameInput.placeholder = 'Folder name'
+          nameInput.value = initialName || 'New Folder'
+          body.appendChild(nameLabel)
+          body.appendChild(nameInput)
+
+          const colorLabel = document.createElement('label')
+          colorLabel.textContent = 'Color'
+          const colorRow = document.createElement('div')
+          colorRow.style.display = 'flex'
+          colorRow.style.alignItems = 'center'
+          colorRow.style.gap = '10px'
+          const colorPicker = document.createElement('input')
+          colorPicker.type = 'color'
+          colorPicker.value = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(initialColor||'') ? initialColor : '#7a5cf0'
+          colorPicker.style.width = '44px'
+          colorPicker.style.height = '32px'
+          const colorHex = document.createElement('input')
+          colorHex.className = 'input'
+          colorHex.style.flex = '1'
+          colorHex.placeholder = '#rrggbb'
+          colorHex.value = colorPicker.value
+          colorPicker.addEventListener('input', () => { colorHex.value = colorPicker.value })
+          colorHex.addEventListener('input', () => {
+            const v = (colorHex.value||'').trim()
+            if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v)) colorPicker.value = v
+          })
+          colorRow.appendChild(colorPicker)
+          colorRow.appendChild(colorHex)
+          body.appendChild(colorLabel)
+          body.appendChild(colorRow)
+
+          const actions = document.createElement('div')
+          actions.className = 'modal-actions'
+          const btnCancel = document.createElement('button')
+          btnCancel.className = 'btn'
+          btnCancel.textContent = 'Cancel'
+          const btnOk = document.createElement('button')
+          btnOk.className = 'btn primary'
+          btnOk.textContent = okLabel || 'Create'
+          actions.appendChild(btnCancel)
+          actions.appendChild(btnOk)
+          modal.appendChild(header); modal.appendChild(body); modal.appendChild(actions)
+          overlay.appendChild(modal)
+          document.body.appendChild(overlay)
+          const close = (val) => { try { document.body.removeChild(overlay) } catch {}; resolve(val) }
+          btnCancel.onclick = () => close(null)
+          btnOk.onclick = () => {
+            const name = (nameInput.value||'').trim()
+            if (!name) { nameInput.focus(); return }
+            const color = (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(colorHex.value||'')) ? colorHex.value : colorPicker.value
+            close({ name, color })
+          }
+          overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close(null); if (e.key==='Enter') btnOk.click() })
+          setTimeout(() => nameInput.focus(), 0)
+        })
+      }
+
       function showErrorModal(title, message) {
         return new Promise((resolve) => {
           const overlay = document.createElement('div')
@@ -814,10 +956,12 @@
       }
 
       // Load tree
+      let renderPending = null
       async function refreshSessions() {
         const res = await window.api.sessionsLoad()
         sessionTree = Array.isArray(res?.tree) ? res.tree : []
-        renderTree()
+        if (renderPending) cancelAnimationFrame(renderPending)
+        renderPending = requestAnimationFrame(() => { renderPending = null; renderTree() })
       }
       refreshSessions()
       window.api.onSessionsUpdated(() => refreshSessions())
