@@ -17,7 +17,7 @@
       .item:hover { background:#121623; }
       .item.selected { background:#1a1f2d; outline:1px solid #2a3040; }
       /* Colored folders and nested sessions in tree */
-      .item[data-color] { --tree-color: var(--tree-color, #2a5bd7); background: color-mix(in srgb, var(--tree-color) 10%, #0b0d14); }
+      .item[data-color] { --tree-color: var(--tree-color, #0b0d14); background: color-mix(in srgb, var(--tree-color) 10%, #0b0d14); }
       .item[data-color]:hover { background: color-mix(in srgb, var(--tree-color) 16%, #121623); }
       .item[data-color].selected { background: color-mix(in srgb, var(--tree-color) 22%, #1a1f2d); outline-color: transparent; }
       .caret { width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:6px solid #8b90a0; transform:rotate(-90deg); transition:transform .15s ease; margin-right:2px; }
@@ -162,8 +162,9 @@
       const tabsEl = document.getElementById('tabs')
       let currentId = null
       let draggingId = null
+      const THEME_BASE = '#0b0d14'
       const THEME_ACCENT = '#2a5bd7'
-      const DEFAULT_FOLDER_COLOR = THEME_ACCENT
+      const DEFAULT_FOLDER_COLOR = THEME_BASE
 
       function createTerminalFor(id, title) {
         const pane = document.createElement('div')
@@ -555,7 +556,7 @@
         }
         const isFolder = targetNode && targetNode.type==='folder'
         add('New Folder', async () => {
-          const res = await showFolderModal('New Folder', 'New Folder', THEME_ACCENT, 'Create')
+          const res = await showFolderModal('New Folder', 'New Folder', DEFAULT_FOLDER_COLOR, 'Create')
           if (!res) return
           const node = { id: genId('fld'), type:'folder', name: res.name, expanded:true, children:[] }
           if (res.color) node.color = res.color
@@ -584,7 +585,7 @@
             targetNode.session = s
             targetNode.name = `${s.name||s.host} (${s.username})`
           } else if (targetNode.type==='folder') {
-            const res = await showFolderModal('Edit Folder', targetNode.name || 'Folder', (typeof targetNode.color==='string' && targetNode.color) ? targetNode.color : THEME_ACCENT, 'Save')
+            const res = await showFolderModal('Edit Folder', targetNode.name || 'Folder', (typeof targetNode.color==='string' && targetNode.color) ? targetNode.color : DEFAULT_FOLDER_COLOR, 'Save')
             if (!res) return
             targetNode.name = res.name || targetNode.name
             if (res.color) targetNode.color = res.color
@@ -815,7 +816,7 @@
         })
       }
 
-      function showFolderModal(title, initialName='New Folder', initialColor=THEME_ACCENT, okLabel='Create') {
+      function showFolderModal(title, initialName='New Folder', initialColor=DEFAULT_FOLDER_COLOR, okLabel='Create') {
         return new Promise((resolve) => {
           const overlay = document.createElement('div')
           overlay.className = 'modal-overlay'
