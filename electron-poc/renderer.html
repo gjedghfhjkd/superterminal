@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
     <style>
-      :root { --app-cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24'%3E%3Cpath fill='%23b6beca' d='M5 3 L5 16 L8.4 12.4 L11.2 20.4 Q11.5 21.2 12.3 20.8 L13.9 20.0 Q14.5 19.7 14.2 19.1 L10.6 11.2 L16.2 11.2 Q17.0 11.2 16.6 10.5 L6.0 3.6 Q5.0 3.0 5 3 Z'/%3E%3C/svg%3E") 2 2, default }
+      :root { }
       html, body { height:100%; overflow:hidden; }
-      body { margin:0; display:flex; height:100vh; font-family:sans-serif; cursor:var(--app-cursor, default); }
-      a, button, input, select, .tab, .item, .left-tab { cursor: var(--app-cursor, pointer) }
+      body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
+      a, button, input, select, .tab, .left-tab { cursor: pointer }
       #left { width:320px; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
       /* Set document title to app name */
       /* Title also set from main, but ensure consistency */
@@ -17,8 +17,8 @@
       .left-tab:hover { background:#22283a; }
       #left-header { padding:10px 12px; border-bottom:1px solid #1f2330; font-weight:600; letter-spacing:0.2px; }
       .tree { flex:1; overflow:auto; padding:6px 4px; }
-      .item { user-select:none; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:6px; cursor:var(--app-cursor, pointer); position:relative; transition: background .15s ease, transform .12s ease, box-shadow .15s ease; }
-      .item:hover { background:#121623; transform: translateX(2px); }
+      .item { user-select:none; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:6px; cursor: default; position:relative; transition: background .15s ease, transform .12s ease, box-shadow .15s ease; }
+      .item:hover { background:#121623; transform: translateX(2px); cursor: pointer; }
       .item.selected { background:#1a1f2d; outline:1px solid #2a3040; }
       .item .icon svg, .item .label { transition: color .15s ease, fill .15s ease, opacity .15s ease; }
       .item:hover .icon svg { fill:#aab0c0 }
@@ -38,12 +38,12 @@
       .children { margin-left:16px; }
       .ctx-menu { position:fixed; z-index:1000; background:#0f111a; border:1px solid #2a3040; border-radius:8px; padding:6px 0; min-width:180px; box-shadow:0 6px 18px rgba(0,0,0,.4); }
       .ctx-item { padding:6px 12px; cursor:pointer; }
-      .btn, .icon-btn, .left-tab, .ctx-item { cursor: var(--app-cursor, pointer) }
+      .btn, .icon-btn, .left-tab, .ctx-item { cursor: pointer }
       .ctx-item:hover { background:#1a1f2d; }
       .drop-target { outline:1px dashed #3a4160; background:#141a29; }
       #right { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
       #tabs { height:36px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:flex-end; gap:6px; padding:0 8px; box-sizing:border-box; }
-      .tab { cursor:var(--app-cursor, pointer); padding:6px 10px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; position:relative; transition:background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease; }
+      .tab { cursor: pointer; padding:6px 10px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; position:relative; transition:background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease; }
       .tab:hover { background:#22283a; border-color:#3a4160; }
       .tab.active { background:#0b0d14; color:#ffffff; border-color:#3a4160; box-shadow:0 0 0 1px #3a4160 inset; font-weight:600; }
       .tab.active::after { content:""; position:absolute; left:8px; right:8px; bottom:-1px; height:3px; border-radius:3px 3px 0 0; background:linear-gradient(90deg,#2f66ef,#7a5cf0); }
