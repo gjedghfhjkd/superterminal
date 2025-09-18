@@ -49,6 +49,19 @@
 
       /* Tunneling placeholder */
       #tun-panel { position:relative; flex:1; display:none; background:#0f111a; color:#cfd3dc; padding:12px; }
+      #tun-controls { display:flex; gap:8px; margin-bottom:10px; align-items:center }
+      .tun-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#2fbf71; margin-left:6px }
+      @keyframes pulse { 0% { opacity:.5; transform:scale(1) } 50% { opacity:1; transform:scale(1.3) } 100% { opacity:.5; transform:scale(1) } }
+      .tun-dot.active { animation:pulse 1.2s ease-in-out infinite }
+      .icon-btn { background:transparent; border:1px solid #2a3040; border-radius:8px; padding:6px; cursor:pointer; color:#cfd3dc }
+      .icon-btn:hover { background:#22283a }
+      .spin { animation:spin 1s linear infinite }
+      @keyframes spin { from { transform:rotate(0) } to { transform:rotate(360deg) } }
+      #tun-list { border-top:1px solid #1f2330; padding-top:8px }
+      .tun-row { display:flex; gap:10px; padding:6px 8px; border-radius:6px; align-items:center }
+      .tun-row:hover { background:#121623 }
+      .tun-col { flex:1 }
+      .tun-col.small { width:120px; flex:none; color:#8b90a0; font-size:12px }
       /* Ensure xterm fully occupies the pane without causing internal scroll splits */
       .pane > .xterm { width:100% !important; height:100% !important; }
       .pane > .xterm .xterm-viewport { width:100% !important; height:100% !important; }
@@ -109,7 +122,10 @@
         </div>
       </div>
       <div id="tun-panel">
-        <div style="opacity:.8">Tunneling view placeholder. Coming soon.</div>
+        <div id="tun-controls">
+          <button id="tun-create" class="btn primary">Create Tunnel</button>
+        </div>
+        <div id="tun-list"></div>
       </div>
     </div>
     <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
@@ -244,7 +260,10 @@
         } catch (e) { alert('Create SFTP session error: ' + (e?.message||e)) }
       }
       document.getElementById('left-tun').onclick = async () => {
-        alert('Tunneling: coming soon')
+        document.getElementById('sftp-panel').style.display = 'none'
+        document.getElementById('panes').style.display = 'none'
+        document.getElementById('tabs').style.display = 'flex'
+        document.getElementById('tun-panel').style.display = 'block'
       }
 
       window.api.sshOnData(payload => {
@@ -612,22 +631,24 @@
           body.appendChild(text)
           const actions = document.createElement('div')
           actions.className = 'modal-actions'
-          const btnCancel = document.createElement('button')
-          btnCancel.className = 'btn'
-          btnCancel.textContent = cancelLabel
           const btnOk = document.createElement('button')
           btnOk.className = 'btn primary'
           btnOk.textContent = okLabel
-          actions.appendChild(btnCancel)
+          if (cancelLabel) {
+            const btnCancel = document.createElement('button')
+            btnCancel.className = 'btn'
+            btnCancel.textContent = cancelLabel
+            btnCancel.onclick = () => close(false)
+            actions.appendChild(btnCancel)
+          }
           actions.appendChild(btnOk)
           modal.appendChild(header); modal.appendChild(body); modal.appendChild(actions)
           overlay.appendChild(modal)
           document.body.appendChild(overlay)
 
           const close = (val) => { try { document.body.removeChild(overlay) } catch {}; resolve(val) }
-          btnCancel.onclick = () => close(false)
           btnOk.onclick = () => close(true)
-          overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close(false) })
+          overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close(true) })
           setTimeout(() => btnOk.focus(), 0)
         })
       }
@@ -885,6 +906,146 @@
         await navigateLocal(up)
       }
       sftpLocalPathEl.addEventListener('keydown', async (e) => { if (e.key==='Enter') { await navigateLocal(sftpLocalPathEl.value) } })
+
+      // ===== Tunneling UI =====
+      const tunListEl = document.getElementById('tun-list')
+      const tunCreateBtn = document.getElementById('tun-create')
+      let tunnels = [] // persisted list: { id, sessionId, name, localHost, localPort, remoteHost, remotePort, active }
+
+      function renderTunnels() {
+        tunListEl.innerHTML = ''
+        for (let i=0;i<tunnels.length;i++) {
+          const t = tunnels[i]
+          const row = document.createElement('div')
+          row.className = 'tun-row'
+          const colA = document.createElement('div'); colA.className='tun-col small'; colA.textContent = t.name || '(no name)'
+          const colB = document.createElement('div'); colB.className='tun-col'; colB.textContent = `${t.remoteHost||'127.0.0.1'}:${t.remotePort} -> ${t.localHost||'127.0.0.1'}:${t.localPort}`
+          if (t.active) { const dot = document.createElement('span'); dot.className='tun-dot active'; colB.appendChild(dot) }
+          const colC = document.createElement('div'); colC.className='tun-col small'
+          const startBtn = document.createElement('button'); startBtn.className='icon-btn'; startBtn.title='Start'
+          startBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>'
+          const stopBtn = document.createElement('button'); stopBtn.className='icon-btn'; stopBtn.title='Stop'
+          stopBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 6h12v12H6z"/></svg>'
+          const delBtn = document.createElement('button'); delBtn.className='icon-btn'; delBtn.title='Delete'
+          delBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 7h12l-1 12H7L6 7zm3-3h6l1 2H8l1-2z"/></svg>'
+          if (t.active) startBtn.style.opacity = '0.4'; else stopBtn.style.opacity = '0.4'
+          startBtn.onclick = async () => {
+            if (t.active) return
+            try {
+              // Ensure SSH connection exists for this tunnel
+              if (!t.connId) {
+                t.connId = genId('tunconn')
+                const cfg = Object.assign({}, t.sessionCfg || {}, { id: t.connId })
+                await window.api.sshConnect(cfg)
+              }
+              await window.api.tunnelStart(t.connId, t.localHost||'127.0.0.1', t.localPort, (t.sessionCfg?.host || t.remoteHost || '127.0.0.1'), t.remotePort)
+              t.active = true
+              await window.api.tunnelsSave(tunnels)
+              renderTunnels()
+            } catch (e) { alert('Start error: ' + (e?.message||e)) }
+          }
+          stopBtn.onclick = async () => {
+            if (!t.active) return
+            try {
+              await window.api.tunnelStop(t.connId || t.sessionId, t.localPort)
+              try { if (t.connId) await window.api.sshDisconnect(t.connId) } catch {}
+              t.active = false
+              t.connId = undefined
+              await window.api.tunnelsSave(tunnels)
+              renderTunnels()
+            } catch (e) { alert('Stop error: ' + (e?.message||e)) }
+          }
+          delBtn.onclick = async () => {
+            const ok = await showConfirmModal('Delete tunnel', `Delete ${t.name||''}?`, 'Delete', 'Cancel')
+            if (!ok) return
+            try {
+              if (t.active) {
+                await window.api.tunnelStop(t.connId || t.sessionId, t.localPort)
+                try { if (t.connId) await window.api.sshDisconnect(t.connId) } catch {}
+              }
+            } catch {}
+            const idx = tunnels.indexOf(t)
+            if (idx >= 0) tunnels.splice(idx,1)
+            await window.api.tunnelsSave(tunnels)
+            renderTunnels()
+          }
+          colC.appendChild(startBtn); colC.appendChild(stopBtn); colC.appendChild(delBtn)
+          row.appendChild(colA); row.appendChild(colB); row.appendChild(colC)
+          tunListEl.appendChild(row)
+        }
+      }
+
+      tunCreateBtn.onclick = async () => {
+        const selInfo0 = selectedId ? findNodeById(sessionTree, selectedId, null) : null
+        const sessNode0 = selInfo0 && selInfo0.node && selInfo0.node.type==='session' ? selInfo0.node : null
+        if (!sessNode0) { await showConfirmModal('Error', 'Select a session in the left tree first.', 'OK', ''); return }
+        // Modal wizard
+        const overlay = document.createElement('div'); overlay.className='modal-overlay'
+        const modal = document.createElement('div'); modal.className='modal'
+        const header = document.createElement('div'); header.className='modal-header'; header.textContent='Create Tunnel'
+        const body = document.createElement('div'); body.className='modal-body'
+        const step1 = document.createElement('div'); step1.style.display='flex'; step1.style.gap='8px'; step1.style.alignItems='center'
+        step1.innerHTML = '<span>Local port</span>'
+        const inLocal = document.createElement('input'); inLocal.className='input'; inLocal.placeholder='8080'; inLocal.value='8080'
+        step1.appendChild(inLocal)
+        const step2 = document.createElement('div'); step2.style.display='none'; step2.style.gap='8px'; step2.style.alignItems='center'
+        step2.innerHTML = '<span>Remote port</span>'
+        const inRemote = document.createElement('input'); inRemote.className='input'; inRemote.placeholder='80'; inRemote.value='80'
+        step2.appendChild(inRemote)
+        const step3 = document.createElement('div'); step3.style.display='none'; step3.style.gap='8px'; step3.style.alignItems='center'
+        step3.innerHTML = '<span>Name (optional)</span>'
+        const inName = document.createElement('input'); inName.className='input'; inName.placeholder='My tunnel'
+        step3.appendChild(inName)
+        body.appendChild(step1); body.appendChild(step2); body.appendChild(step3)
+        const actions = document.createElement('div'); actions.className='modal-actions'
+        const btnCancel = document.createElement('button'); btnCancel.className='btn'; btnCancel.textContent='Cancel'
+        const btnNext = document.createElement('button'); btnNext.className='btn primary'; btnNext.textContent='Next'
+        const btnCreate = document.createElement('button'); btnCreate.className='btn primary'; btnCreate.textContent='Create'; btnCreate.style.display='none'
+        actions.appendChild(btnCancel); actions.appendChild(btnNext); actions.appendChild(btnCreate)
+        modal.appendChild(header); modal.appendChild(body); modal.appendChild(actions); overlay.appendChild(modal); document.body.appendChild(overlay)
+
+        let step = 1
+        function update() {
+          step1.style.display = step===1?'flex':'none'
+          step2.style.display = step===2?'flex':'none'
+          step3.style.display = step===3?'flex':'none'
+          btnNext.style.display = step<3?'':'none'
+          btnCreate.style.display = step===3?'':'none'
+        }
+        update()
+
+        function close() { try { document.body.removeChild(overlay) } catch {} }
+        btnCancel.onclick = close
+        btnNext.onclick = () => { step = Math.min(3, step+1); update() }
+
+        btnCreate.onclick = async () => {
+        // Use selected session
+        const selInfo = selectedId ? findNodeById(sessionTree, selectedId, null) : null
+        const sessNode = selInfo && selInfo.node && selInfo.node.type==='session' ? selInfo.node : null
+        if (!sessNode) { await showConfirmModal('Error', 'Select a session in the left tree first.', 'OK', ''); return }
+        const remoteHost = (sessNode.session && (sessNode.session.host || sessNode.session.hostname)) || '127.0.0.1'
+        const localPort = Number(inLocal.value || '0')
+        const remotePort = Number(inRemote.value || '0')
+        if (!localPort || !remotePort) { alert('Ports are required'); return }
+        const name = (inName.value || '').trim()
+        // Add tunnel inactive by default
+        const entry = { id: genId('tun'), sessionId: sessNode.id, sessionCfg: sessNode.session, name, localHost:'127.0.0.1', localPort, remoteHost, remotePort, active:false }
+        tunnels.push(entry)
+        await window.api.tunnelsSave(tunnels)
+        renderTunnels()
+          close()
+        }
+      }
+
+      // Load persisted tunnels
+      async function loadTunnelsUI() {
+        try {
+          const res = await window.api.tunnelsLoad()
+          tunnels = Array.isArray(res?.tunnels) ? res.tunnels : []
+          renderTunnels()
+        } catch {}
+      }
+      loadTunnelsUI()
     </script>
   </body>
   </html>

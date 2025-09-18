@@ -4,6 +4,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { Client as SSHClient } from 'ssh2'
 import SFTPClient from 'ssh2-sftp-client'
+import net from 'net'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -26,6 +27,7 @@ app.whenReady().then(createWindow)
 
 // Manage multiple connections
 const connections = new Map() // id -> { ssh, sftp, stream }
+const forwards = new Map() // key `${id}:${localPort}` -> server
 
 // Sessions persistence
 const sessionsFile = () => path.join(app.getPath('userData'), 'sessions.json')
@@ -46,6 +48,22 @@ async function saveSessionsTree(tree) {
   await writeFile(sessionsFile(), JSON.stringify(payload, null, 2))
 }
 
+// Tunnels persistence
+const tunnelsFile = () => path.join(app.getPath('userData'), 'tunnels.json')
+async function loadTunnels() {
+  try {
+    const txt = await readFile(tunnelsFile(), 'utf-8')
+    const data = JSON.parse(txt)
+    if (Array.isArray(data)) return data
+    if (data && Array.isArray(data.tunnels)) return data.tunnels
+    return []
+  } catch { return [] }
+}
+async function saveTunnels(tunnels) {
+  const payload = { version: 1, tunnels: Array.isArray(tunnels) ? tunnels : [] }
+  await writeFile(tunnelsFile(), JSON.stringify(payload, null, 2))
+}
+
 ipcMain.handle('sessions-load', async () => {
   const data = await loadSessions()
   // normalize to { tree }
@@ -61,6 +79,17 @@ ipcMain.handle('sessions-load', async () => {
 ipcMain.handle('sessions-save', async (evt, tree) => {
   await saveSessionsTree(tree || [])
   try { win.webContents.send('sessions-updated') } catch {}
+  return { ok: true }
+})
+
+// Tunnels load/save
+ipcMain.handle('tunnels-load', async () => {
+  const tunnels = await loadTunnels()
+  return { ok: true, tunnels }
+})
+ipcMain.handle('tunnels-save', async (evt, tunnels) => {
+  await saveTunnels(tunnels || [])
+  try { win.webContents.send('tunnels-updated') } catch {}
   return { ok: true }
 })
 // legacy handlers kept as no-ops to avoid errors if called
@@ -150,6 +179,39 @@ ipcMain.handle('sftp-connect', async (evt, cfg) => {
   let rec = connections.get(id) || {}
   rec.sftp = sftp
   connections.set(id, rec)
+  return { ok: true }
+})
+
+// Local port forwarding via ssh2 (L->R)
+ipcMain.handle('tunnel-start', async (evt, payload) => {
+  const { id, localHost='127.0.0.1', localPort, remoteHost='127.0.0.1', remotePort } = payload || {}
+  if (!id || !localPort || !remoteHost || !remotePort) throw new Error('Invalid tunnel params')
+  const rec = connections.get(id)
+  if (!rec || !rec.ssh) throw new Error('Not connected')
+  const key = `${id}:${localPort}`
+  if (forwards.has(key)) return { ok: true }
+  const server = net.createServer((socket) => {
+    rec.ssh.forwardOut(socket.remoteAddress || '127.0.0.1', socket.remotePort || 0, remoteHost, remotePort, (err, stream) => {
+      if (err) { try { socket.destroy() } catch {}; return }
+      socket.pipe(stream).pipe(socket)
+    })
+  })
+  await new Promise((resolve, reject) => {
+    server.on('error', reject)
+    server.listen(localPort, localHost, resolve)
+  })
+  forwards.set(key, server)
+  return { ok: true }
+})
+
+ipcMain.handle('tunnel-stop', async (evt, payload) => {
+  const { id, localPort } = payload || {}
+  const key = `${id}:${localPort}`
+  const server = forwards.get(key)
+  if (server) {
+    try { await new Promise((r) => server.close(r)) } catch {}
+    forwards.delete(key)
+  }
   return { ok: true }
 })
 
