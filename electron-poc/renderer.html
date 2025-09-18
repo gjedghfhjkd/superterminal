@@ -246,6 +246,40 @@
           } catch {}
         }
         const xtermEl = () => (pane && pane.querySelector) ? pane.querySelector('.xterm') : null
+        const forceClearSelectionVisual = () => {
+          try {
+            const el = xtermEl()
+            const target = el ? (el.querySelector('.xterm-viewport') || el) : null
+            if (!target) return
+            const mk = (type) => new MouseEvent(type, { bubbles:true, cancelable:true, button:0, buttons:0, clientX:1, clientY:1 })
+            try { target.dispatchEvent(mk('mousedown')) } catch {}
+            try { target.dispatchEvent(mk('mouseup')) } catch {}
+            try { target.dispatchEvent(mk('click')) } catch {}
+          } catch {}
+        }
+        const clearOsSelectionByDummy = () => {
+          try {
+            const dummy = document.createElement('span')
+            dummy.textContent = '\u200b'
+            dummy.style.position = 'fixed'
+            dummy.style.left = '-99999px'
+            dummy.style.top = '-99999px'
+            document.body.appendChild(dummy)
+            const range = document.createRange()
+            range.selectNodeContents(dummy)
+            const sel = window.getSelection && window.getSelection()
+            if (sel) { try { sel.removeAllRanges() } catch {}; try { sel.addRange(range) } catch {} }
+            try { sel && sel.removeAllRanges && sel.removeAllRanges() } catch {}
+            try { document.body.removeChild(dummy) } catch {}
+          } catch {}
+        }
+        const clearXtermSelectionDeep = () => {
+          try { if (typeof term.clearSelection === 'function') term.clearSelection() } catch {}
+          try { const core = term && (term._core || term._coreProxy || term._coreService); core && core._selectionService && core._selectionService.clearSelection && core._selectionService.clearSelection() } catch {}
+          try { clearSelections() } catch {}
+          try { forceClearSelectionVisual() } catch {}
+          try { clearOsSelectionByDummy() } catch {}
+        }
         // Use capture to run even if inner handlers stop propagation
         setTimeout(() => {
           const el = xtermEl()
@@ -286,7 +320,7 @@
                   try { window.api.sshSendId(currentId, text) } catch {}
                 } finally {
                   try { lastSelection = '' } catch {}
-                  const clearCycle = () => { try { clearSelections() } catch {}; try { term.focus() } catch {} }
+                  const clearCycle = () => { try { clearXtermSelectionDeep() } catch {}; try { term.focus() } catch {} }
                   try { clearCycle() } catch {}
                   try { requestAnimationFrame(() => clearCycle()) } catch {}
                   try { setTimeout(() => clearCycle(), 0) } catch {}
