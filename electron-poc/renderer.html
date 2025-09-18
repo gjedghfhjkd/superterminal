@@ -174,6 +174,10 @@
       const THEME_BASE = '#0b0d14'
       const THEME_ACCENT = '#2a5bd7'
       const DEFAULT_FOLDER_COLOR = THEME_BASE
+      const ZOOM_STEP = 1
+      const ZOOM_MIN = 8
+      const ZOOM_MAX = 64
+      const zoomGuard = { in:false, out:false, reset:false }
 
       function closeTabById(id) {
         try {
@@ -196,6 +200,23 @@
         term.loadAddon(fit)
         term.open(pane)
         term.focus()
+        const initialFontSize = (() => { try { return Number(term.options && term.options.fontSize) || 15 } catch { return 15 } })()
+        const applyZoom = (mode) => {
+          try {
+            const rec = terminals.get(id)
+            const current = (rec && typeof rec.currFontSize === 'number') ? rec.currFontSize : (Number(term.options && term.options.fontSize) || initialFontSize)
+            const base = (rec && typeof rec.baseFontSize === 'number') ? rec.baseFontSize : initialFontSize
+            let next = current
+            if (mode === 'in') next = Math.min(ZOOM_MAX, current + ZOOM_STEP)
+            else if (mode === 'out') next = Math.max(ZOOM_MIN, current - ZOOM_STEP)
+            else if (mode === 'reset') next = base
+            if (next !== current) {
+              try { term.options.fontSize = next } catch {}
+              if (rec) rec.currFontSize = next
+              try { resize() } catch {}
+            }
+          } catch {}
+        }
         // Reliable copy helpers bound to xterm root element and xterm key hook
         let lastSelection = ''
         try {
@@ -348,15 +369,25 @@
         // Handle Ctrl+Shift+C via xterm API so events consumed by xterm are still caught
         try {
           term.attachCustomKeyEventHandler((ev) => {
+            // Copy
             if ((ev.key === 'c' || ev.key === 'C') && ev.ctrlKey && ev.shiftKey) {
               copySelectedText()
-              return false // prevent xterm/default handling
+              return false
+            }
+            // Zoom in/out/reset (guarded per physical press)
+            if (ev.ctrlKey) {
+              const isPlus = (ev.key === '+' || (ev.key === '=' && ev.shiftKey) || ev.code === 'NumpadAdd')
+              const isMinus = (ev.key === '-' || ev.code === 'NumpadSubtract')
+              const isReset = (ev.key === '=' && !ev.shiftKey)
+              if (isPlus) { if (!zoomGuard.in) { applyZoom('in'); zoomGuard.in = true } return false }
+              if (isMinus) { if (!zoomGuard.out) { applyZoom('out'); zoomGuard.out = true } return false }
+              if (isReset) { if (!zoomGuard.reset) { applyZoom('reset'); zoomGuard.reset = true } return false }
             }
             return true
           })
         } catch {}
         term.onData(data => { if (currentId != null) window.api.sshSendId(currentId, data) })
-        terminals.set(id, { term, el: pane, fit })
+        terminals.set(id, { term, el: pane, fit, baseFontSize: initialFontSize, currFontSize: initialFontSize })
 
         const tab = document.createElement('div')
         tab.className = 'tab'
@@ -873,6 +904,52 @@
             return
           }
         }
+        // Zoom controls for active terminal:
+        // Ctrl+Shift+= (which is '+') -> zoom in
+        // Ctrl+- -> zoom out
+        // Ctrl+= -> reset to initial font size
+        if (e.ctrlKey) {
+          // If event originated inside xterm, let xterm handler manage it to avoid double handling
+          try {
+            const t = e.target
+            if (t && typeof t.closest === 'function' && t.closest('.xterm')) {
+              // Do not handle here
+            } else {
+              const isPlus = (e.key === '+' || (e.key === '=' && e.shiftKey) || e.code === 'NumpadAdd')
+              const isMinus = (e.key === '-' || e.code === 'NumpadSubtract')
+              const isReset = (e.key === '=' && !e.shiftKey)
+              if (isPlus || isMinus || isReset) {
+                // Guard to ensure one action per physical press
+                if ((isPlus && zoomGuard.in) || (isMinus && zoomGuard.out) || (isReset && zoomGuard.reset)) {
+                  e.preventDefault(); e.stopPropagation(); return
+                }
+                const rec = currentId != null ? terminals.get(currentId) : null
+                const term = rec && rec.term
+                if (term) {
+                  try {
+                    const current = (typeof rec.currFontSize === 'number') ? rec.currFontSize : (Number(term.options && term.options.fontSize) || 15)
+                    const base = (typeof rec.baseFontSize === 'number') ? rec.baseFontSize : (Number(term.options && term.options.fontSize) || 15)
+                    let next = current
+                    if (isPlus) next = Math.min(ZOOM_MAX, current + ZOOM_STEP)
+                    else if (isMinus) next = Math.max(ZOOM_MIN, current - ZOOM_STEP)
+                    else if (isReset) next = base
+                    if (next !== current) {
+                      try { term.options.fontSize = next } catch {}
+                      rec.currFontSize = next
+                      try { resize() } catch {}
+                    }
+                  } catch {}
+                  if (isPlus) zoomGuard.in = true
+                  if (isMinus) zoomGuard.out = true
+                  if (isReset) zoomGuard.reset = true
+                  e.preventDefault()
+                  e.stopPropagation()
+                  return
+                }
+              }
+            }
+          } catch {}
+        }
         if (e.key === 'Delete' && selectedId) {
           const ok = await showConfirmModal('Delete', 'Delete selected item?', 'Delete', 'Cancel')
           if (!ok) return
@@ -896,6 +973,16 @@
           await window.api.sessionsSaveTree(sessionTree)
           renderTree()
         }
+      })
+
+      // Clear zoom guard on keyup to allow next press
+      document.addEventListener('keyup', (e) => {
+        try {
+          if (e.key === 'Control') { zoomGuard.in = zoomGuard.out = zoomGuard.reset = false; return }
+          if (e.code === 'NumpadAdd' || e.key === '+' || (e.key === '=' && e.shiftKey)) { zoomGuard.in = false }
+          if (e.code === 'NumpadSubtract' || e.key === '-') { zoomGuard.out = false }
+          if (e.key === '=' && !e.shiftKey) { zoomGuard.reset = false }
+        } catch {}
       })
 
       // Modal for input (since prompt is disabled in secure Electron)
