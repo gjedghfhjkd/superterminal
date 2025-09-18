@@ -46,10 +46,10 @@
         --tab-bg-hover: color-mix(in srgb, var(--tab-color) 24%, #22283a);
         --tab-bg-active: color-mix(in srgb, var(--tab-color) 30%, #0b0d14);
         background: var(--tab-bg-normal);
-        border-color: var(--tab-color);
+        border-color: transparent;
       }
-      .tab[data-color]:hover { background: var(--tab-bg-hover); border-color: var(--tab-color); }
-      .tab[data-color].active { background: var(--tab-bg-active); color:#ffffff; border-color: var(--tab-color); box-shadow: 0 0 0 1px var(--tab-color) inset; }
+      .tab[data-color]:hover { background: var(--tab-bg-hover); border-color: transparent; }
+      .tab[data-color].active { background: var(--tab-bg-active); color:#ffffff; border-color: transparent; box-shadow: none; }
       .tab[data-color]::before { content:""; position:absolute; left:0; top:4px; bottom:0; width:3px; border-radius:3px 0 0 0; background:var(--tab-color); opacity:.9; }
       .tab[data-color].active::after { background: var(--tab-color); }
       #panes { position:relative; flex:1; overflow:hidden; background:#0f111a; min-height:0; }
