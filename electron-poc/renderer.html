@@ -395,6 +395,16 @@
           await moveNode(draggingId, { id:'__root__', type:'folder' })
           draggingId = null
         })
+        // Clear selection when clicking on empty space in the tree
+        root.onclick = (e) => {
+          const t = e && e.target
+          if (t && t.closest && t.closest('.item')) return
+          if (selectedId != null) {
+            selectedId = null
+            try { hideCtx() } catch {}
+            renderTree()
+          }
+        }
 
         function renderList(list, container, inheritedColor) {
           list.forEach(n => {
