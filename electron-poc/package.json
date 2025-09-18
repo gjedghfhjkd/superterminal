@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "electron .",
-    "pack:win": "electron-packager . SuperTerminal --platform=win32 --arch=x64 --out=dist --overwrite --asar --prune=true --ignore=^dist$"
+    "pack:win": "electron-packager . SuperTerminal --platform=win32 --arch=x64 --out=dist --overwrite --asar --prune=true --ignore=^dist$ --ignore='node_modules/.*/(README|Readme|readme)(\\..*)?$' --ignore='node_modules/.*/(test|tests|__tests__|example|examples)/' --ignore='.*\\.(pem|key|pub)$'"
   },
   "devDependencies": {
     "electron": "^30.0.0",
