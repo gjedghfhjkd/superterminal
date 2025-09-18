@@ -200,20 +200,26 @@
         try {
           term.attachCustomKeyEventHandler((ev) => {
             try {
-              const hasCtrlShift = !!ev && ev.ctrlKey && ev.shiftKey
-              if (!hasCtrlShift) return true
-              const isV = (ev.code === 'KeyV') || ev.key === 'V' || ev.key === 'v'
-              const isC = (ev.code === 'KeyC') || ev.key === 'C' || ev.key === 'c'
-              if (isV) {
+              if (!ev) return true
+              const isShiftInsert = ev.shiftKey && !ev.ctrlKey && !ev.altKey && (ev.code === 'Insert' || ev.key === 'Insert')
+              const isCtrlInsert = ev.ctrlKey && !ev.shiftKey && !ev.altKey && (ev.code === 'Insert' || ev.key === 'Insert')
+              const hasCtrlShift = ev.ctrlKey && ev.shiftKey
+              const isV = hasCtrlShift && ((ev.code === 'KeyV') || ev.key === 'V' || ev.key === 'v')
+              const isC = hasCtrlShift && ((ev.code === 'KeyC') || ev.key === 'C' || ev.key === 'c')
+              if (isV || isShiftInsert) {
                 const txt = (window.api.readClipboardText?.() || '')
                 if (txt) { try { typeof term.paste === 'function' ? term.paste(txt) : term.write(txt) } catch {} }
+                try { ev.preventDefault?.() } catch {}
+                try { ev.stopPropagation?.() } catch {}
                 return false
               }
-              if (isC) {
+              if (isC || isCtrlInsert) {
                 const hasSel = typeof term.hasSelection === 'function' ? term.hasSelection() : undefined
                 const sel = (typeof term.getSelection === 'function') ? term.getSelection() : ''
                 if ((hasSel === true) || (sel && sel.length)) {
                   try { window.api.writeClipboardText?.(sel) } catch {}
+                  try { ev.preventDefault?.() } catch {}
+                  try { ev.stopPropagation?.() } catch {}
                   return false
                 }
                 return true
@@ -380,15 +386,23 @@
           if (!isC) return
           const active = currentId != null ? terminals.get(currentId) : null
           if (!active) return
-          const pane = active.el
-          if (!pane) return
-          const target = e.target
-          if (!target || (typeof target.closest === 'function' && !target.closest('.xterm'))) return
+          // Only handle when focus is in xterm or its helper textarea
+          const ae = document.activeElement
+          const inXterm = (ae && typeof ae.closest === 'function' && ae.closest('.xterm')) || (ae && ae.classList && ae.classList.contains('xterm-helper-textarea'))
+          if (!inXterm) return
           const term = active.term
           const hasSel = typeof term.hasSelection === 'function' ? term.hasSelection() : undefined
-          const sel = (typeof term.getSelection === 'function') ? term.getSelection() : ''
+          let sel = (typeof term.getSelection === 'function') ? term.getSelection() : ''
+          // Fallback to DOM selection if xterm selection API returns empty
+          if ((!sel || !sel.length) && window.getSelection) {
+            try { sel = String(window.getSelection()?.toString() || '') } catch {}
+          }
           if ((hasSel === true) || (sel && sel.length)) {
-            try { window.api.writeClipboardText?.(sel) } catch {}
+            let copied = false
+            try { window.api.writeClipboardText?.(sel); copied = true } catch {}
+            if (!copied && navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+              try { navigator.clipboard.writeText(sel); copied = true } catch {}
+            }
             e.preventDefault()
             e.stopPropagation()
           }
