@@ -631,22 +631,24 @@
           body.appendChild(text)
           const actions = document.createElement('div')
           actions.className = 'modal-actions'
-          const btnCancel = document.createElement('button')
-          btnCancel.className = 'btn'
-          btnCancel.textContent = cancelLabel
           const btnOk = document.createElement('button')
           btnOk.className = 'btn primary'
           btnOk.textContent = okLabel
-          actions.appendChild(btnCancel)
+          if (cancelLabel) {
+            const btnCancel = document.createElement('button')
+            btnCancel.className = 'btn'
+            btnCancel.textContent = cancelLabel
+            btnCancel.onclick = () => close(false)
+            actions.appendChild(btnCancel)
+          }
           actions.appendChild(btnOk)
           modal.appendChild(header); modal.appendChild(body); modal.appendChild(actions)
           overlay.appendChild(modal)
           document.body.appendChild(overlay)
 
           const close = (val) => { try { document.body.removeChild(overlay) } catch {}; resolve(val) }
-          btnCancel.onclick = () => close(false)
           btnOk.onclick = () => close(true)
-          overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close(false) })
+          overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close(true) })
           setTimeout(() => btnOk.focus(), 0)
         })
       }
