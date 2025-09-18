@@ -196,17 +196,34 @@
         term.loadAddon(fit)
         term.open(pane)
         term.focus()
-        // Right-click inside terminal copies current selection (if any)
-        pane.oncontextmenu = (e) => {
-          // ensure event is for this terminal area
-          const within = e && e.target && (e.target.closest && e.target.closest('.xterm'))
-          if (!within) return
-          e.preventDefault()
+        // Reliable copy helpers bound to xterm root element and xterm key hook
+        const copySelectedText = () => {
           try {
-            const selected = (typeof term.getSelection === 'function') ? (term.getSelection() || '') : ''
-            if (selected) { window.api.copyText(selected) }
+            let selected = (typeof term.getSelection === 'function') ? (term.getSelection() || '') : ''
+            if (!selected && typeof window.getSelection === 'function') {
+              try { selected = String(window.getSelection().toString() || '') } catch {}
+            }
+            if (selected) window.api.copyText(selected)
           } catch {}
         }
+        const xtermEl = () => (pane && pane.querySelector) ? pane.querySelector('.xterm') : null
+        // Use capture to run even if inner handlers stop propagation
+        setTimeout(() => {
+          const el = xtermEl()
+          if (el) {
+            el.addEventListener('contextmenu', (e) => { e.preventDefault(); copySelectedText() }, { capture: true })
+          }
+        }, 0)
+        // Handle Ctrl+Shift+C via xterm API so events consumed by xterm are still caught
+        try {
+          term.attachCustomKeyEventHandler((ev) => {
+            if ((ev.key === 'c' || ev.key === 'C') && ev.ctrlKey && ev.shiftKey) {
+              copySelectedText()
+              return false // prevent xterm/default handling
+            }
+            return true
+          })
+        } catch {}
         term.onData(data => { if (currentId != null) window.api.sshSendId(currentId, data) })
         terminals.set(id, { term, el: pane, fit })
 
