@@ -19,7 +19,7 @@
       body::-webkit-scrollbar-thumb { background:#2a3040; border-radius:8px; border:2px solid #0b0d14 }
       body::-webkit-scrollbar-thumb:hover { background:#3a4160 }
       /* Dropdown */
-      .dropdown-toggle { background:#121623; color:#e6e6e6; border:1px solid #2a3040; border-radius:8px; padding:8px 10px; padding-right:34px; outline:none; cursor:pointer; position:relative; display:block; width:100%; line-height:normal }
+      .dropdown-toggle { background:#121623; color:#e6e6e6; border:1px solid #2a3040; border-radius:8px; padding:8px 10px; padding-right:34px; outline:none; cursor:pointer; position:relative; display:block; width:100%; line-height:normal; min-height:38px }
       .dropdown-toggle::after { content:""; position:absolute; right:10px; top:50%; width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:6px solid #8b90a0; transform:translateY(-50%); pointer-events:none }
       .dropdown-menu { position:absolute; z-index:1000; left:0; right:0; top:calc(100% + 6px); background:#0f111a; border:1px solid #2a3040; border-radius:8px; padding:6px 0; max-height:220px; overflow:auto; box-shadow:0 6px 18px rgba(0,0,0,.4) }
       .dropdown-item { display:flex; align-items:center; gap:8px; padding:6px 10px; color:#cfd3dc; cursor:pointer }
@@ -50,7 +50,7 @@
     <label>User</label>
     <div id="userSelectWrap" style="position:relative; display:flex; gap:8px; align-items:center">
       <div id="userDropdown" class="dropdown-toggle" tabindex="0" style="flex:1"></div>
-      <input id="userCustom" placeholder="username" style="display:none; width:100%" />
+      <input id="userCustom" class="input" placeholder="username" style="display:none; width:100%" />
       <div id="userDropdownMenu" class="dropdown-menu" style="display:none"></div>
     </div>
     <select id="auth">
@@ -128,14 +128,17 @@
         const toggle = document.getElementById('userDropdown')
         const label = u.name ? `${u.name} — ${u.username}${u.host?`@${u.host}`:''}` : `${u.username}${u.host?`@${u.host}`:''}`
         toggle.textContent = label
+        toggle.style.display = 'block'
+        document.getElementById('userCustom').style.display = 'none'
         applySelectedUserFromOption({ dataset: { user: encodeURIComponent(JSON.stringify(u)) } })
       }
       function selectCustom() {
         const toggle = document.getElementById('userDropdown')
         toggle.textContent = 'Custom username…'
+        toggle.style.display = 'none'
+        document.getElementById('userCustom').style.display = ''
         selectedUser = null
         forcedAuth = null
-        document.getElementById('userCustom').style.display = ''
         document.getElementById('auth').style.display = ''
         onAuthChange()
       }
