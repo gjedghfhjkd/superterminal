@@ -885,7 +885,7 @@
                 const cfg = Object.assign({}, t.sessionCfg || {}, { id: t.connId })
                 await window.api.sshConnect(cfg)
               }
-              await window.api.tunnelStart(t.connId, '127.0.0.1', t.localPort, '127.0.0.1', t.remotePort)
+              await window.api.tunnelStart(t.connId, t.localHost||'127.0.0.1', t.localPort, (t.sessionCfg?.host || t.remoteHost || '127.0.0.1'), t.remotePort)
               t.active = true
               await window.api.tunnelsSave(tunnels)
               renderTunnels()
@@ -894,8 +894,7 @@
           stopBtn.onclick = async () => {
             if (!t.active) return
             try {
-              const bindHost = '127.0.0.1'
-              await window.api.tunnelStop(t.connId || t.sessionId, bindHost, t.remotePort)
+              await window.api.tunnelStop(t.connId || t.sessionId, t.localPort)
               try { if (t.connId) await window.api.sshDisconnect(t.connId) } catch {}
               t.active = false
               t.connId = undefined
@@ -908,7 +907,7 @@
             if (!ok) return
             try {
               if (t.active) {
-                await window.api.tunnelStop(t.connId || t.sessionId, '127.0.0.1', t.remotePort)
+                await window.api.tunnelStop(t.connId || t.sessionId, t.localPort)
                 try { if (t.connId) await window.api.sshDisconnect(t.connId) } catch {}
               }
             } catch {}

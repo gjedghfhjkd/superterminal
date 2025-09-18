@@ -27,7 +27,7 @@ app.whenReady().then(createWindow)
 
 // Manage multiple connections
 const connections = new Map() // id -> { ssh, sftp, stream }
-const forwards = new Map() // key `${id}:${remoteHost}:${remotePort}` -> { onTcp, remoteHost, remotePort }
+const forwards = new Map() // key `${id}:${localPort}` -> server
 
 // Sessions persistence
 const sessionsFile = () => path.join(app.getPath('userData'), 'sessions.json')
@@ -188,33 +188,28 @@ ipcMain.handle('tunnel-start', async (evt, payload) => {
   if (!id || !localPort || !remoteHost || !remotePort) throw new Error('Invalid tunnel params')
   const rec = connections.get(id)
   if (!rec || !rec.ssh) throw new Error('Not connected')
-  const key = `${id}:${remoteHost}:${remotePort}`
+  const key = `${id}:${localPort}`
   if (forwards.has(key)) return { ok: true }
-  await new Promise((resolve, reject) => rec.ssh.forwardIn(remoteHost, remotePort, (err) => err ? reject(err) : resolve()))
-  const onTcp = (info, accept, reject) => {
-    try {
-      if (info && info.destIP === remoteHost && Number(info.destPort) === Number(remotePort)) {
-        const client = accept()
-        const dst = net.connect({ host: localHost, port: localPort }, () => {
-          client.pipe(dst).pipe(client)
-        })
-        dst.on('error', () => { try { client.end() } catch {} })
-      }
-    } catch {}
-  }
-  rec.ssh.on('tcp connection', onTcp)
-  forwards.set(key, { onTcp, remoteHost, remotePort })
+  const server = net.createServer((socket) => {
+    rec.ssh.forwardOut(socket.remoteAddress || '127.0.0.1', socket.remotePort || 0, remoteHost, remotePort, (err, stream) => {
+      if (err) { try { socket.destroy() } catch {}; return }
+      socket.pipe(stream).pipe(socket)
+    })
+  })
+  await new Promise((resolve, reject) => {
+    server.on('error', reject)
+    server.listen(localPort, localHost, resolve)
+  })
+  forwards.set(key, server)
   return { ok: true }
 })
 
 ipcMain.handle('tunnel-stop', async (evt, payload) => {
-  const { id, remoteHost='127.0.0.1', remotePort } = payload || {}
-  const key = `${id}:${remoteHost}:${remotePort}`
-  const rec = connections.get(id)
-  const entry = forwards.get(key)
-  if (rec && rec.ssh && entry) {
-    try { await new Promise((r, j) => rec.ssh.unforwardIn(remoteHost, remotePort, (err) => err ? j(err) : r())) } catch {}
-    try { rec.ssh.removeListener('tcp connection', entry.onTcp) } catch {}
+  const { id, localPort } = payload || {}
+  const key = `${id}:${localPort}`
+  const server = forwards.get(key)
+  if (server) {
+    try { await new Promise((r) => server.close(r)) } catch {}
     forwards.delete(key)
   }
   return { ok: true }
