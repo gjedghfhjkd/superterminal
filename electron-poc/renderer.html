@@ -687,22 +687,29 @@
       const sftpRemoteRefreshBtn = document.getElementById('sftp-remote-refresh')
       // no explicit remote connect button anymore
 
-      function renderListInto(el, basePath, items, onEnterDir) {
+      async function renderListInto(el, basePath, items, onEnterDir) {
         el.innerHTML = ''
         const rows = document.createDocumentFragment()
-        if (basePath && basePath !== '/') {
-          const upRow = document.createElement('div')
-          upRow.className = 'sftp-row'
-          upRow.innerHTML = '<span class="icon"><svg viewBox="0 0 24 24"><path d="M12 5l6 6h-4v6h-4v-6H6l6-6z"/></svg></span><div class="sftp-name">..</div><div class="sftp-type"></div>'
-          upRow.ondblclick = async () => {
-            if (el && el.id === 'sftp-local-list') {
+        {
+          const isLocal = el && el.id === 'sftp-local-list'
+          let shouldShowUp = false
+          let upTarget = null
+          if (isLocal) {
+            try {
               const up = await window.api.pathDirname(basePath)
-              onEnterDir(up)
-            } else {
-              onEnterDir(dirname(basePath))
-            }
+              if (up && up !== basePath) { shouldShowUp = true; upTarget = up }
+            } catch {}
+          } else {
+            shouldShowUp = Boolean(basePath && basePath !== '/')
+            upTarget = dirname(basePath)
           }
-          rows.appendChild(upRow)
+          if (shouldShowUp) {
+            const upRow = document.createElement('div')
+            upRow.className = 'sftp-row'
+            upRow.innerHTML = '<span class="icon"><svg viewBox="0 0 24 24"><path d="M12 5l6 6h-4v6h-4v-6H6l6-6z"/></svg></span><div class="sftp-name">..</div><div class="sftp-type"></div>'
+            upRow.ondblclick = () => onEnterDir(upTarget)
+            rows.appendChild(upRow)
+          }
         }
         for (const it of items || []) {
           const row = document.createElement('div')
@@ -715,7 +722,15 @@
           const fileIcon = '<span class="icon"><svg viewBox="0 0 24 24"><path d="M4 3h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2zm3 4v2h10V7H7zm0 4v2h6v-2H7z"/></svg></span>'
           row.innerHTML = `${isDir ? folderIcon : fileIcon}<div class="sftp-name" title="${displayName}">${displayName}</div><div class="sftp-type">${isDir?'dir':'file'}</div>`
           // Navigate by double click
-          row.ondblclick = () => { if (isDir) onEnterDir(joinPath(basePath, pathName)); }
+          row.ondblclick = async () => {
+            if (!isDir) return
+            if (el && el.id === 'sftp-local-list') {
+              const next = await window.api.pathJoin(basePath, pathName)
+              onEnterDir(next)
+            } else {
+              onEnterDir(joinPath(basePath, pathName))
+            }
+          }
           // Context menu
           row.oncontextmenu = (e) => { e.preventDefault(); openSftpCtxMenu(e.clientX, e.clientY, { basePath, name: displayName, pathName, isDir, ownerEl: el }) }
           // Drag support
@@ -832,7 +847,7 @@
 
       async function listRemote(p) {
         const list = await window.api.sftpListById(currentId, p)
-        renderListInto(sftpRemoteListEl, p, list, navigateRemote)
+        await renderListInto(sftpRemoteListEl, p, list, navigateRemote)
       }
       async function navigateRemote(p) {
         sftpRemotePathEl.value = p
@@ -840,7 +855,7 @@
       }
       async function listLocal(p) {
         const list = await window.api.localList(p)
-        renderListInto(sftpLocalListEl, p, list, navigateLocal)
+        await renderListInto(sftpLocalListEl, p, list, navigateLocal)
       }
       async function navigateLocal(p) {
         sftpLocalPathEl.value = p
