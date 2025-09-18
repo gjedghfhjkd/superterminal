@@ -580,23 +580,21 @@
         add('Rename…', async () => {
           const tabEl = tabs.get(tabId)
           if (!tabEl) return
-          const current = tabEl.querySelector('.title')?.textContent || tabEl.title || ''
+          const titleEl = tabEl.querySelector('.title')
+          const current = titleEl ? (titleEl.textContent || '') : (tabEl.title || '')
           const next = await showInputModal('Rename Tab', 'New name', current)
           if (!next) return
-          const tEl = tabEl.querySelector('.title')
-          if (tEl) tEl.textContent = next
+          if (titleEl) titleEl.textContent = next
           tabEl.title = next
         })
         add('Color…', async () => {
           const tabEl = tabs.get(tabId)
           if (!tabEl) return
           const current = tabEl.style.getPropertyValue('--tab-color') || '#3a4160'
-          const next = await showInputModal('Tab Color', 'Hex color, e.g. #ff6b6b', current)
-          if (!next) return
-          const val = next.trim()
-          if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(val)) { alert('Enter a valid hex color like #ff6b6b'); return }
+          const picked = await showColorModal('Tab Color', current)
+          if (!picked) return
           tabEl.dataset.color = '1'
-          tabEl.style.setProperty('--tab-color', val)
+          tabEl.style.setProperty('--tab-color', picked)
         })
         add('Clear Color', () => {
           const tabEl = tabs.get(tabId)
@@ -716,6 +714,60 @@
           btnOk.onclick = () => close(true)
           overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close(cancelLabel ? false : true) })
           setTimeout(() => btnOk.focus(), 0)
+        })
+      }
+
+      function showColorModal(title, initialValue='#3a4160') {
+        return new Promise((resolve) => {
+          const overlay = document.createElement('div')
+          overlay.className = 'modal-overlay'
+          const modal = document.createElement('div')
+          modal.className = 'modal'
+          const header = document.createElement('div')
+          header.className = 'modal-header'
+          header.textContent = title || 'Pick a color'
+          const body = document.createElement('div')
+          body.className = 'modal-body'
+          const pickerWrap = document.createElement('div')
+          pickerWrap.style.display = 'flex'
+          pickerWrap.style.alignItems = 'center'
+          pickerWrap.style.gap = '10px'
+          const input = document.createElement('input')
+          input.type = 'color'
+          input.value = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(initialValue||'') ? initialValue : '#3a4160'
+          input.style.width = '44px'
+          input.style.height = '32px'
+          const hex = document.createElement('input')
+          hex.className = 'input'
+          hex.style.flex = '1'
+          hex.placeholder = '#rrggbb'
+          hex.value = input.value
+          input.addEventListener('input', () => { hex.value = input.value })
+          hex.addEventListener('input', () => {
+            const v = hex.value.trim()
+            if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v)) input.value = v
+          })
+          pickerWrap.appendChild(input)
+          pickerWrap.appendChild(hex)
+          body.appendChild(pickerWrap)
+          const actions = document.createElement('div')
+          actions.className = 'modal-actions'
+          const btnCancel = document.createElement('button')
+          btnCancel.className = 'btn'
+          btnCancel.textContent = 'Cancel'
+          const btnOk = document.createElement('button')
+          btnOk.className = 'btn primary'
+          btnOk.textContent = 'Apply'
+          actions.appendChild(btnCancel)
+          actions.appendChild(btnOk)
+          modal.appendChild(header); modal.appendChild(body); modal.appendChild(actions)
+          overlay.appendChild(modal)
+          document.body.appendChild(overlay)
+          const close = (val) => { try { document.body.removeChild(overlay) } catch {}; resolve(val) }
+          btnCancel.onclick = () => close(null)
+          btnOk.onclick = () => close(input.value)
+          overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close(null) })
+          setTimeout(() => input.focus(), 0)
         })
       }
 
