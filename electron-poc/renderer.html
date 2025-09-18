@@ -197,6 +197,21 @@
         term.open(pane)
         term.focus()
         term.onData(data => { if (currentId != null) window.api.sshSendId(currentId, data) })
+        try {
+          term.attachCustomKeyEventHandler((ev) => {
+            try {
+              const isCtrlShiftV = !!ev && ev.ctrlKey && ev.shiftKey && (ev.key === 'V' || ev.key === 'v')
+              if (isCtrlShiftV) {
+                const txt = (window.api.readClipboardText?.() || '')
+                if (txt) {
+                  try { typeof term.paste === 'function' ? term.paste(txt) : term.write(txt) } catch {}
+                }
+                return false
+              }
+            } catch {}
+            return true
+          })
+        } catch {}
         terminals.set(id, { term, el: pane, fit })
 
         const tab = document.createElement('div')

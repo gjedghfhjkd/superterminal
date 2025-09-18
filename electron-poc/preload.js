@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron')
+const { contextBridge, ipcRenderer, clipboard } = require('electron')
 
 contextBridge.exposeInMainWorld('api', {
   sshConnect: (cfg) => ipcRenderer.invoke('ssh-connect', cfg),
@@ -51,5 +51,10 @@ contextBridge.exposeInMainWorld('api', {
   onTunnelsUpdated: (cb) => ipcRenderer.on('tunnels-updated', cb),
   openTunnelWindow: (preset=null) => ipcRenderer.invoke('open-tunnel-window', { preset }),
   tunnelFormSubmit: (tunnel) => ipcRenderer.send('tunnel-form-submit', tunnel)
+  ,
+  // Clipboard helpers
+  readClipboardText: () => {
+    try { return clipboard.readText() } catch { return '' }
+  }
 })
 
