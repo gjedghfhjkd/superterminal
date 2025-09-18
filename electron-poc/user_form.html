@@ -75,13 +75,13 @@
       document.getElementById('btn-save').onclick = async () => {
         const out = {
           id: undefined,
-          username: (document.getElementById('username').value || '').trim(),
+          username: (document.getElementById('username').value || 'root').trim() || 'root',
           auth: document.getElementById('auth').value,
           password: document.getElementById('password').value,
           privateKey: document.getElementById('privateKey').value,
           passphrase: document.getElementById('passphrase').value
         }
-        if (!out.username) { alert('Username is required'); return }
+        if (!out.username) { out.username = 'root' }
         if (out.auth === 'key' && !out.privateKey.trim()) { alert('Private key is required for key auth'); return }
         try { window.api.userFormSubmit(out) } catch {}
       }
