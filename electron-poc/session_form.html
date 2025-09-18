@@ -18,10 +18,17 @@
       body::-webkit-scrollbar-track { background:#0b0d14 }
       body::-webkit-scrollbar-thumb { background:#2a3040; border-radius:8px; border:2px solid #0b0d14 }
       body::-webkit-scrollbar-thumb:hover { background:#3a4160 }
-      /* Context menu */
-      .ctx-menu { position:fixed; z-index:1000; background:#0f111a; border:1px solid #2a3040; border-radius:8px; padding:6px 0; min-width:160px; box-shadow:0 6px 18px rgba(0,0,0,.4) }
-      .ctx-item { padding:6px 12px; cursor:pointer; color:#cfd3dc }
-      .ctx-item:hover { background:#1a1f2d }
+      /* Dropdown */
+      .dropdown-toggle { background:#121623; color:#e6e6e6; border:1px solid #2a3040; border-radius:8px; padding:8px 34px 8px 10px; outline:none; cursor:pointer; position:relative; min-height:38px; display:flex; align-items:center }
+      .dropdown-toggle::after { content:""; position:absolute; right:10px; top:50%; width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:6px solid #8b90a0; transform:translateY(-50%) }
+      .dropdown-menu { position:absolute; z-index:1000; left:0; right:0; top:calc(100% + 6px); background:#0f111a; border:1px solid #2a3040; border-radius:8px; padding:6px 0; max-height:220px; overflow:auto; box-shadow:0 6px 18px rgba(0,0,0,.4) }
+      .dropdown-item { display:flex; align-items:center; gap:8px; padding:6px 10px; color:#cfd3dc; cursor:pointer }
+      .dropdown-item:hover { background:#1a1f2d }
+      .dropdown-item .label { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+      .dropdown-item .del { color:#a66; padding:2px 6px; border-radius:6px; border:1px solid #3a3040 }
+      .dropdown-item .del:hover { background:#3a1f23; color:#fff }
+      .dropdown-divider { height:1px; background:#2a3040; margin:6px 0 }
+      .dropdown-hint { color:#8b90a0; font-size:12px; padding:4px 10px }
       /* Modal */
       .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; z-index:1100 }
       .modal { width:320px; max-width:90vw; background:#0b0d14; color:#cfd3dc; border:1px solid #1f2330; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.5) }
@@ -41,8 +48,9 @@
     <label>Port</label>
     <input id="port" value="22" />
     <label>User</label>
-    <div id="userSelectWrap" style="display:flex; gap:8px; align-items:center">
-      <select id="userSelect" style="flex:1"></select>
+    <div id="userSelectWrap" style="position:relative; display:flex; gap:8px; align-items:center">
+      <div id="userDropdown" class="dropdown-toggle" tabindex="0" style="flex:1"></div>
+      <div id="userDropdownMenu" class="dropdown-menu" style="display:none"></div>
     </div>
     <input id="userCustom" placeholder="username" style="display:none" />
     <select id="auth">
@@ -71,25 +79,87 @@
       let selectedUser = null
       let forcedAuth = null
       async function fillUsers() {
-        const sel = document.getElementById('userSelect')
-        sel.innerHTML = ''
+        const toggle = document.getElementById('userDropdown')
+        const menu = document.getElementById('userDropdownMenu')
+        menu.innerHTML = ''
         const res = await window.api.usersLoad().catch(() => ({ users: [] }))
         const users = Array.isArray(res?.users) ? res.users : []
-        // Build options: presets, then special actions
+        // Build dropdown items
         for (const u of users) {
-          const opt = document.createElement('option')
-          opt.value = u.id || `${u.username || ''}@${u.host || ''}`
+          const item = document.createElement('div')
+          item.className = 'dropdown-item'
           const label = u.name ? `${u.name} — ${u.username}${u.host?`@${u.host}`:''}` : `${u.username}${u.host?`@${u.host}`:''}`
-          opt.textContent = label
-          opt.dataset.user = encodeURIComponent(JSON.stringify(u))
-          sel.appendChild(opt)
+          const lab = document.createElement('div'); lab.className='label'; lab.textContent = label
+          const del = document.createElement('button'); del.className='del'; del.type='button'; del.textContent='Delete'
+          del.onclick = async (e) => {
+            e.stopPropagation()
+            const ok = await showConfirm('Delete user', `Delete user "${label}"?`)
+            if (!ok) return
+            await removeUserById(u.id)
+            await fillUsers()
+            hideDropdown()
+          }
+          item.onclick = () => { selectUser(u); hideDropdown() }
+          item.appendChild(lab)
+          item.appendChild(del)
+          menu.appendChild(item)
         }
-        const divider = document.createElement('option'); divider.disabled = true; divider.textContent = '──────────'; divider.value=''; sel.appendChild(divider)
-        const create = document.createElement('option'); create.value='__create__'; create.textContent = 'Create user…'; sel.appendChild(create)
-        const custom = document.createElement('option'); custom.value='__custom__'; custom.textContent = 'Custom username…'; sel.appendChild(custom)
+        if (users.length) { const div = document.createElement('div'); div.className='dropdown-divider'; menu.appendChild(div) }
+        const createIt = document.createElement('div'); createIt.className='dropdown-item'; createIt.innerHTML = '<div class="label">Create user…</div>'
+        createIt.onclick = async () => {
+          await openCreateUser()
+          await fillUsers()
+          hideDropdown()
+        }
+        menu.appendChild(createIt)
+        const customIt = document.createElement('div'); customIt.className='dropdown-item'; customIt.innerHTML = '<div class="label">Custom username…</div>'
+        customIt.onclick = () => { selectCustom(); hideDropdown() }
+        menu.appendChild(customIt)
+        // Set toggle label
+        if (users.length) { toggle.textContent = (users[0].name ? `${users[0].name} — ${users[0].username}` : users[0].username) }
+        else { toggle.textContent = 'Custom username…' }
         // Default selection
-        if (users.length) { sel.selectedIndex = 0; applySelectedUserFromOption(sel.options[0]) }
-        else { sel.value='__custom__'; onUserSelectionChange() }
+        if (users.length) { applySelectedUserFromOption({ dataset: { user: encodeURIComponent(JSON.stringify(users[0])) } }) }
+        else { selectCustom() }
+      }
+      function showDropdown() { const m = document.getElementById('userDropdownMenu'); m.style.display='block' }
+      function hideDropdown() { const m = document.getElementById('userDropdownMenu'); m.style.display='none' }
+      function selectUser(u) {
+        const toggle = document.getElementById('userDropdown')
+        const label = u.name ? `${u.name} — ${u.username}${u.host?`@${u.host}`:''}` : `${u.username}${u.host?`@${u.host}`:''}`
+        toggle.textContent = label
+        applySelectedUserFromOption({ dataset: { user: encodeURIComponent(JSON.stringify(u)) } })
+      }
+      function selectCustom() {
+        const toggle = document.getElementById('userDropdown')
+        toggle.textContent = 'Custom username…'
+        selectedUser = null
+        forcedAuth = null
+        document.getElementById('userCustom').style.display = ''
+        document.getElementById('auth').style.display = ''
+        onAuthChange()
+      }
+      async function openCreateUser() {
+        try {
+          const res = await window.api.openUserWindow(null)
+          const u = res && res.user
+          if (u && u.username) {
+            const listRes = await window.api.usersLoad()
+            const users = Array.isArray(listRes?.users) ? listRes.users : []
+            u.id = u.id || ('usr_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7))
+            const idx = users.findIndex(x => x && x.id === u.id)
+            if (idx >= 0) users[idx] = u; else users.push(u)
+            await window.api.usersSave(users)
+          }
+        } catch {}
+      }
+      async function removeUserById(userId) {
+        try {
+          const res = await window.api.usersLoad()
+          const users = Array.isArray(res?.users) ? res.users : []
+          const next = users.filter(u => u && u.id !== userId)
+          await window.api.usersSave(next)
+        } catch {}
       }
       function applySelectedUserFromOption(opt) {
         selectedUser = null
@@ -213,24 +283,18 @@
       document.getElementById('title').textContent = `Create ${sessionType} Session`
       ;(async () => {
         await fillUsers()
-        const sel = document.getElementById('userSelect')
+        // If editing existing preset, try to select it in dropdown label state
         if (editPreset && editPreset.userPreset) {
-          for (const o of sel.options) {
-            try { const x = o.dataset.user ? JSON.parse(decodeURIComponent(o.dataset.user)) : null; if (x && ((x.id && editPreset.userPreset.id && x.id===editPreset.userPreset.id) || (x.username===editPreset.userPreset.username && String(x.host||'')===String(editPreset.userPreset.host||'') ))) { o.selected=true; applySelectedUserFromOption(o); break } } catch {}
-          }
+          selectUser(editPreset.userPreset)
         } else if (editPreset && editPreset.username) {
-          sel.value = '__custom__'
-          document.getElementById('userCustom').style.display = ''
+          selectCustom()
           document.getElementById('userCustom').value = editPreset.username
-          onAuthChange()
         }
-        const selEl = document.getElementById('userSelect')
-        selEl.addEventListener('change', onUserSelectionChange)
-        selEl.addEventListener('contextmenu', onUserContextMenu)
-        selEl.addEventListener('mousedown', (e) => { if (e.button === 2) onUserContextMenu(e) })
-        const wrap = document.getElementById('userSelectWrap')
-        wrap.addEventListener('contextmenu', onUserContextMenu)
-        wrap.addEventListener('mousedown', (e) => { if (e.button === 2) onUserContextMenu(e) })
+        const toggle = document.getElementById('userDropdown')
+        const menu = document.getElementById('userDropdownMenu')
+        function outside(e) { if (!menu.contains(e.target) && !toggle.contains(e.target)) { hideDropdown(); document.removeEventListener('mousedown', outside) } }
+        toggle.addEventListener('click', () => { const open = menu.style.display!=='none'; if (open) hideDropdown(); else { showDropdown(); setTimeout(()=>document.addEventListener('mousedown', outside), 0) } })
+        toggle.addEventListener('keydown', (e) => { if (e.key==='Enter' || e.key===' ') { e.preventDefault(); toggle.click() } })
       })()
 
       function updateAuth() {
@@ -277,83 +341,7 @@
         try { window.api.sessionFormSubmit(sess) } catch {}
       }
 
-      // Context menu for deleting selected user preset
-      function onUserContextMenu(e) {
-        e.preventDefault(); e.stopPropagation()
-        // prevent immediate change reactions caused by right-click interactions
-        ignoreNextUserChange = true
-        const sel = document.getElementById('userSelect')
-        const opt = sel && sel.selectedOptions && sel.selectedOptions[0]
-        const menu = document.createElement('div')
-        menu.className = 'ctx-menu'
-        async function removeUserById(userId) {
-          try {
-            const res = await window.api.usersLoad()
-            const users = Array.isArray(res?.users) ? res.users : []
-            const next = users.filter(u => u && u.id !== userId)
-            await window.api.usersSave(next)
-            await fillUsers()
-            const sel2 = document.getElementById('userSelect')
-            sel2.value = '__custom__'
-            document.getElementById('userCustom').style.display = ''
-          } catch {}
-        }
-        // If current selection is a preset, add quick delete for it
-        if (opt && opt.dataset && opt.dataset.user) {
-          const del = document.createElement('div')
-          del.className = 'ctx-item'
-          del.textContent = 'Delete selected'
-          del.onmousedown = async (ev) => {
-            ev.preventDefault(); ev.stopPropagation()
-            hideCtx()
-            let user = null
-            try { user = JSON.parse(decodeURIComponent(opt.dataset.user)) } catch {}
-            if (!user || !user.id) return
-            const ok = await showConfirm('Delete user', 'Delete selected user preset?')
-            if (!ok) return
-            await removeUserById(user.id)
-          }
-          menu.appendChild(del)
-        }
-        // Populate deletions for all users
-        ;(async () => {
-          try {
-            const res = await window.api.usersLoad()
-            const users = Array.isArray(res?.users) ? res.users : []
-            if (users.length) {
-              // Divider
-              const hr = document.createElement('div')
-              hr.style.borderTop = '1px solid #2a3040'
-              hr.style.margin = '6px 0'
-              menu.appendChild(hr)
-            }
-            for (const u of users) {
-              const label = u.name ? `${u.name} — ${u.username}${u.host?`@${u.host}`:''}` : `${u.username}${u.host?`@${u.host}`:''}`
-              const it = document.createElement('div')
-              it.className = 'ctx-item'
-              it.textContent = `Delete: ${label}`
-              it.onmousedown = async (ev) => {
-                ev.preventDefault(); ev.stopPropagation()
-                hideCtx()
-                const ok = await showConfirm('Delete user', `Delete user "${label}"?`)
-                if (!ok) return
-                if (!u.id) return
-                await removeUserById(u.id)
-              }
-              menu.appendChild(it)
-            }
-          } catch {}
-        })()
-        document.body.appendChild(menu)
-        const x = e.clientX, y = e.clientY
-        menu.style.left = x + 'px'
-        menu.style.top = y + 'px'
-        setTimeout(() => {
-          const onDoc = (ev) => { if (!menu.contains(ev.target)) { hideCtx(); document.removeEventListener('mousedown', onDoc) } }
-          document.addEventListener('mousedown', onDoc)
-        }, 0)
-        function hideCtx() { try { document.body.removeChild(menu) } catch {} }
-      }
+      // Context menu removed; deletion now available inline in dropdown
 
       function showConfirm(title, message) {
         return new Promise((resolve) => {
