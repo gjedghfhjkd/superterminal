@@ -285,8 +285,17 @@
                 } catch {
                   try { window.api.sshSendId(currentId, text) } catch {}
                 } finally {
-                  try { clearSelections() } catch {}
-                  try { setTimeout(() => { try { clearSelections() } catch {} }, 0) } catch {}
+                  try { lastSelection = '' } catch {}
+                  const clearCycle = () => { try { clearSelections() } catch {}; try { term.focus() } catch {} }
+                  try { clearCycle() } catch {}
+                  try { requestAnimationFrame(() => clearCycle()) } catch {}
+                  try { setTimeout(() => clearCycle(), 0) } catch {}
+                  try { setTimeout(() => clearCycle(), 30) } catch {}
+                  try { setTimeout(() => clearCycle(), 100) } catch {}
+                  try {
+                    const onUp = () => { try { clearCycle() } catch {}; try { document.removeEventListener('mouseup', onUp, true) } catch {} }
+                    document.addEventListener('mouseup', onUp, true)
+                  } catch {}
                 }
               }
             }, { capture: true })
