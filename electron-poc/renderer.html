@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
     <style>
+      :root { --app-cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23e6e6e6' d='M3 2 L3 16 L7 12 L11 21 L13 20 L9 11 L15 11 Z'/%3E%3C/svg%3E") 2 2, default }
       html, body { height:100%; overflow:hidden; }
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; cursor:var(--app-cursor, default); }
+      a, button, input, select, .tab, .item, .left-tab { cursor: var(--app-cursor, pointer) }
       #left { width:320px; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
       #left-topnav { padding:6px 8px; border-bottom:1px solid #1f2330; display:flex; gap:6px; align-items:center; }
       .left-tab { cursor:pointer; padding:6px 10px; border-radius:8px; border:1px solid #2a3040; color:#cfd3dc; background:#1a1f2d; display:flex; align-items:center; gap:6px; }
@@ -34,6 +36,7 @@
       .children { margin-left:16px; }
       .ctx-menu { position:fixed; z-index:1000; background:#0f111a; border:1px solid #2a3040; border-radius:8px; padding:6px 0; min-width:180px; box-shadow:0 6px 18px rgba(0,0,0,.4); }
       .ctx-item { padding:6px 12px; cursor:pointer; }
+      .btn, .icon-btn, .left-tab, .ctx-item { cursor: var(--app-cursor, pointer) }
       .ctx-item:hover { background:#1a1f2d; }
       .drop-target { outline:1px dashed #3a4160; background:#141a29; }
       #right { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
