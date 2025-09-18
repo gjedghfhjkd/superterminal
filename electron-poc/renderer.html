@@ -50,7 +50,7 @@
       }
       .tab[data-color]:hover { background: var(--tab-bg-hover); border-color: transparent; }
       .tab[data-color].active { background: var(--tab-bg-active); color:#ffffff; border-color: transparent; box-shadow: none; }
-      .tab[data-color]::before { content:""; position:absolute; left:0; top:4px; bottom:0; width:3px; border-radius:3px 0 0 0; background:var(--tab-color); opacity:.9; }
+      .tab[data-color]::before { content:none; display:none; }
       .tab[data-color].active::after { background: var(--tab-color); }
       #panes { position:relative; flex:1; overflow:hidden; background:#0f111a; min-height:0; }
       .pane { position:absolute; inset:0; display:none; }
