@@ -197,6 +197,7 @@
         term.open(pane)
         term.focus()
         term.onData(data => { if (currentId != null) window.api.sshSendId(currentId, data) })
+        // Note: copy/paste handled via key handlers below
         try {
           term.attachCustomKeyEventHandler((ev) => {
             try {
@@ -208,7 +209,7 @@
               const isC = hasCtrlShift && ((ev.code === 'KeyC') || ev.key === 'C' || ev.key === 'c')
               if (isV || isShiftInsert) {
                 const txt = (window.api.readClipboardText?.() || '')
-                if (txt) { try { typeof term.paste === 'function' ? term.paste(txt) : term.write(txt) } catch {} }
+                if (txt) { try { window.api.sshSendId?.(id, txt) } catch {} }
                 try { ev.preventDefault?.() } catch {}
                 try { ev.stopPropagation?.() } catch {}
                 return false
