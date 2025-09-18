@@ -731,6 +731,9 @@
           renderTree()
         }
 
+      // (duplicate removed)
+
+      // Move many nodes in one batch (supports folders and sessions)
       async function moveMany(sourceIds, targetNode) {
         if (!Array.isArray(sourceIds) || !sourceIds.length) return
         // Prevent moving a folder into its descendant for any folder in selection
@@ -738,20 +741,19 @@
         for (const sid of sourceIds) {
           const info = findNodeById(sessionTree, sid, null)
           if (!info) continue
-          // Skip if target is descendant of this folder
-          if (targetNode && targetNode.type==='folder') {
-            if (info.node.type==='folder' && info.node.id !== '__root__') {
+          if (targetNode && targetNode.type === 'folder') {
+            if (info.node.type === 'folder' && info.node.id !== '__root__') {
               if (isDescendant(info.node, targetNode.id)) continue
             }
           }
           toMoveInfos.push(info)
         }
         if (!toMoveInfos.length) return
-        // Sort by tree order (prevent index shifts) using visibleOrder fallback
+        // Sort by visual order to minimize index shifts
         const orderIndex = (id) => visibleOrder.indexOf(id)
-        toMoveInfos.sort((a,b) => orderIndex(a.node.id) - orderIndex(b.node.id))
+        toMoveInfos.sort((a, b) => orderIndex(a.node.id) - orderIndex(b.node.id))
 
-        // Determine insertion container/index from targetNode
+        // Determine destination container/index
         let container = null
         let insertIndex = null
         if (targetNode.type === 'folder') {
@@ -765,14 +767,14 @@
           insertIndex = (tgtInfo.index ?? 0) + 1
         }
 
-        // Remove all sources from their original containers (from bottom to top)
-        const removalList = toMoveInfos.slice().sort((a,b) => b.index - a.index)
+        // Remove sources bottom-up and collect nodes
+        const removalList = toMoveInfos.slice().sort((a, b) => b.index - a.index)
         const nodes = []
         for (const info of removalList) {
           if (!info.parent) nodes.push(sessionTree.splice(info.index, 1)[0])
           else nodes.push(info.parent.children.splice(info.index, 1)[0])
         }
-        // Insert nodes in original order at the computed position
+        // Insert nodes in original order
         for (let i = 0; i < nodes.length; i++) {
           container.splice(insertIndex + i, 0, nodes[i])
         }
