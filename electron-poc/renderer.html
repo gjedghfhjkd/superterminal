@@ -191,11 +191,170 @@
         const pane = document.createElement('div')
         pane.className = 'pane'
         panesEl.appendChild(pane)
-        const term = new Terminal({ cursorBlink:true, theme:{ background:'#0f111a', foreground:'#e6e6e6' } })
+        const term = new Terminal({ cursorBlink:true, copyOnSelection:true, theme:{ background:'#0f111a', foreground:'#e6e6e6' } })
         const fit = new FitAddon.FitAddon()
         term.loadAddon(fit)
         term.open(pane)
         term.focus()
+        // Reliable copy helpers bound to xterm root element and xterm key hook
+        let lastSelection = ''
+        try {
+          term.onSelectionChange?.(() => {
+            try { lastSelection = String(term.getSelection() || '') } catch { lastSelection = '' }
+          })
+        } catch {}
+        const performClipboardWrite = async (text) => {
+          if (!text) return
+          try {
+            if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+              await navigator.clipboard.writeText(text)
+              return
+            }
+          } catch {}
+          try {
+            window.api.copyText(text)
+            return
+          } catch {}
+          try {
+            const ta = document.createElement('textarea')
+            ta.value = text
+            ta.style.position = 'fixed'
+            ta.style.left = '-10000px'
+            ta.style.top = '-10000px'
+            document.body.appendChild(ta)
+            ta.focus()
+            ta.select()
+            try { document.execCommand('copy') } catch {}
+            try { document.body.removeChild(ta) } catch {}
+          } catch {}
+        }
+        const clearSelections = () => {
+          try { if (typeof term.clearSelection === 'function') term.clearSelection() } catch {}
+          try {
+            const sel = typeof window.getSelection === 'function' ? window.getSelection() : null
+            if (sel && typeof sel.removeAllRanges === 'function') sel.removeAllRanges()
+          } catch {}
+        }
+        const copySelectedText = async () => {
+          try {
+            let selected = (typeof term.getSelection === 'function') ? (term.getSelection() || '') : ''
+            if (!selected && lastSelection) selected = lastSelection
+            if (!selected && typeof window.getSelection === 'function') {
+              try { selected = String(window.getSelection().toString() || '') } catch {}
+            }
+            if (selected) { await performClipboardWrite(selected); clearSelections() }
+          } catch {}
+        }
+        const xtermEl = () => (pane && pane.querySelector) ? pane.querySelector('.xterm') : null
+        const forceClearSelectionVisual = () => {
+          try {
+            const el = xtermEl()
+            const target = el ? (el.querySelector('.xterm-viewport') || el) : null
+            if (!target) return
+            const mk = (type) => new MouseEvent(type, { bubbles:true, cancelable:true, button:0, buttons:0, clientX:1, clientY:1 })
+            try { target.dispatchEvent(mk('mousedown')) } catch {}
+            try { target.dispatchEvent(mk('mouseup')) } catch {}
+            try { target.dispatchEvent(mk('click')) } catch {}
+          } catch {}
+        }
+        const collapseInputCaret = () => {
+          try {
+            const el = xtermEl()
+            const ta = el ? el.querySelector('.xterm-helper-textarea') : null
+            if (ta && typeof ta.setSelectionRange === 'function') {
+              const len = Number(ta.value ? ta.value.length : 0)
+              try { ta.setSelectionRange(len, len) } catch {}
+            }
+          } catch {}
+        }
+        const clearOsSelectionByDummy = () => {
+          try {
+            const dummy = document.createElement('span')
+            dummy.textContent = '\u200b'
+            dummy.style.position = 'fixed'
+            dummy.style.left = '-99999px'
+            dummy.style.top = '-99999px'
+            document.body.appendChild(dummy)
+            const range = document.createRange()
+            range.selectNodeContents(dummy)
+            const sel = window.getSelection && window.getSelection()
+            if (sel) { try { sel.removeAllRanges() } catch {}; try { sel.addRange(range) } catch {} }
+            try { sel && sel.removeAllRanges && sel.removeAllRanges() } catch {}
+            try { document.body.removeChild(dummy) } catch {}
+          } catch {}
+        }
+        const clearXtermSelectionDeep = () => {
+          try { if (typeof term.clearSelection === 'function') term.clearSelection() } catch {}
+          try { const core = term && (term._core || term._coreProxy || term._coreService); core && core._selectionService && core._selectionService.clearSelection && core._selectionService.clearSelection() } catch {}
+          try { clearSelections() } catch {}
+          try { forceClearSelectionVisual() } catch {}
+          try { clearOsSelectionByDummy() } catch {}
+        }
+        // Use capture to run even if inner handlers stop propagation
+        setTimeout(() => {
+          const el = xtermEl()
+          if (el) {
+            el.addEventListener('contextmenu', async (e) => {
+              e.preventDefault()
+              // Decide based on actual current selection only (not cached)
+              let hasSel = false
+              try { hasSel = typeof term.hasSelection === 'function' ? term.hasSelection() : false } catch {}
+              if (!hasSel) {
+                try {
+                  const domSel = typeof window.getSelection === 'function' ? window.getSelection() : null
+                  hasSel = Boolean(domSel && String(domSel.toString()||'').length)
+                } catch {}
+              }
+              if (hasSel) {
+                await copySelectedText()
+                return
+              }
+              // No selection -> paste from clipboard
+              let text = ''
+              try {
+                if (navigator && navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+                  text = await navigator.clipboard.readText()
+                }
+              } catch {}
+              if (!text) {
+                try { text = String(window.api.readText() || '') } catch {}
+              }
+              if (text) {
+                try {
+                  if (term.paste) {
+                    term.paste(text)
+                  } else {
+                    window.api.sshSendId(currentId, text)
+                  }
+                } catch {
+                  try { window.api.sshSendId(currentId, text) } catch {}
+                } finally {
+                  try { lastSelection = '' } catch {}
+          const clearCycle = () => { try { clearXtermSelectionDeep() } catch {}; try { collapseInputCaret() } catch {}; try { term.blur?.() } catch {}; try { term.focus() } catch {} }
+                  try { clearCycle() } catch {}
+                  try { requestAnimationFrame(() => clearCycle()) } catch {}
+                  try { setTimeout(() => clearCycle(), 0) } catch {}
+                  try { setTimeout(() => clearCycle(), 30) } catch {}
+                  try { setTimeout(() => clearCycle(), 100) } catch {}
+                  try {
+                    const onUp = () => { try { clearCycle() } catch {}; try { document.removeEventListener('mouseup', onUp, true) } catch {} }
+                    document.addEventListener('mouseup', onUp, true)
+                  } catch {}
+                }
+              }
+            }, { capture: true })
+          }
+        }, 0)
+        // Handle Ctrl+Shift+C via xterm API so events consumed by xterm are still caught
+        try {
+          term.attachCustomKeyEventHandler((ev) => {
+            if ((ev.key === 'c' || ev.key === 'C') && ev.ctrlKey && ev.shiftKey) {
+              copySelectedText()
+              return false // prevent xterm/default handling
+            }
+            return true
+          })
+        } catch {}
         term.onData(data => { if (currentId != null) window.api.sshSendId(currentId, data) })
         terminals.set(id, { term, el: pane, fit })
 
@@ -703,6 +862,17 @@
       }
       document.getElementById('left').oncontextmenu = (e) => { if (e.target && e.target.closest('.item')) return; e.preventDefault(); openCtxMenu(e.clientX, e.clientY, null) }
       document.addEventListener('keydown', async (e) => {
+        // Copy selection on Ctrl+Shift+C when a terminal is active
+        if ((e.key === 'c' || e.key === 'C') && e.ctrlKey && e.shiftKey) {
+          const active = currentId != null ? terminals.get(currentId) : null
+          const term = active && active.term
+          if (term && typeof term.hasSelection === 'function' && term.hasSelection()) {
+            try { window.api.copyText(term.getSelection()) } catch {}
+            e.preventDefault()
+            e.stopPropagation()
+            return
+          }
+        }
         if (e.key === 'Delete' && selectedId) {
           const ok = await showConfirmModal('Delete', 'Delete selected item?', 'Delete', 'Cancel')
           if (!ok) return
