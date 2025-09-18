@@ -174,6 +174,9 @@
       const THEME_BASE = '#0b0d14'
       const THEME_ACCENT = '#2a5bd7'
       const DEFAULT_FOLDER_COLOR = THEME_BASE
+      const ZOOM_STEP = 1
+      const ZOOM_MIN = 8
+      const ZOOM_MAX = 64
 
       function closeTabById(id) {
         try {
@@ -196,6 +199,23 @@
         term.loadAddon(fit)
         term.open(pane)
         term.focus()
+        const initialFontSize = (() => { try { return Number(term.options && term.options.fontSize) || 15 } catch { return 15 } })()
+        const applyZoom = (mode) => {
+          try {
+            const rec = terminals.get(id)
+            const current = (rec && typeof rec.currFontSize === 'number') ? rec.currFontSize : (Number(term.options && term.options.fontSize) || initialFontSize)
+            const base = (rec && typeof rec.baseFontSize === 'number') ? rec.baseFontSize : initialFontSize
+            let next = current
+            if (mode === 'in') next = Math.min(ZOOM_MAX, current + ZOOM_STEP)
+            else if (mode === 'out') next = Math.max(ZOOM_MIN, current - ZOOM_STEP)
+            else if (mode === 'reset') next = base
+            if (next !== current) {
+              try { term.options.fontSize = next } catch {}
+              if (rec) rec.currFontSize = next
+              try { resize() } catch {}
+            }
+          } catch {}
+        }
         // Reliable copy helpers bound to xterm root element and xterm key hook
         let lastSelection = ''
         try {
@@ -348,15 +368,25 @@
         // Handle Ctrl+Shift+C via xterm API so events consumed by xterm are still caught
         try {
           term.attachCustomKeyEventHandler((ev) => {
+            // Copy
             if ((ev.key === 'c' || ev.key === 'C') && ev.ctrlKey && ev.shiftKey) {
               copySelectedText()
-              return false // prevent xterm/default handling
+              return false
+            }
+            // Zoom in/out/reset
+            if (ev.ctrlKey) {
+              const isPlus = (ev.key === '+' || (ev.key === '=' && ev.shiftKey) || ev.code === 'NumpadAdd')
+              const isMinus = (ev.key === '-' || ev.code === 'NumpadSubtract')
+              const isReset = (ev.key === '=' && !ev.shiftKey)
+              if (isPlus) { applyZoom('in'); return false }
+              if (isMinus) { applyZoom('out'); return false }
+              if (isReset) { applyZoom('reset'); return false }
             }
             return true
           })
         } catch {}
         term.onData(data => { if (currentId != null) window.api.sshSendId(currentId, data) })
-        terminals.set(id, { term, el: pane, fit })
+        terminals.set(id, { term, el: pane, fit, baseFontSize: initialFontSize, currFontSize: initialFontSize })
 
         const tab = document.createElement('div')
         tab.className = 'tab'
@@ -871,6 +901,37 @@
             e.preventDefault()
             e.stopPropagation()
             return
+          }
+        }
+        // Zoom controls for active terminal:
+        // Ctrl+Shift+= (which is '+') -> zoom in
+        // Ctrl+- -> zoom out
+        // Ctrl+= -> reset to initial font size
+        if (e.ctrlKey) {
+          const isPlus = (e.key === '+' || (e.key === '=' && e.shiftKey) || e.code === 'NumpadAdd')
+          const isMinus = (e.key === '-' || e.code === 'NumpadSubtract')
+          const isReset = (e.key === '=' && !e.shiftKey)
+          if (isPlus || isMinus || isReset) {
+            const rec = currentId != null ? terminals.get(currentId) : null
+            const term = rec && rec.term
+            if (term) {
+              try {
+                const current = (typeof rec.currFontSize === 'number') ? rec.currFontSize : (Number(term.options && term.options.fontSize) || 15)
+                const base = (typeof rec.baseFontSize === 'number') ? rec.baseFontSize : (Number(term.options && term.options.fontSize) || 15)
+                let next = current
+                if (isPlus) next = Math.min(ZOOM_MAX, current + ZOOM_STEP)
+                else if (isMinus) next = Math.max(ZOOM_MIN, current - ZOOM_STEP)
+                else if (isReset) next = base
+                if (next !== current) {
+                  try { term.options.fontSize = next } catch {}
+                  rec.currFontSize = next
+                  try { resize() } catch {}
+                }
+              } catch {}
+              e.preventDefault()
+              e.stopPropagation()
+              return
+            }
           }
         }
         if (e.key === 'Delete' && selectedId) {
