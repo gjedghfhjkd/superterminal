@@ -17,9 +17,9 @@
       .item:hover { background:#121623; }
       .item.selected { background:#1a1f2d; outline:1px solid #2a3040; }
       /* Colored folders and nested sessions in tree */
-      .item[data-color] { --tree-color: var(--tree-color, #0b0d14); background: color-mix(in srgb, var(--tree-color) 10%, #0b0d14); }
-      .item[data-color]:hover { background: color-mix(in srgb, var(--tree-color) 16%, #121623); }
-      .item[data-color].selected { background: color-mix(in srgb, var(--tree-color) 22%, #1a1f2d); outline-color: transparent; }
+      .item[data-color] { --tree-color: var(--tree-color, #0b0d14); background: var(--tree-color); }
+      .item[data-color]:hover { background: color-mix(in srgb, var(--tree-color) 92%, #ffffff 8%); }
+      .item[data-color].selected { background: color-mix(in srgb, var(--tree-color) 85%, #ffffff 15%); outline-color: transparent; }
       .caret { width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:6px solid #8b90a0; transform:rotate(-90deg); transition:transform .15s ease; margin-right:2px; }
       .expanded > .caret { transform:rotate(0deg); }
       .icon { width:14px; height:14px; display:inline-block; }
