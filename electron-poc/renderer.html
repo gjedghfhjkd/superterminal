@@ -13,12 +13,15 @@
       .left-tab:hover { background:#22283a; }
       #left-header { padding:10px 12px; border-bottom:1px solid #1f2330; font-weight:600; letter-spacing:0.2px; }
       .tree { flex:1; overflow:auto; padding:6px 4px; }
-      .item { user-select:none; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:6px; cursor:default; transition: background .15s ease, transform .12s ease, box-shadow .15s ease; }
+      .item { user-select:none; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:6px; cursor:pointer; position:relative; transition: background .15s ease, transform .12s ease, box-shadow .15s ease; }
       .item:hover { background:#121623; transform: translateX(2px); }
       .item.selected { background:#1a1f2d; outline:1px solid #2a3040; }
       .item .icon svg, .item .label { transition: color .15s ease, fill .15s ease, opacity .15s ease; }
       .item:hover .icon svg { fill:#aab0c0 }
       .item:hover .label { color:#e6e6e6 }
+      /* Mouse-follow highlight */
+      .item::after { content:""; position:absolute; inset:0; pointer-events:none; opacity:0; background: radial-gradient(120px circle at var(--mx, -20px) var(--my, -20px), rgba(255,255,255,.08), transparent 40%); transition: opacity .18s ease; border-radius:6px; }
+      .item:hover::after { opacity:1 }
       /* Colored folders and nested sessions in tree */
       .item[data-color] { --tree-color: var(--tree-color, #0b0d14); background: var(--tree-color); }
       .item[data-color]:hover { background: color-mix(in srgb, var(--tree-color) 92%, #ffffff 8%); }
@@ -464,6 +467,13 @@
               e.dataTransfer.effectAllowed = 'move'
             })
             row.addEventListener('dragend', () => { draggingId = null })
+            row.addEventListener('mousemove', (e) => {
+              const rect = row.getBoundingClientRect()
+              const x = Math.round(e.clientX - rect.left)
+              const y = Math.round(e.clientY - rect.top)
+              row.style.setProperty('--mx', x + 'px')
+              row.style.setProperty('--my', y + 'px')
+            })
             row.addEventListener('dragover', (e) => {
               if (!draggingId || draggingId === n.id) return
               e.preventDefault(); e.stopPropagation()
