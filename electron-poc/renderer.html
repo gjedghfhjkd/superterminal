@@ -16,6 +16,10 @@
       .item { user-select:none; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:6px; cursor:default; }
       .item:hover { background:#121623; }
       .item.selected { background:#1a1f2d; outline:1px solid #2a3040; }
+      /* Colored folders and nested sessions in tree */
+      .item[data-color] { --tree-color: var(--tree-color, #2a5bd7); background: color-mix(in srgb, var(--tree-color) 10%, #0b0d14); }
+      .item[data-color]:hover { background: color-mix(in srgb, var(--tree-color) 16%, #121623); }
+      .item[data-color].selected { background: color-mix(in srgb, var(--tree-color) 22%, #1a1f2d); outline-color: transparent; }
       .caret { width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:6px solid #8b90a0; transform:rotate(-90deg); transition:transform .15s ease; margin-right:2px; }
       .expanded > .caret { transform:rotate(0deg); }
       .icon { width:14px; height:14px; display:inline-block; }
@@ -158,6 +162,8 @@
       const tabsEl = document.getElementById('tabs')
       let currentId = null
       let draggingId = null
+      const THEME_ACCENT = '#2a5bd7'
+      const DEFAULT_FOLDER_COLOR = THEME_ACCENT
 
       function createTerminalFor(id, title) {
         const pane = document.createElement('div')
@@ -368,12 +374,14 @@
           draggingId = null
         })
 
-        function renderList(list, container) {
+        function renderList(list, container, inheritedColor) {
           list.forEach(n => {
             const row = document.createElement('div')
             row.className = 'item' + (n.expanded ? ' expanded' : '') + (selectedId===n.id?' selected':'')
             row.dataset.id = n.id
             row.draggable = true
+            const effectiveColor = n.type === 'folder' ? (n.color || inheritedColor) : inheritedColor
+            if (effectiveColor) { row.dataset.color = '1'; row.style.setProperty('--tree-color', effectiveColor) } else { delete row.dataset.color; row.style.removeProperty('--tree-color') }
             const caret = document.createElement('div')
             caret.className = 'caret'
             caret.style.visibility = n.type==='folder' ? 'visible' : 'hidden'
@@ -470,11 +478,11 @@
               const children = document.createElement('div')
               children.className = 'children'
               container.appendChild(children)
-              renderList(n.children || [], children)
+              renderList(n.children || [], children, (n.color || effectiveColor || inheritedColor))
             }
           })
         }
-        renderList(sessionTree, root)
+        renderList(sessionTree, root, null)
       }
 
       function isDescendant(potentialParent, childId) {
@@ -547,7 +555,7 @@
         }
         const isFolder = targetNode && targetNode.type==='folder'
         add('New Folder', async () => {
-          const res = await showFolderModal('New Folder', 'New Folder', '#7a5cf0', 'Create')
+          const res = await showFolderModal('New Folder', 'New Folder', THEME_ACCENT, 'Create')
           if (!res) return
           const node = { id: genId('fld'), type:'folder', name: res.name, expanded:true, children:[] }
           if (res.color) node.color = res.color
@@ -576,7 +584,7 @@
             targetNode.session = s
             targetNode.name = `${s.name||s.host} (${s.username})`
           } else if (targetNode.type==='folder') {
-            const res = await showFolderModal('Edit Folder', targetNode.name || 'Folder', (typeof targetNode.color==='string' && targetNode.color) ? targetNode.color : '#7a5cf0', 'Save')
+            const res = await showFolderModal('Edit Folder', targetNode.name || 'Folder', (typeof targetNode.color==='string' && targetNode.color) ? targetNode.color : THEME_ACCENT, 'Save')
             if (!res) return
             targetNode.name = res.name || targetNode.name
             if (res.color) targetNode.color = res.color
@@ -807,7 +815,7 @@
         })
       }
 
-      function showFolderModal(title, initialName='New Folder', initialColor='#7a5cf0', okLabel='Create') {
+      function showFolderModal(title, initialName='New Folder', initialColor=THEME_ACCENT, okLabel='Create') {
         return new Promise((resolve) => {
           const overlay = document.createElement('div')
           overlay.className = 'modal-overlay'
