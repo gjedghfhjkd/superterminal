@@ -632,6 +632,38 @@
         })
       }
 
+      function showErrorModal(title, message) {
+        return new Promise((resolve) => {
+          const overlay = document.createElement('div')
+          overlay.className = 'modal-overlay'
+          const modal = document.createElement('div')
+          modal.className = 'modal'
+          const header = document.createElement('div')
+          header.className = 'modal-header'
+          header.textContent = title
+          const body = document.createElement('div')
+          body.className = 'modal-body'
+          const text = document.createElement('div')
+          text.style.whiteSpace = 'pre-wrap'
+          text.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+          text.textContent = message
+          body.appendChild(text)
+          const actions = document.createElement('div')
+          actions.className = 'modal-actions'
+          const btnOk = document.createElement('button')
+          btnOk.className = 'btn primary'
+          btnOk.textContent = 'OK'
+          actions.appendChild(btnOk)
+          modal.appendChild(header); modal.appendChild(body); modal.appendChild(actions)
+          overlay.appendChild(modal)
+          document.body.appendChild(overlay)
+          const close = () => { try { document.body.removeChild(overlay) } catch {}; resolve() }
+          btnOk.onclick = close
+          overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close() })
+          setTimeout(() => btnOk.focus(), 0)
+        })
+      }
+
       // Load tree
       async function refreshSessions() {
         const res = await window.api.sessionsLoad()
@@ -804,7 +836,7 @@
       }
       async function navigateRemote(p) {
         sftpRemotePathEl.value = p
-        try { await listRemote(p) } catch (e) { alert('SFTP list error: ' + (e?.message||e)) }
+        try { await listRemote(p) } catch (e) { showErrorModal('SFTP list error', String(e?.message||e)) }
       }
       async function listLocal(p) {
         const list = await window.api.localList(p)
@@ -812,7 +844,7 @@
       }
       async function navigateLocal(p) {
         sftpLocalPathEl.value = p
-        try { await listLocal(p) } catch (e) { alert('Local list error: ' + (e?.message||e)) }
+        try { await listLocal(p) } catch (e) { showErrorModal('Local list error', String(e?.message||e)) }
       }
 
       async function initSftpSplitIfNeeded(id) {
