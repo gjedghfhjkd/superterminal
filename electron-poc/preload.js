@@ -51,5 +51,12 @@ contextBridge.exposeInMainWorld('api', {
   onTunnelsUpdated: (cb) => ipcRenderer.on('tunnels-updated', cb),
   openTunnelWindow: (preset=null) => ipcRenderer.invoke('open-tunnel-window', { preset }),
   tunnelFormSubmit: (tunnel) => ipcRenderer.send('tunnel-form-submit', tunnel)
+  ,
+  // Users management
+  usersLoad: () => ipcRenderer.invoke('users-load'),
+  usersSave: (list) => ipcRenderer.invoke('users-save', list),
+  onUsersUpdated: (cb) => ipcRenderer.on('users-updated', cb),
+  openUserWindow: (preset=null) => ipcRenderer.invoke('open-user-window', { preset }),
+  userFormSubmit: (user) => ipcRenderer.send('user-form-submit', user)
 })
 

@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { margin:0; font-family:sans-serif; background:#0b0d14; color:#cfd3dc }
+      .wrap { padding:14px }
+      h3 { margin:0; padding:12px 14px; border-bottom:1px solid #1f2330 }
+      label { display:block; font-size:12px; margin-top:8px }
+      input, select, textarea { width:100%; box-sizing:border-box; background:#121623; color:#e6e6e6; border:1px solid #2a3040; border-radius:8px; padding:8px 10px; outline:none }
+      input:focus, select:focus, textarea:focus { border-color:#3a4160; box-shadow:0 0 0 3px rgba(42,48,64,.35) }
+      button { margin-top:12px; background:#2a5bd7; border:1px solid #2a5bd7; color:#fff; padding:8px 12px; border-radius:8px; cursor:pointer }
+      button:hover { background:#2f66ef }
+    </style>
+  </head>
+  <body>
+    <h3 id="title">Create User Preset</h3>
+    <div class="wrap">
+      <label>Display name</label>
+      <input id="name" placeholder="My server root" />
+      <label>Host (optional)</label>
+      <input id="host" placeholder="e.g. example.com" />
+      <label>Port (optional)</label>
+      <input id="port" placeholder="22" />
+      <label>Username</label>
+      <input id="username" placeholder="root" />
+      <label>Auth</label>
+      <select id="auth">
+        <option value="password">Password</option>
+        <option value="key">SSH key</option>
+      </select>
+      <label id="lbl-password">Password (optional)</label>
+      <input id="password" type="password" />
+      <label id="lbl-key">Private key (paste)</label>
+      <textarea id="privateKey" style="height:100px"></textarea>
+      <label id="lbl-passphrase">Passphrase (optional)</label>
+      <input id="passphrase" type="password" />
+      <button id="btn-save">Save</button>
+    </div>
+    <script>
+      function getQueryParam(name) {
+        const params = new URLSearchParams(window.location.search)
+        return params.get(name)
+      }
+      function updateAuth() {
+        const isKey = document.getElementById('auth').value === 'key'
+        document.getElementById('lbl-password').style.display = isKey ? 'none' : ''
+        document.getElementById('password').style.display = isKey ? 'none' : ''
+        document.getElementById('lbl-key').style.display = isKey ? '' : 'none'
+        document.getElementById('privateKey').style.display = isKey ? '' : 'none'
+        document.getElementById('lbl-passphrase').style.display = isKey ? '' : 'none'
+        document.getElementById('passphrase').style.display = isKey ? '' : 'none'
+      }
+      document.getElementById('auth').addEventListener('change', updateAuth)
+      try {
+        const presetRaw = getQueryParam('preset')
+        if (presetRaw) {
+          const preset = JSON.parse(decodeURIComponent(presetRaw))
+          if (preset.name) document.getElementById('name').value = preset.name
+          if (preset.host) document.getElementById('host').value = preset.host
+          if (preset.port) document.getElementById('port').value = String(preset.port)
+          if (preset.username) document.getElementById('username').value = preset.username
+          if (preset.auth) document.getElementById('auth').value = preset.auth
+          if (preset.password) document.getElementById('password').value = preset.password
+          if (preset.privateKey) document.getElementById('privateKey').value = preset.privateKey
+          if (preset.passphrase) document.getElementById('passphrase').value = preset.passphrase
+        }
+      } catch {}
+      updateAuth()
+      document.getElementById('btn-save').onclick = async () => {
+        const out = {
+          id: undefined,
+          name: (document.getElementById('name').value || '').trim(),
+          host: (document.getElementById('host').value || '').trim() || undefined,
+          port: Number((document.getElementById('port').value || '').trim()) || undefined,
+          username: (document.getElementById('username').value || '').trim(),
+          auth: document.getElementById('auth').value,
+          password: document.getElementById('password').value,
+          privateKey: document.getElementById('privateKey').value,
+          passphrase: document.getElementById('passphrase').value
+        }
+        if (!out.username) { alert('Username is required'); return }
+        try { window.api.userFormSubmit(out) } catch {}
+      }
+    </script>
+  </body>
+  </html>
+

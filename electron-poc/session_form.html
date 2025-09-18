@@ -18,6 +18,8 @@
     <h3 id="title">Create Session</h3>
     <div class="wrap">
     <!-- Type selected by parent window via query param: SSH or SFTP -->
+    <label>User preset (optional)</label>
+    <select id="userPreset"></select>
     <label>Name</label>
     <input id="name" placeholder="Optional name (defaults to host)" />
     <label>Host</label>
@@ -50,6 +52,22 @@
         return params.get(name)
       }
       const sessionType = (getQueryParam('type') || 'SSH').toUpperCase()
+      async function loadUsersIntoSelect() {
+        const sel = document.getElementById('userPreset')
+        sel.innerHTML = ''
+        const none = document.createElement('option'); none.value=''; none.textContent='(none)'; sel.appendChild(none)
+        try {
+          const res = await window.api.usersLoad()
+          const users = Array.isArray(res?.users) ? res.users : []
+          for (const u of users) {
+            const opt = document.createElement('option')
+            opt.value = u.id || `${u.username || ''}@${u.host || ''}`
+            opt.textContent = `${u.username || ''}${u.host?`@${u.host}`:''}`
+            opt.dataset.user = encodeURIComponent(JSON.stringify(u))
+            sel.appendChild(opt)
+          }
+        } catch {}
+      }
       try {
         const presetRaw = getQueryParam('preset')
         if (presetRaw) {
@@ -65,6 +83,7 @@
         }
       } catch {}
       document.getElementById('title').textContent = `Create ${sessionType} Session`
+      loadUsersIntoSelect()
 
       function updateAuth() {
         const isKey = document.getElementById('auth').value === 'key'
@@ -87,7 +106,10 @@
         document.getElementById('fname').textContent = file ? file.name : ''
       })
       document.getElementById('btn-save').onclick = async () => {
-        const sess = {
+        const userPresetSel = document.getElementById('userPreset')
+        let selectedUser = null
+        try { selectedUser = userPresetSel && userPresetSel.selectedOptions && userPresetSel.selectedOptions[0] ? JSON.parse(decodeURIComponent(userPresetSel.selectedOptions[0].dataset.user || '')) : null } catch {}
+        const sessBase = {
           type: sessionType,
           name: (document.getElementById('name').value || document.getElementById('host').value || '').trim(),
           host: document.getElementById('host').value,
@@ -98,6 +120,16 @@
           privateKey: document.getElementById('pkey').value,
           passphrase: document.getElementById('passphrase').value
         }
+        // Merge selected user preset if chosen; explicit form values take precedence
+        let sess = Object.assign({}, selectedUser ? {
+          host: selectedUser.host || undefined,
+          port: selectedUser.port || undefined,
+          username: selectedUser.username || undefined,
+          auth: selectedUser.auth || undefined,
+          password: selectedUser.password || undefined,
+          privateKey: selectedUser.privateKey || undefined,
+          passphrase: selectedUser.passphrase || undefined
+        } : {}, sessBase)
         try { window.api.sessionFormSubmit(sess) } catch {}
       }
     </script>

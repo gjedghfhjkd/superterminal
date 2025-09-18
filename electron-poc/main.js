@@ -79,6 +79,22 @@ async function saveTunnels(tunnels) {
   await writeFile(tunnelsFile(), JSON.stringify(payload, null, 2))
 }
 
+// Users persistence
+const usersFile = () => path.join(app.getPath('userData'), 'users.json')
+async function loadUsers() {
+  try {
+    const txt = await readFile(usersFile(), 'utf-8')
+    const data = JSON.parse(txt)
+    if (Array.isArray(data)) return data
+    if (data && Array.isArray(data.users)) return data.users
+    return []
+  } catch { return [] }
+}
+async function saveUsers(users) {
+  const payload = { version: 1, users: Array.isArray(users) ? users : [] }
+  await writeFile(usersFile(), JSON.stringify(payload, null, 2))
+}
+
 ipcMain.handle('sessions-load', async () => {
   const data = await loadSessions()
   // normalize to { tree }
@@ -106,6 +122,42 @@ ipcMain.handle('tunnels-save', async (evt, tunnels) => {
   await saveTunnels(tunnels || [])
   try { win.webContents.send('tunnels-updated') } catch {}
   return { ok: true }
+})
+// Users load/save
+ipcMain.handle('users-load', async () => {
+  const users = await loadUsers()
+  return { ok: true, users }
+})
+ipcMain.handle('users-save', async (evt, users) => {
+  await saveUsers(users || [])
+  try { win.webContents.send('users-updated') } catch {}
+  return { ok: true }
+})
+// Open separate window to create/edit a user
+ipcMain.handle('open-user-window', async (evt, payload) => {
+  const preset = payload && payload.preset ? payload.preset : null
+  return new Promise(async (resolve) => {
+    const child = new BrowserWindow({
+      width: 480,
+      height: 520,
+      parent: win,
+      modal: true,
+      autoHideMenuBar: true,
+      webPreferences: { contextIsolation: true, nodeIntegration: false, preload: path.join(__dirname, 'preload.js') }
+    })
+    try { child.setMenu(null) } catch {}
+    let resolved = false
+    const handler = (_, user) => {
+      if (resolved) return
+      resolved = true
+      try { child.close() } catch {}
+      resolve({ ok: true, user })
+    }
+    ipcMain.once('user-form-submit', handler)
+    const query = preset ? { preset: encodeURIComponent(JSON.stringify(preset)) } : {}
+    await child.loadFile('user_form.html', { query })
+    child.on('closed', () => { if (!resolved) resolve({ ok: false }) })
+  })
 })
 // Open separate window to create/edit a tunnel
 ipcMain.handle('open-tunnel-window', async (evt, payload) => {
@@ -166,6 +218,19 @@ ipcMain.handle('ssh-connect', async (evt, cfg) => {
       host: cfg.host, port: cfg.port, username: cfg.username,
       readyTimeout: 10000
     }
+    // Merge user preset if present (cfg.userPreset fields)
+    try {
+      const preset = cfg.userPreset && typeof cfg.userPreset === 'object' ? cfg.userPreset : null
+      if (preset) {
+        if (!conn.host && preset.host) conn.host = preset.host
+        if (!conn.port && preset.port) conn.port = preset.port
+        if (!conn.username && preset.username) conn.username = preset.username
+        if (preset.auth && !cfg.auth) cfg.auth = preset.auth
+        if (!cfg.password && preset.password) cfg.password = preset.password
+        if (!cfg.privateKey && preset.privateKey) cfg.privateKey = preset.privateKey
+        if (!cfg.passphrase && preset.passphrase) cfg.passphrase = preset.passphrase
+      }
+    } catch {}
     if (cfg.auth === 'password') {
       if (!cfg.password) return reject(new Error('Password is required'))
       conn.password = cfg.password
@@ -207,6 +272,19 @@ ipcMain.handle('sftp-connect', async (evt, cfg) => {
   const id = cfg.id
   const sftp = new SFTPClient()
   const options = { host: cfg.host, port: cfg.port, username: cfg.username }
+  // Merge user preset if present
+  try {
+    const preset = cfg.userPreset && typeof cfg.userPreset === 'object' ? cfg.userPreset : null
+    if (preset) {
+      if (!options.host && preset.host) options.host = preset.host
+      if (!options.port && preset.port) options.port = preset.port
+      if (!options.username && preset.username) options.username = preset.username
+      if (preset.auth && !cfg.auth) cfg.auth = preset.auth
+      if (!cfg.password && preset.password) cfg.password = preset.password
+      if (!cfg.privateKey && preset.privateKey) cfg.privateKey = preset.privateKey
+      if (!cfg.passphrase && preset.passphrase) cfg.passphrase = preset.passphrase
+    }
+  } catch {}
   if (cfg.auth === 'password') {
     if (!cfg.password) throw new Error('Password is required')
     options.password = cfg.password
