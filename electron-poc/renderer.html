@@ -164,6 +164,7 @@
     </div>
     <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
     <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+    <script src="node_modules/@xterm/addon-clipboard/lib/addon-clipboard.js"></script>
     <script>
       const terminals = new Map() // id -> { term, el }
       const tabs = new Map() // id -> tab element
@@ -193,26 +194,13 @@
         panesEl.appendChild(pane)
         const term = new Terminal({ cursorBlink:true, theme:{ background:'#0f111a', foreground:'#e6e6e6' } })
         const fit = new FitAddon.FitAddon()
+        const clip = new ClipboardAddon.ClipboardAddon()
         term.loadAddon(fit)
+        term.loadAddon(clip)
         term.open(pane)
         term.focus()
         term.onData(data => { if (currentId != null) window.api.sshSendId(currentId, data) })
-        // Respond to main-process forwarded clipboard actions
-        try {
-          window.api.onClipboardAction?.(async (payload) => {
-            try {
-              if (!payload || (currentId !== id)) return
-              if (payload.type === 'paste') {
-                const txt = (window.api.readClipboardText?.() || '')
-                if (txt) { try { window.api.sshSendId?.(id, txt) } catch {} }
-              } else if (payload.type === 'copy') {
-                const hasSel = typeof term.hasSelection === 'function' ? term.hasSelection() : undefined
-                const sel = (typeof term.getSelection === 'function') ? term.getSelection() : ''
-                if ((hasSel === true) || (sel && sel.length)) { try { window.api.writeClipboardText?.(sel) } catch {} }
-              }
-            } catch {}
-          })
-        } catch {}
+        // Clipboard handled via xterm addon and key handlers
         terminals.set(id, { term, el: pane, fit })
 
         const tab = document.createElement('div')
