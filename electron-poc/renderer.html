@@ -926,6 +926,8 @@
           startBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>'
           const stopBtn = document.createElement('button'); stopBtn.className='icon-btn'; stopBtn.title='Stop'
           stopBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 6h12v12H6z"/></svg>'
+          const editBtn = document.createElement('button'); editBtn.className='icon-btn'; editBtn.title='Edit'
+          editBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/></svg>'
           const delBtn = document.createElement('button'); delBtn.className='icon-btn'; delBtn.title='Delete'
           delBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 7h12l-1 12H7L6 7zm3-3h6l1 2H8l1-2z"/></svg>'
           if (t.active) startBtn.style.opacity = '0.4'; else stopBtn.style.opacity = '0.4'
@@ -955,6 +957,19 @@
               renderTunnels()
             } catch (e) { alert('Stop error: ' + (e?.message||e)) }
           }
+          editBtn.onclick = async () => {
+            try {
+              const res = await window.api.openTunnelWindow(Object.assign({}, t))
+              const updated = res && res.tunnel
+              if (!updated) return
+              updated.active = t.active
+              updated.connId = t.connId
+              if (!updated.id) updated.id = t.id
+              tunnels[i] = updated
+              await window.api.tunnelsSave(tunnels)
+              renderTunnels()
+            } catch (e) { alert('Edit error: ' + (e?.message||e)) }
+          }
           delBtn.onclick = async () => {
             const ok = await showConfirmModal('Delete tunnel', `Delete ${t.name||''}?`, 'Delete', 'Cancel')
             if (!ok) return
@@ -969,7 +984,7 @@
             await window.api.tunnelsSave(tunnels)
             renderTunnels()
           }
-          colC.appendChild(startBtn); colC.appendChild(stopBtn); colC.appendChild(delBtn)
+          colC.appendChild(startBtn); colC.appendChild(stopBtn); colC.appendChild(editBtn); colC.appendChild(delBtn)
           row.appendChild(colA); row.appendChild(colB); row.appendChild(colC)
           tunListEl.appendChild(row)
         }
@@ -1046,6 +1061,7 @@
         } catch {}
       }
       loadTunnelsUI()
+      window.api.onTunnelsUpdated?.(() => loadTunnelsUI())
     </script>
   </body>
   </html>

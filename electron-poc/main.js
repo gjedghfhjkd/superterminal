@@ -93,6 +93,32 @@ ipcMain.handle('tunnels-save', async (evt, tunnels) => {
   try { win.webContents.send('tunnels-updated') } catch {}
   return { ok: true }
 })
+// Open separate window to create/edit a tunnel
+ipcMain.handle('open-tunnel-window', async (evt, payload) => {
+  const preset = payload && payload.preset ? payload.preset : null
+  return new Promise(async (resolve) => {
+    const child = new BrowserWindow({
+      width: 420,
+      height: 520,
+      parent: win,
+      modal: true,
+      autoHideMenuBar: true,
+      webPreferences: { contextIsolation: true, nodeIntegration: false, preload: path.join(__dirname, 'preload.js') }
+    })
+    try { child.setMenu(null) } catch {}
+    let resolved = false
+    const handler = (_, tunnel) => {
+      if (resolved) return
+      resolved = true
+      try { child.close() } catch {}
+      resolve({ ok: true, tunnel })
+    }
+    ipcMain.once('tunnel-form-submit', handler)
+    const query = preset ? { preset: encodeURIComponent(JSON.stringify(preset)) } : {}
+    await child.loadFile('tunnel_form.html', { query })
+    child.on('closed', () => { if (!resolved) resolve({ ok: false }) })
+  })
+})
 // legacy handlers kept as no-ops to avoid errors if called
 ipcMain.handle('sessions-add', async (evt, session) => {
   const existing = await loadSessions()

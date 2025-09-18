@@ -47,6 +47,9 @@ contextBridge.exposeInMainWorld('api', {
   tunnelStart: (id, localHost, localPort, remoteHost, remotePort) => ipcRenderer.invoke('tunnel-start', { id, localHost, localPort, remoteHost, remotePort }),
   tunnelStop: (id, localPort) => ipcRenderer.invoke('tunnel-stop', { id, localPort }),
   tunnelsLoad: () => ipcRenderer.invoke('tunnels-load'),
-  tunnelsSave: (list) => ipcRenderer.invoke('tunnels-save', list)
+  tunnelsSave: (list) => ipcRenderer.invoke('tunnels-save', list),
+  onTunnelsUpdated: (cb) => ipcRenderer.on('tunnels-updated', cb),
+  openTunnelWindow: (preset=null) => ipcRenderer.invoke('open-tunnel-window', { preset }),
+  tunnelFormSubmit: (tunnel) => ipcRenderer.send('tunnel-form-submit', tunnel)
 })
 
