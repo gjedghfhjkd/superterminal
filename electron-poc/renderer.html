@@ -511,6 +511,7 @@
             row.addEventListener('dragstart', (e) => {
               const inSelection = selectedIds.has(n.id)
               draggingIds = (inSelection && selectedIds.size > 1) ? Array.from(selectedIds) : [n.id]
+              draggingId = n.id
               try { e.dataTransfer.setData('text/plain', n.id) } catch {}
               e.dataTransfer.effectAllowed = 'move'
             })
@@ -525,6 +526,8 @@
             row.addEventListener('dragover', (e) => {
               const hasDrag = Array.isArray(draggingIds) && draggingIds.length > 0
               if (!hasDrag) return
+              // Do not allow dropping onto one of the dragged items
+              if (draggingIds.includes(n.id)) return
               e.preventDefault(); e.stopPropagation();
               try { e.dataTransfer.dropEffect = 'move' } catch {}
               row.classList.add('drop-target')
@@ -534,7 +537,7 @@
               e.preventDefault(); e.stopPropagation(); row.classList.remove('drop-target')
               const listToMove = (draggingIds && draggingIds.length) ? draggingIds.slice() : []
               if (!listToMove.length) return
-              if (listToMove.length === 1 && listToMove[0] === n.id) return
+              if (listToMove.includes(n.id)) return
               await moveMany(listToMove, n)
               draggingIds = []
             })
