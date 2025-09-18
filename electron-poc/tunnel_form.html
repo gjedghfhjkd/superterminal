@@ -21,6 +21,8 @@
     <div class="wrap">
       <label>Name</label>
       <input id="name" placeholder="Optional name" />
+      <label>Session (SSH only)</label>
+      <select id="session"></select>
       <div class="row">
         <div>
           <label>Local host</label>
@@ -48,6 +50,37 @@
         const params = new URLSearchParams(window.location.search)
         return params.get(name)
       }
+      async function loadSshSessions() {
+        const sel = document.getElementById('session')
+        sel.innerHTML = ''
+        let tree = []
+        try {
+          const res = await window.api.sessionsLoad()
+          tree = Array.isArray(res?.tree) ? res.tree : []
+        } catch {}
+        const sessions = []
+        function walk(list) {
+          for (const n of list || []) {
+            if (!n) continue
+            if (n.type === 'folder' && Array.isArray(n.children)) { walk(n.children) }
+            else if (n.type === 'session' && n.session && String((n.session.type||'SSH')).toUpperCase() === 'SSH') {
+              sessions.push(n)
+            }
+          }
+        }
+        walk(tree)
+        // Fill select
+        for (const n of sessions) {
+          const s = n.session || {}
+          const opt = document.createElement('option')
+          const label = `${s.name || s.host || 'Session'} (${s.username || 'user'})`
+          opt.textContent = label
+          opt.value = n.id
+          opt.dataset.session = encodeURIComponent(JSON.stringify(s))
+          sel.appendChild(opt)
+        }
+        return sessions
+      }
       try {
         const presetRaw = getQueryParam('preset')
         if (presetRaw) {
@@ -59,6 +92,30 @@
           if (t.remotePort) document.getElementById('rport').value = String(t.remotePort)
         }
       } catch {}
+      // Populate sessions and preselect
+      ;(async () => {
+        const presetRaw = getQueryParam('preset')
+        let preset = {}
+        try { preset = JSON.parse(decodeURIComponent(presetRaw)) || {} } catch {}
+        const sessions = await loadSshSessions()
+        const sel = document.getElementById('session')
+        // Try to preselect by sessionId, fallback to host/username match
+        let selected = false
+        if (preset.sessionId) {
+          for (const opt of sel.options) { if (opt.value === preset.sessionId) { opt.selected = true; selected = true; break } }
+        }
+        if (!selected && preset.sessionCfg) {
+          const p = preset.sessionCfg
+          for (const opt of sel.options) {
+            try {
+              const s = JSON.parse(decodeURIComponent(opt.dataset.session || ''))
+              if (s && s.host === p.host && s.username === p.username && String(s.port||22) === String(p.port||22)) { opt.selected = true; selected = true; break }
+            } catch {}
+          }
+        }
+        // If nothing selected, pick first
+        if (!selected && sel.options.length) sel.options[0].selected = true
+      })()
 
       document.getElementById('save').onclick = async () => {
         const name = (document.getElementById('name').value || '').trim()
@@ -70,7 +127,12 @@
         const presetRaw = getQueryParam('preset')
         let base = {}
         try { base = JSON.parse(decodeURIComponent(presetRaw)) || {} } catch {}
-        const out = Object.assign({}, base, { name, localHost, localPort, remoteHost, remotePort })
+        // Session selection
+        const sel = document.getElementById('session')
+        const sessionId = sel && sel.value
+        let sessionCfg = null
+        try { sessionCfg = sel && sel.selectedOptions && sel.selectedOptions[0] ? JSON.parse(decodeURIComponent(sel.selectedOptions[0].dataset.session || '')) : null } catch {}
+        const out = Object.assign({}, base, { name, localHost, localPort, remoteHost, remotePort, sessionId, sessionCfg })
         try { window.api.tunnelFormSubmit(out) } catch {}
       }
     </script>
