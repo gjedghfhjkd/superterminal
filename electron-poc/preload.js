@@ -1,6 +1,7 @@
-const { contextBridge, ipcRenderer } = require('electron')
+const { contextBridge, ipcRenderer, clipboard } = require('electron')
 
 contextBridge.exposeInMainWorld('api', {
+  copyText: (text) => { try { clipboard.writeText(String(text||'')) } catch {} },
   sshConnect: (cfg) => ipcRenderer.invoke('ssh-connect', cfg),
   sshOpenPty: () => ipcRenderer.invoke('ssh-open-pty'),
   sshSend: (data) => ipcRenderer.send('ssh-send', data),
