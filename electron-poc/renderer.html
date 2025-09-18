@@ -276,7 +276,18 @@
                 try { text = String(window.api.readText() || '') } catch {}
               }
               if (text) {
-                try { term.paste ? term.paste(text) : window.api.sshSendId(currentId, text) } catch { try { window.api.sshSendId(currentId, text) } catch {} }
+                try {
+                  if (term.paste) {
+                    term.paste(text)
+                  } else {
+                    window.api.sshSendId(currentId, text)
+                  }
+                } catch {
+                  try { window.api.sshSendId(currentId, text) } catch {}
+                } finally {
+                  try { clearSelections() } catch {}
+                  try { setTimeout(() => { try { clearSelections() } catch {} }, 0) } catch {}
+                }
               }
             }, { capture: true })
           }
