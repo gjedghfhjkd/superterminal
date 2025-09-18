@@ -662,7 +662,14 @@
           const upRow = document.createElement('div')
           upRow.className = 'sftp-row'
           upRow.innerHTML = '<span class="icon"><svg viewBox="0 0 24 24"><path d="M12 5l6 6h-4v6h-4v-6H6l6-6z"/></svg></span><div class="sftp-name">..</div><div class="sftp-type"></div>'
-          upRow.onclick = () => onEnterDir(dirname(basePath))
+          upRow.ondblclick = async () => {
+            if (el && el.id === 'sftp-local-list') {
+              const up = await window.api.pathDirname(basePath)
+              onEnterDir(up)
+            } else {
+              onEnterDir(dirname(basePath))
+            }
+          }
           rows.appendChild(upRow)
         }
         for (const it of items || []) {
