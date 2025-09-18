@@ -643,7 +643,7 @@
                     const rec = terminals.get(rid)
                     try { rec.fit.fit() } catch {}
                     try { window.api.sshResizeId(rid, rec.term.cols, rec.term.rows) } catch {}
-                    rec.term.write('\r\n[Connected]\r\n')
+                    // Removed explicit "[Connected]" banner and extra CRLF to avoid redundant line on first connect
                     showSshView()
                     activateTab(rid)
                   } catch (e) {
