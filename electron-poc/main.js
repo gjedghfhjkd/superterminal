@@ -27,7 +27,8 @@ app.whenReady().then(createWindow)
 
 // Manage multiple connections
 const connections = new Map() // id -> { ssh, sftp, stream }
-const forwards = new Map() // key `${id}:${localPort}` -> server
+// key `${id}:${localPort}` -> { server, sockets:Set<net.Socket>, streams:Set<ssh2.Stream> }
+const forwards = new Map()
 
 // Sessions persistence
 const sessionsFile = () => path.join(app.getPath('userData'), 'sessions.json')
@@ -190,9 +191,21 @@ ipcMain.handle('tunnel-start', async (evt, payload) => {
   if (!rec || !rec.ssh) throw new Error('Not connected')
   const key = `${id}:${localPort}`
   if (forwards.has(key)) return { ok: true }
+  const sockets = new Set()
+  const streams = new Set()
   const server = net.createServer((socket) => {
+    // Track sockets so we can destroy them on stop (e.g., HTTP keep-alive)
+    sockets.add(socket)
+    socket.on('close', () => { try { sockets.delete(socket) } catch {} })
+    socket.on('error', () => {})
     rec.ssh.forwardOut(socket.remoteAddress || '127.0.0.1', socket.remotePort || 0, remoteHost, remotePort, (err, stream) => {
       if (err) { try { socket.destroy() } catch {}; return }
+      // Track SSH streams to close them on stop
+      try {
+        streams.add(stream)
+        stream.on('close', () => { try { streams.delete(stream) } catch {} })
+        stream.on('error', () => {})
+      } catch {}
       socket.pipe(stream).pipe(socket)
     })
   })
@@ -200,16 +213,27 @@ ipcMain.handle('tunnel-start', async (evt, payload) => {
     server.on('error', reject)
     server.listen(localPort, localHost, resolve)
   })
-  forwards.set(key, server)
+  forwards.set(key, { server, sockets, streams })
   return { ok: true }
 })
 
 ipcMain.handle('tunnel-stop', async (evt, payload) => {
   const { id, localPort } = payload || {}
   const key = `${id}:${localPort}`
-  const server = forwards.get(key)
-  if (server) {
-    try { await new Promise((r) => server.close(r)) } catch {}
+  const entry = forwards.get(key)
+  if (entry) {
+    try {
+      // Force-close active TCP sockets and SSH streams to unblock server.close
+      if (entry.sockets && typeof entry.sockets.forEach === 'function') {
+        entry.sockets.forEach((s) => { try { s.destroy() } catch {} })
+        try { entry.sockets.clear() } catch {}
+      }
+      if (entry.streams && typeof entry.streams.forEach === 'function') {
+        entry.streams.forEach((st) => { try { st.end() } catch {}; try { st.destroy() } catch {} })
+        try { entry.streams.clear() } catch {}
+      }
+    } catch {}
+    try { await new Promise((r) => entry.server.close(r)) } catch {}
     forwards.delete(key)
   }
   return { ok: true }
@@ -340,6 +364,19 @@ ipcMain.handle('ssh-disconnect', async (e, id) => {
     try { rec.sftp?.end?.() || rec.sftp?.close?.() } catch {}
     try { rec.ssh?.end?.() } catch {}
     connections.delete(id)
+  }
+  // Ensure any tunnels tied to this connection id are stopped and cleaned up
+  const keysToClose = []
+  for (const [k] of forwards.entries()) { if (k.startsWith(`${id}:`)) keysToClose.push(k) }
+  for (const k of keysToClose) {
+    const entry = forwards.get(k)
+    if (!entry) continue
+    try {
+      if (entry.sockets) { entry.sockets.forEach((s) => { try { s.destroy() } catch {} }); try { entry.sockets.clear() } catch {} }
+      if (entry.streams) { entry.streams.forEach((st) => { try { st.end() } catch {}; try { st.destroy() } catch {} }); try { entry.streams.clear() } catch {} }
+    } catch {}
+    try { await new Promise((r) => entry.server.close(r)) } catch {}
+    forwards.delete(k)
   }
   return { ok: true }
 })
