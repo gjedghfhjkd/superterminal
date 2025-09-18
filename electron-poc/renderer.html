@@ -250,8 +250,34 @@
         setTimeout(() => {
           const el = xtermEl()
           if (el) {
-            el.addEventListener('contextmenu', (e) => { e.preventDefault(); copySelectedText() }, { capture: true })
-            el.addEventListener('mousedown', (e) => { if (e && e.button === 2) { e.preventDefault(); copySelectedText() } }, { capture: true })
+            el.addEventListener('contextmenu', async (e) => {
+              e.preventDefault()
+              // If there is a selection, copy and clear; otherwise paste from clipboard
+              const hasSel = (typeof term.hasSelection === 'function') ? term.hasSelection() : false
+              if (hasSel || lastSelection) {
+                await copySelectedText()
+              } else {
+                let text = ''
+                try {
+                  if (navigator && navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+                    text = await navigator.clipboard.readText()
+                  }
+                } catch {}
+                if (!text) {
+                  try { text = String(window.api.readText() || '') } catch {}
+                }
+                if (text) {
+                  try { term.paste ? term.paste(text) : window.api.sshSendId(currentId, text) } catch { try { window.api.sshSendId(currentId, text) } catch {} }
+                }
+              }
+            }, { capture: true })
+            el.addEventListener('mousedown', async (e) => {
+              if (e && e.button === 2) {
+                e.preventDefault()
+                const hasSel = (typeof term.hasSelection === 'function') ? term.hasSelection() : false
+                if (hasSel || lastSelection) { await copySelectedText() }
+              }
+            }, { capture: true })
           }
         }, 0)
         // Handle Ctrl+Shift+C via xterm API so events consumed by xterm are still caught
