@@ -53,7 +53,9 @@
       .theme-select:hover { background:#22283a }
       [data-theme="light"] .theme-select { background:#eef1f7; color:#1f2937; border:1px solid #d7dbe7 }
       [data-theme="light"] .theme-select:hover { background:#e9edf6 }
-      .theme-select-wrap { position:relative; display:flex; align-items:center; margin-left:auto }
+      .theme-select-wrap { position:relative; display:flex; align-items:center }
+      #tabs { position:relative }
+      .theme-top { position:absolute; right:8px; top:6px }
       .theme-icon { position:absolute; left:8px; width:16px; height:16px; color:#cfd3dc; pointer-events:none; display:inline-flex; align-items:center; justify-content:center }
       .theme-icon svg { display:block; width:16px; height:16px; fill:currentColor }
       .theme-select { padding-left:32px }
@@ -80,7 +82,7 @@
       .ctx-item:hover { background:#1a1f2d; }
       .drop-target { outline:1px dashed #3a4160; background:#141a29; }
       #right { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
-      #tabs { height:36px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:flex-end; gap:6px; padding:0 8px; box-sizing:border-box; }
+      #tabs { height:36px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:flex-end; gap:6px; padding:0 8px; padding-right:180px; box-sizing:border-box; }
       .tab { cursor:pointer; padding:6px 10px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
       .tab.active { background:#0f111a; color:#ffffff; }
       .tab .close { margin-left:8px; color:#8b90a0; }
@@ -145,20 +147,13 @@
       <div id="left-topnav">
         <div id="left-ssh" class="left-tab"><span class="icon"><svg viewBox="0 0 24 24"><path d="M3 12l4-4 4 4-4 4-4-4zm10-2h8v4h-8v-4z"/></svg></span>SSH</div>
         <div id="left-sftp" class="left-tab"><span class="icon sftp"><svg viewBox="0 0 24 24"><path d="M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h16v2H4v-2zm0 4h10v2H4v-2z"/></svg></span>SFTP</div>
-        <div class="theme-select-wrap">
-          <span id="theme-icon" class="theme-icon" aria-hidden="true"></span>
-          <select id="theme-select" class="theme-select" title="Theme">
-          <option value="dark">Dark</option>
-          <option value="light">Light</option>
-          </select>
-        </div>
       </div>
       <div id="left-header">Sessions</div>
       <div id="tree" class="tree"></div>
       <div id="ctx" class="ctx-menu" style="display:none"></div>
     </div>
       <div id="right">
-      <div id="tabs"></div>
+      <div id="tabs"><div id="theme-select-top" class="theme-select-wrap theme-top"><span id="theme-icon" class="theme-icon" aria-hidden="true"></span><select id="theme-select" class="theme-select" title="Theme"><option value="dark">Dark</option><option value="light">Light</option></select></div></div>
       <div id="panes"></div>
       <div id="sftp-panel">
         <div id="sftp-split">
@@ -393,11 +388,13 @@
         } catch { applyTheme('dark'); updateThemeSelect('dark') }
       }
       initTheme()
-      themeSelectEl.onchange = async () => {
-        const theme = themeSelectEl.value
-        applyTheme(theme)
-        setThemeIcon(theme)
-        try { await window.api.settingsSave({ theme }) } catch {}
+      if (themeSelectEl) {
+        themeSelectEl.onchange = async () => {
+          const theme = themeSelectEl.value
+          applyTheme(theme)
+          setThemeIcon(theme)
+          try { await window.api.settingsSave({ theme }) } catch {}
+        }
       }
 
       // Tree state and helpers
