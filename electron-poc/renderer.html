@@ -171,6 +171,7 @@
       const tabsEl = document.getElementById('tabs')
       let currentId = null
       let draggingId = null
+      let draggingIds = []
       const THEME_BASE = '#0b0d14'
       const THEME_ACCENT = '#2a5bd7'
       const DEFAULT_FOLDER_COLOR = THEME_BASE
@@ -350,6 +351,9 @@
       // Tree state and helpers
       let sessionTree = []
       let selectedId = null
+      let selectedIds = new Set()
+      let lastClickedId = null
+      let visibleOrder = []
       function genId(prefix='id') { return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7) }
       function findNodeById(list, id, parent=null) {
         for (let i=0;i<list.length;i++) {
@@ -391,17 +395,20 @@
           e.preventDefault()
           // If dropping on an item subtree, let the item's handler manage it
           if (e.target && e.target.closest && e.target.closest('.item')) return
-          if (!draggingId) return
-          await moveNode(draggingId, { id:'__root__', type:'folder' })
-          draggingId = null
+          if (!(draggingIds && draggingIds.length)) return
+          await moveMany(draggingIds, { id:'__root__', type:'folder' })
+          draggingIds = []
         })
 
+        visibleOrder = []
         function renderList(list, container, inheritedColor) {
           list.forEach(n => {
             const row = document.createElement('div')
-            row.className = 'item ' + (n.type==='folder'?'folder':'session') + (n.expanded ? ' expanded' : '') + (selectedId===n.id?' selected':'')
+            const isSelected = selectedIds.has(n.id) || selectedId===n.id
+            row.className = 'item ' + (n.type==='folder'?'folder':'session') + (n.expanded ? ' expanded' : '') + (isSelected ? ' selected' : '')
             row.dataset.id = n.id
             row.draggable = true
+            visibleOrder.push(n.id)
             const effectiveColor = n.type === 'folder' ? (n.color || inheritedColor) : inheritedColor
             if (effectiveColor) { row.dataset.color = '1'; row.style.setProperty('--tree-color', effectiveColor) } else { delete row.dataset.color; row.style.removeProperty('--tree-color') }
             const caret = document.createElement('div')
@@ -429,7 +436,21 @@
             container.appendChild(row)
 
             row.onclick = (e) => {
+              if (e.shiftKey && lastClickedId && visibleOrder.length) {
+                const a = visibleOrder.indexOf(lastClickedId)
+                const b = visibleOrder.indexOf(n.id)
+                if (a >= 0 && b >= 0) {
+                  selectedIds = new Set()
+                  const [start, end] = a <= b ? [a, b] : [b, a]
+                  for (let i = start; i <= end; i++) selectedIds.add(visibleOrder[i])
+                  selectedId = n.id
+                  renderTree()
+                  return
+                }
+              }
+              selectedIds = new Set([n.id])
               selectedId = n.id
+              lastClickedId = n.id
               if (n.type === 'folder') { n.expanded = !n.expanded }
               renderTree()
             }
@@ -488,11 +509,12 @@
 
             // Drag and drop
             row.addEventListener('dragstart', (e) => {
-              draggingId = n.id
+              const inSelection = selectedIds.has(n.id)
+              draggingIds = (inSelection && selectedIds.size > 1) ? Array.from(selectedIds) : [n.id]
               try { e.dataTransfer.setData('text/plain', n.id) } catch {}
               e.dataTransfer.effectAllowed = 'move'
             })
-            row.addEventListener('dragend', () => { draggingId = null })
+            row.addEventListener('dragend', () => { draggingIds = [] })
             row.addEventListener('mousemove', (e) => {
               const rect = row.getBoundingClientRect()
               const x = Math.round(e.clientX - rect.left)
@@ -508,10 +530,11 @@
             row.addEventListener('dragleave', () => row.classList.remove('drop-target'))
             row.addEventListener('drop', async (e) => {
               e.preventDefault(); e.stopPropagation(); row.classList.remove('drop-target')
-              const dragId = draggingId
-              if (!dragId || dragId === n.id) return
-              await moveNode(dragId, n)
-              draggingId = null
+              const listToMove = (draggingIds && draggingIds.length) ? draggingIds.slice() : []
+              if (!listToMove.length) return
+              if (listToMove.length === 1 && listToMove[0] === n.id) return
+              await moveMany(listToMove, n)
+              draggingIds = []
             })
 
             if (n.type === 'folder' && n.expanded) {
@@ -699,8 +722,57 @@
           removeNodeById(selectedId)
           selectedId = null
           await window.api.sessionsSaveTree(sessionTree)
-          renderTree()
+        renderTree()
         }
+
+      async function moveMany(sourceIds, targetNode) {
+        if (!Array.isArray(sourceIds) || !sourceIds.length) return
+        // Prevent moving a folder into its descendant for any folder in selection
+        const toMoveInfos = []
+        for (const sid of sourceIds) {
+          const info = findNodeById(sessionTree, sid, null)
+          if (!info) continue
+          // Skip if target is descendant of this folder
+          if (targetNode && targetNode.type==='folder') {
+            if (info.node.type==='folder' && info.node.id !== '__root__') {
+              if (isDescendant(info.node, targetNode.id)) continue
+            }
+          }
+          toMoveInfos.push(info)
+        }
+        if (!toMoveInfos.length) return
+        // Sort by tree order (prevent index shifts) using visibleOrder fallback
+        const orderIndex = (id) => visibleOrder.indexOf(id)
+        toMoveInfos.sort((a,b) => orderIndex(a.node.id) - orderIndex(b.node.id))
+
+        // Determine insertion container/index from targetNode
+        let container = null
+        let insertIndex = null
+        if (targetNode.type === 'folder') {
+          targetNode.expanded = true
+          container = targetNode.id === '__root__' ? sessionTree : (targetNode.children || (targetNode.children = []))
+          insertIndex = container.length
+        } else {
+          const tgtInfo = findNodeById(sessionTree, targetNode.id, null)
+          if (!tgtInfo) return
+          container = tgtInfo.parent ? tgtInfo.parent.children : sessionTree
+          insertIndex = (tgtInfo.index ?? 0) + 1
+        }
+
+        // Remove all sources from their original containers (from bottom to top)
+        const removalList = toMoveInfos.slice().sort((a,b) => b.index - a.index)
+        const nodes = []
+        for (const info of removalList) {
+          if (!info.parent) nodes.push(sessionTree.splice(info.index, 1)[0])
+          else nodes.push(info.parent.children.splice(info.index, 1)[0])
+        }
+        // Insert nodes in original order at the computed position
+        for (let i = 0; i < nodes.length; i++) {
+          container.splice(insertIndex + i, 0, nodes[i])
+        }
+        await window.api.sessionsSaveTree(sessionTree)
+        renderTree()
+      }
         if (e.key === 'F2' && selectedId) {
           const info = findNodeById(sessionTree, selectedId, null)
           if (!info) return
