@@ -34,7 +34,28 @@ function createWindow() {
   })
   try { app.setName('SuperTerminal') } catch {}
   try { win.setTitle('SuperTerminal') } catch {}
+  // Hide menu to avoid accelerator conflicts and accidental devtools shortcuts
+  try { win.setMenu(null) } catch {}
+  try { win.setMenuBarVisibility(false) } catch {}
   win.loadFile('renderer.html')
+  try {
+    win.webContents.on('before-input-event', (event, input) => {
+      try {
+        if (input && input.type === 'keyDown') {
+          const ctrlShift = !!input.control && !!input.shift && !input.alt
+          const isKey = (code, key) => (input.code === code) || (input.key && input.key.toUpperCase && input.key.toUpperCase() === key)
+          if (ctrlShift && isKey('KeyI', 'I')) {
+            try {
+              if (win.webContents.isDevToolsOpened()) win.webContents.closeDevTools(); else win.webContents.openDevTools({ mode: 'detach' })
+            } catch {}
+            event.preventDefault()
+            return
+          }
+        }
+      } catch {}
+    })
+  } catch {}
+  // Removed global key interception; rely on renderer/xterm handlers
 }
 
 app.whenReady().then(createWindow)
