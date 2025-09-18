@@ -18,6 +18,16 @@
       body::-webkit-scrollbar-track { background:#0b0d14 }
       body::-webkit-scrollbar-thumb { background:#2a3040; border-radius:8px; border:2px solid #0b0d14 }
       body::-webkit-scrollbar-thumb:hover { background:#3a4160 }
+      /* Context menu */
+      .ctx-menu { position:fixed; z-index:1000; background:#0f111a; border:1px solid #2a3040; border-radius:8px; padding:6px 0; min-width:160px; box-shadow:0 6px 18px rgba(0,0,0,.4) }
+      .ctx-item { padding:6px 12px; cursor:pointer; color:#cfd3dc }
+      .ctx-item:hover { background:#1a1f2d }
+      /* Modal */
+      .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; z-index:1100 }
+      .modal { width:320px; max-width:90vw; background:#0b0d14; color:#cfd3dc; border:1px solid #1f2330; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.5) }
+      .modal-header { padding:12px 14px; border-bottom:1px solid #1f2330; font-weight:600 }
+      .modal-body { padding:14px }
+      .modal-actions { padding:12px 14px; border-top:1px solid #1f2330; display:flex; gap:8px; justify-content:flex-end }
     </style>
   </head>
   <body>
@@ -213,6 +223,7 @@
           onAuthChange()
         }
         document.getElementById('userSelect').addEventListener('change', onUserSelectionChange)
+        document.getElementById('userSelect').addEventListener('contextmenu', onUserContextMenu)
       })()
 
       function updateAuth() {
@@ -257,6 +268,82 @@
           userPreset: selectedUser
         } : {}, sessBase)
         try { window.api.sessionFormSubmit(sess) } catch {}
+      }
+
+      // Context menu for deleting selected user preset
+      function onUserContextMenu(e) {
+        e.preventDefault()
+        const sel = document.getElementById('userSelect')
+        const opt = sel && sel.selectedOptions && sel.selectedOptions[0]
+        if (!opt || !opt.dataset || !opt.dataset.user) return
+        const menu = document.createElement('div')
+        menu.className = 'ctx-menu'
+        const del = document.createElement('div')
+        del.className = 'ctx-item'
+        del.textContent = 'Delete'
+        del.onmousedown = async (ev) => {
+          ev.preventDefault(); ev.stopPropagation()
+          hideCtx()
+          const ok = await showConfirm('Delete user', 'Delete selected user preset?')
+          if (!ok) return
+          let user = null
+          try { user = JSON.parse(decodeURIComponent(opt.dataset.user)) } catch {}
+          if (!user || !user.id) return
+          try {
+            const res = await window.api.usersLoad()
+            const users = Array.isArray(res?.users) ? res.users : []
+            const next = users.filter(u => u && u.id !== user.id)
+            await window.api.usersSave(next)
+            await fillUsers()
+            const sel2 = document.getElementById('userSelect')
+            sel2.value = '__custom__'
+            document.getElementById('userCustom').style.display = ''
+          } catch {}
+        }
+        menu.appendChild(del)
+        document.body.appendChild(menu)
+        const x = e.clientX, y = e.clientY
+        menu.style.left = x + 'px'
+        menu.style.top = y + 'px'
+        setTimeout(() => {
+          const onDoc = (ev) => { if (!menu.contains(ev.target)) { hideCtx(); document.removeEventListener('mousedown', onDoc) } }
+          document.addEventListener('mousedown', onDoc)
+        }, 0)
+        function hideCtx() { try { document.body.removeChild(menu) } catch {} }
+      }
+
+      function showConfirm(title, message) {
+        return new Promise((resolve) => {
+          const overlay = document.createElement('div')
+          overlay.className = 'modal-overlay'
+          const modal = document.createElement('div')
+          modal.className = 'modal'
+          const header = document.createElement('div')
+          header.className = 'modal-header'
+          header.textContent = title
+          const body = document.createElement('div')
+          body.className = 'modal-body'
+          body.textContent = message
+          const actions = document.createElement('div')
+          actions.className = 'modal-actions'
+          const btnCancel = document.createElement('button')
+          btnCancel.className = 'btn'
+          btnCancel.textContent = 'Cancel'
+          const btnOk = document.createElement('button')
+          btnOk.className = 'btn'
+          btnOk.style.background = '#2a5bd7'; btnOk.style.borderColor = '#2a5bd7'
+          btnOk.textContent = 'Delete'
+          actions.appendChild(btnCancel)
+          actions.appendChild(btnOk)
+          modal.appendChild(header); modal.appendChild(body); modal.appendChild(actions)
+          overlay.appendChild(modal)
+          document.body.appendChild(overlay)
+          const close = (val) => { try { document.body.removeChild(overlay) } catch {}; resolve(val) }
+          btnCancel.onclick = () => close(false)
+          btnOk.onclick = () => close(true)
+          overlay.addEventListener('keydown', (e2) => { if (e2.key==='Escape') close(false) })
+          setTimeout(() => btnOk.focus(), 0)
+        })
       }
     </script>
   </body>
