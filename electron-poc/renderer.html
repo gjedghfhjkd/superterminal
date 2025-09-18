@@ -228,6 +228,13 @@
             try { document.body.removeChild(ta) } catch {}
           } catch {}
         }
+        const clearSelections = () => {
+          try { if (typeof term.clearSelection === 'function') term.clearSelection() } catch {}
+          try {
+            const sel = typeof window.getSelection === 'function' ? window.getSelection() : null
+            if (sel && typeof sel.removeAllRanges === 'function') sel.removeAllRanges()
+          } catch {}
+        }
         const copySelectedText = async () => {
           try {
             let selected = (typeof term.getSelection === 'function') ? (term.getSelection() || '') : ''
@@ -235,7 +242,7 @@
             if (!selected && typeof window.getSelection === 'function') {
               try { selected = String(window.getSelection().toString() || '') } catch {}
             }
-            if (selected) await performClipboardWrite(selected)
+            if (selected) { await performClipboardWrite(selected); clearSelections() }
           } catch {}
         }
         const xtermEl = () => (pane && pane.querySelector) ? pane.querySelector('.xterm') : null
