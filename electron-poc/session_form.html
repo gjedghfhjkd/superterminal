@@ -48,7 +48,7 @@
     <label>Port</label>
     <input id="port" value="22" />
     <label>User</label>
-    <div id="userSelectWrap" style="position:relative; display:flex; gap:8px; align-items:center">
+    <div id="userSelectWrap" style="position:relative; display:block">
       <div id="userDropdown" class="dropdown-toggle" tabindex="0" style="flex:1"></div>
       <input id="userCustom" class="input" placeholder="username" style="display:none; width:100%" />
       <div id="userDropdownMenu" class="dropdown-menu" style="display:none"></div>
@@ -117,10 +117,20 @@
         menu.appendChild(customIt)
         // Set toggle label
         if (users.length) { toggle.textContent = (users[0].name ? `${users[0].name} — ${users[0].username}` : users[0].username) }
-        else { toggle.textContent = 'Custom username…' }
+        else { toggle.textContent = 'Custom username…'; toggle.style.display = 'block'; document.getElementById('userCustom').style.display = 'none' }
         // Default selection
         if (users.length) { applySelectedUserFromOption({ dataset: { user: encodeURIComponent(JSON.stringify(users[0])) } }) }
-        else { selectCustom() }
+        else {
+          // Show dropdown with two actions when no users exist
+          toggle.onclick = () => { const open = menu.style.display!=='none'; if (open) hideDropdown(); else showDropdown() }
+          menu.innerHTML = ''
+          const createEmpty = document.createElement('div'); createEmpty.className='dropdown-item'; createEmpty.innerHTML = '<div class="label">Create user…</div>'
+          createEmpty.onclick = async () => { await openCreateUser(); await fillUsers(); hideDropdown() }
+          const customEmpty = document.createElement('div'); customEmpty.className='dropdown-item'; customEmpty.innerHTML = '<div class="label">Custom username…</div>'
+          customEmpty.onclick = () => { document.getElementById('userCustom').style.display = ''; document.getElementById('userDropdown').style.display = 'none'; forcedAuth = null; selectedUser = null; onAuthChange(); hideDropdown() }
+          menu.appendChild(createEmpty); menu.appendChild(customEmpty)
+          document.getElementById('userDropdown').style.display = 'block'
+        }
       }
       function showDropdown() { const m = document.getElementById('userDropdownMenu'); m.style.display='block' }
       function hideDropdown() { const m = document.getElementById('userDropdownMenu'); m.style.display='none' }
