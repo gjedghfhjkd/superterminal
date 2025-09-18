@@ -32,9 +32,16 @@
       .tab:hover { background:#22283a; border-color:#3a4160; }
       .tab.active { background:#0b0d14; color:#ffffff; border-color:#3a4160; box-shadow:0 0 0 1px #3a4160 inset; font-weight:600; }
       .tab.active::after { content:""; position:absolute; left:8px; right:8px; bottom:-1px; height:3px; border-radius:3px 3px 0 0; background:linear-gradient(90deg,#2f66ef,#7a5cf0); }
-      .tab .close { margin-left:8px; color:#8b90a0; opacity:.8; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; transition:transform .15s ease, background .15s ease, color .15s ease, opacity .15s ease, box-shadow .15s ease; }
+      .tab .title { pointer-events:none; }
+      .tab .close { margin-left:8px; color:#8b90a0; opacity:.8; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; transition:background .15s ease, color .15s ease, opacity .15s ease, box-shadow .15s ease; }
       .tab:hover .close { opacity:.95; color:#a0a6b8; }
-      .tab .close:hover { color:#ff6b6b; background:#2a3040; transform:rotate(90deg) scale(1.1); opacity:1; box-shadow:0 0 0 2px rgba(255,107,107,.15) inset; }
+      .tab .close:hover { color:#e6e6e6; background:#2a3040; opacity:1; box-shadow:0 0 0 2px rgba(58,65,96,.35) inset; }
+
+      /* Colored tabs */
+      .tab[data-color] { border-color: var(--tab-color, #3a4160); }
+      .tab[data-color].active { box-shadow: 0 0 0 1px var(--tab-color, #3a4160) inset; }
+      .tab[data-color]::before { content:""; position:absolute; left:0; top:4px; bottom:0; width:3px; border-radius:3px 0 0 0; background:var(--tab-color); opacity:.9; }
+      .tab[data-color].active::after { background: var(--tab-color); }
       #panes { position:relative; flex:1; overflow:hidden; background:#0f111a; min-height:0; }
       .pane { position:absolute; inset:0; display:none; }
       .pane.active { display:block; }
@@ -157,7 +164,10 @@
         const tab = document.createElement('div')
         tab.className = 'tab'
         tab.title = title
-        tab.textContent = title
+        const titleEl = document.createElement('span')
+        titleEl.className = 'title'
+        titleEl.textContent = title
+        tab.appendChild(titleEl)
         const close = document.createElement('span')
         close.textContent = '✕'
         close.className = 'close'
@@ -174,6 +184,7 @@
         }
         tab.appendChild(close)
         tab.onclick = () => activateTab(id)
+        tab.oncontextmenu = (e) => { e.preventDefault(); openTabCtxMenu(e.clientX, e.clientY, id) }
         tabsEl.appendChild(tab)
         tabs.set(id, tab)
       }
@@ -183,7 +194,10 @@
         const tab = document.createElement('div')
         tab.className = 'tab'
         tab.title = title
-        tab.textContent = title
+        const titleEl = document.createElement('span')
+        titleEl.className = 'title'
+        titleEl.textContent = title
+        tab.appendChild(titleEl)
         const close = document.createElement('span')
         close.textContent = '✕'
         close.className = 'close'
@@ -199,6 +213,7 @@
         }
         tab.appendChild(close)
         tab.onclick = () => { activateTab(id); showSftpView() }
+        tab.oncontextmenu = (e) => { e.preventDefault(); openTabCtxMenu(e.clientX, e.clientY, id) }
         tabsEl.appendChild(tab)
         tabs.set(id, tab)
       }
@@ -552,6 +567,53 @@
         }, 0)
       }
       function hideCtx() { const menu = document.getElementById('ctx'); menu.style.display='none' }
+      function openTabCtxMenu(x, y, tabId) {
+        const menu = document.getElementById('ctx')
+        menu.innerHTML = ''
+        function add(label, handler) {
+          const it = document.createElement('div');
+          it.className='ctx-item';
+          it.textContent=label;
+          it.onmousedown=(e)=>{ e.preventDefault(); e.stopPropagation(); hideCtx(); handler() };
+          menu.appendChild(it)
+        }
+        add('Rename…', async () => {
+          const tabEl = tabs.get(tabId)
+          if (!tabEl) return
+          const current = tabEl.querySelector('.title')?.textContent || tabEl.title || ''
+          const next = await showInputModal('Rename Tab', 'New name', current)
+          if (!next) return
+          const tEl = tabEl.querySelector('.title')
+          if (tEl) tEl.textContent = next
+          tabEl.title = next
+        })
+        add('Color…', async () => {
+          const tabEl = tabs.get(tabId)
+          if (!tabEl) return
+          const current = tabEl.style.getPropertyValue('--tab-color') || '#3a4160'
+          const next = await showInputModal('Tab Color', 'Hex color, e.g. #ff6b6b', current)
+          if (!next) return
+          const val = next.trim()
+          if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(val)) { alert('Enter a valid hex color like #ff6b6b'); return }
+          tabEl.dataset.color = '1'
+          tabEl.style.setProperty('--tab-color', val)
+        })
+        add('Clear Color', () => {
+          const tabEl = tabs.get(tabId)
+          if (!tabEl) return
+          delete tabEl.dataset.color
+          tabEl.style.removeProperty('--tab-color')
+        })
+        add('Close', async () => {
+          const closeBtn = tabs.get(tabId)?.querySelector('.close')
+          if (closeBtn) closeBtn.click()
+        })
+        menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.style.display = 'block'
+        setTimeout(() => {
+          const onDoc = (e) => { if (!menu.contains(e.target)) { hideCtx(); document.removeEventListener('mousedown', onDoc) } }
+          document.addEventListener('mousedown', onDoc)
+        }, 0)
+      }
       document.getElementById('left').oncontextmenu = (e) => { if (e.target && e.target.closest('.item')) return; e.preventDefault(); openCtxMenu(e.clientX, e.clientY, null) }
       document.addEventListener('keydown', async (e) => {
         if (e.key === 'Delete' && selectedId) {
