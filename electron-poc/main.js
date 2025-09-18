@@ -319,11 +319,15 @@ ipcMain.handle('local-list', async (evt, localPath) => {
       const name = ent.name
       let type = 'file'
       try {
-        if (ent.isDirectory()) type = 'd'
-        else if (ent.isSymbolicLink()) {
+        if (ent.isDirectory()) {
+          type = 'd'
+        } else if (ent.isSymbolicLink()) {
+          // Treat Windows junctions/symlinks as non-navigable to avoid EPERM on legacy compatibility links
           const full = path.join(dirPath, name)
-          const st = await stat(full).catch(() => null)
-          type = st && st.isDirectory() ? 'd' : 'file'
+          let st = null
+          try { st = await stat(full) } catch (e) { st = null }
+          type = 'link'
+          // If explicitly desired, we could attempt to navigate only when readable, but default to non-dir
         }
       } catch {}
       return { name, type }
