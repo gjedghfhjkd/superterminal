@@ -41,7 +41,7 @@
     <label>Port</label>
     <input id="port" value="22" />
     <label>User</label>
-    <div style="display:flex; gap:8px; align-items:center">
+    <div id="userSelectWrap" style="display:flex; gap:8px; align-items:center">
       <select id="userSelect" style="flex:1"></select>
     </div>
     <input id="userCustom" placeholder="username" style="display:none" />
@@ -151,7 +151,9 @@
           }
         }
       }
+      let ignoreNextUserChange = false
       async function onUserSelectionChange() {
+        if (ignoreNextUserChange) { ignoreNextUserChange = false; return }
         const sel = document.getElementById('userSelect')
         const val = sel.value
         if (val === '__create__') {
@@ -222,8 +224,13 @@
           document.getElementById('userCustom').value = editPreset.username
           onAuthChange()
         }
-        document.getElementById('userSelect').addEventListener('change', onUserSelectionChange)
-        document.getElementById('userSelect').addEventListener('contextmenu', onUserContextMenu)
+        const selEl = document.getElementById('userSelect')
+        selEl.addEventListener('change', onUserSelectionChange)
+        selEl.addEventListener('contextmenu', onUserContextMenu)
+        selEl.addEventListener('mousedown', (e) => { if (e.button === 2) onUserContextMenu(e) })
+        const wrap = document.getElementById('userSelectWrap')
+        wrap.addEventListener('contextmenu', onUserContextMenu)
+        wrap.addEventListener('mousedown', (e) => { if (e.button === 2) onUserContextMenu(e) })
       })()
 
       function updateAuth() {
@@ -272,7 +279,9 @@
 
       // Context menu for deleting selected user preset
       function onUserContextMenu(e) {
-        e.preventDefault()
+        e.preventDefault(); e.stopPropagation()
+        // prevent immediate change reactions caused by right-click interactions
+        ignoreNextUserChange = true
         const sel = document.getElementById('userSelect')
         const opt = sel && sel.selectedOptions && sel.selectedOptions[0]
         if (!opt || !opt.dataset || !opt.dataset.user) return
