@@ -4,10 +4,12 @@
   "main": "main.js",
   "type": "module",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "pack:win": "electron-packager . SuperTerminal --platform=win32 --arch=x64 --out=dist --overwrite --asar --prune=true --ignore=^dist$"
   },
   "devDependencies": {
-    "electron": "^30.0.0"
+    "electron": "^30.0.0",
+    "electron-packager": "^17.1.2"
   },
   "dependencies": {
     "ssh2": "^1.15.0",

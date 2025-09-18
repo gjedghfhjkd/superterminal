@@ -1,0 +1,1 @@
+electron-poc/dist/SuperTerminal-win32-x64/SuperTerminal.exe filter=lfs diff=lfs merge=lfs -text

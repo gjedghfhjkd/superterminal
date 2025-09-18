@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { readFile, writeFile, readdir, stat, rm as fsrm, mkdir as fsmkdir, rename as fsrename } from 'fs/promises'
+import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { Client as SSHClient } from 'ssh2'
@@ -8,6 +9,15 @@ import net from 'net'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+// Configure portable userData directory next to the executable
+try {
+  const isDev = !app.isPackaged
+  const baseDir = isDev ? __dirname : path.dirname(process.execPath)
+  const dataDir = path.join(baseDir, 'data')
+  try { fs.mkdirSync(dataDir, { recursive: true }) } catch {}
+  app.setPath('userData', dataDir)
+} catch {}
 
 let win
 function createWindow() {

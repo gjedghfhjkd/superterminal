@@ -1,0 +1,4 @@
+electron-poc/node_modules/
+electron-poc/dist/
+!electron-poc/dist/SuperTerminal-win32-x64/
+!electron-poc/dist/SuperTerminal-win32-x64/SuperTerminal.exe
