@@ -547,11 +547,10 @@
         }
         const isFolder = targetNode && targetNode.type==='folder'
         add('New Folder', async () => {
-          const name = await showInputModal('New Folder', 'Folder name', 'New Folder')
-          if (!name) return
-          const picked = await showColorModal('Folder Color', '#7a5cf0')
-          const node = { id: genId('fld'), type:'folder', name, expanded:true, children:[] }
-          if (picked) node.color = picked
+          const res = await showFolderModal('New Folder', 'New Folder', '#7a5cf0', 'Create')
+          if (!res) return
+          const node = { id: genId('fld'), type:'folder', name: res.name, expanded:true, children:[] }
+          if (res.color) node.color = res.color
           if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
           else targetNode.children.push(node)
           await window.api.sessionsSaveTree(sessionTree)
@@ -569,35 +568,22 @@
         })
         add('Edit…', async () => {
           if (!targetNode) return
-          const present = targetNode.type==='session' ? (targetNode.session || {}) : { name: targetNode.name }
-          const res = await window.api.openSessionWindowPreset((present.type||'SSH'), present)
-          const s = res && res.session
-          if (!s) return
           if (targetNode.type==='session') {
+            const present = targetNode.session || {}
+            const res = await window.api.openSessionWindowPreset((present.type||'SSH'), present)
+            const s = res && res.session
+            if (!s) return
             targetNode.session = s
             targetNode.name = `${s.name||s.host} (${s.username})`
           } else if (targetNode.type==='folder') {
-            targetNode.name = s.name || targetNode.name
+            const res = await showFolderModal('Edit Folder', targetNode.name || 'Folder', (typeof targetNode.color==='string' && targetNode.color) ? targetNode.color : '#7a5cf0', 'Save')
+            if (!res) return
+            targetNode.name = res.name || targetNode.name
+            if (res.color) targetNode.color = res.color
           }
           await window.api.sessionsSaveTree(sessionTree)
           renderTree()
         })
-        if (targetNode && targetNode.type==='folder') {
-          add('Folder Color…', async () => {
-            const initial = (typeof targetNode.color === 'string' && targetNode.color) ? targetNode.color : '#7a5cf0'
-            const picked = await showColorModal('Folder Color', initial)
-            if (!picked) return
-            targetNode.color = picked
-            await window.api.sessionsSaveTree(sessionTree)
-            renderTree()
-          })
-          add('Clear Folder Color', async () => {
-            if (!targetNode) return
-            delete targetNode.color
-            await window.api.sessionsSaveTree(sessionTree)
-            renderTree()
-          })
-        }
         if (targetNode) {
           add('Delete…', async () => {
             const ok = await showConfirmModal('Delete', 'Delete selected item?', 'Delete', 'Cancel')
@@ -818,6 +804,79 @@
           btnOk.onclick = () => close(input.value)
           overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close(null) })
           setTimeout(() => input.focus(), 0)
+        })
+      }
+
+      function showFolderModal(title, initialName='New Folder', initialColor='#7a5cf0', okLabel='Create') {
+        return new Promise((resolve) => {
+          const overlay = document.createElement('div')
+          overlay.className = 'modal-overlay'
+          const modal = document.createElement('div')
+          modal.className = 'modal'
+          const header = document.createElement('div')
+          header.className = 'modal-header'
+          header.textContent = title || 'Folder'
+          const body = document.createElement('div')
+          body.className = 'modal-body'
+
+          const nameLabel = document.createElement('label')
+          nameLabel.textContent = 'Name'
+          const nameInput = document.createElement('input')
+          nameInput.className = 'input'
+          nameInput.placeholder = 'Folder name'
+          nameInput.value = initialName || 'New Folder'
+          body.appendChild(nameLabel)
+          body.appendChild(nameInput)
+
+          const colorLabel = document.createElement('label')
+          colorLabel.textContent = 'Color'
+          const colorRow = document.createElement('div')
+          colorRow.style.display = 'flex'
+          colorRow.style.alignItems = 'center'
+          colorRow.style.gap = '10px'
+          const colorPicker = document.createElement('input')
+          colorPicker.type = 'color'
+          colorPicker.value = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(initialColor||'') ? initialColor : '#7a5cf0'
+          colorPicker.style.width = '44px'
+          colorPicker.style.height = '32px'
+          const colorHex = document.createElement('input')
+          colorHex.className = 'input'
+          colorHex.style.flex = '1'
+          colorHex.placeholder = '#rrggbb'
+          colorHex.value = colorPicker.value
+          colorPicker.addEventListener('input', () => { colorHex.value = colorPicker.value })
+          colorHex.addEventListener('input', () => {
+            const v = (colorHex.value||'').trim()
+            if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v)) colorPicker.value = v
+          })
+          colorRow.appendChild(colorPicker)
+          colorRow.appendChild(colorHex)
+          body.appendChild(colorLabel)
+          body.appendChild(colorRow)
+
+          const actions = document.createElement('div')
+          actions.className = 'modal-actions'
+          const btnCancel = document.createElement('button')
+          btnCancel.className = 'btn'
+          btnCancel.textContent = 'Cancel'
+          const btnOk = document.createElement('button')
+          btnOk.className = 'btn primary'
+          btnOk.textContent = okLabel || 'Create'
+          actions.appendChild(btnCancel)
+          actions.appendChild(btnOk)
+          modal.appendChild(header); modal.appendChild(body); modal.appendChild(actions)
+          overlay.appendChild(modal)
+          document.body.appendChild(overlay)
+          const close = (val) => { try { document.body.removeChild(overlay) } catch {}; resolve(val) }
+          btnCancel.onclick = () => close(null)
+          btnOk.onclick = () => {
+            const name = (nameInput.value||'').trim()
+            if (!name) { nameInput.focus(); return }
+            const color = (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(colorHex.value||'')) ? colorHex.value : colorPicker.value
+            close({ name, color })
+          }
+          overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close(null); if (e.key==='Enter') btnOk.click() })
+          setTimeout(() => nameInput.focus(), 0)
         })
       }
 
