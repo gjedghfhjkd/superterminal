@@ -1,4 +1,4 @@
-POC: Electron + xterm.js + ssh2 / ssh2-sftp-client
+SuperTerminal: Electron + xterm.js + ssh2 / ssh2-sftp-client
 
 Setup:
 1) cd electron-poc
