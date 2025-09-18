@@ -27,6 +27,11 @@
       <label id="lbl-password">Password (optional)</label>
       <input id="password" type="password" />
       <label id="lbl-key">Private key (paste)</label>
+      <div id="filepick" style="display:flex; gap:8px; align-items:center">
+        <input id="keyfile" type="file" accept=".pem,.ppk,.key,.rsa,*/*" style="display:none" />
+        <button id="choose" type="button" style="margin:0">Choose file…</button>
+        <span id="fname" style="font-size:12px; color:#8b90a0"></span>
+      </div>
       <textarea id="privateKey" style="height:100px"></textarea>
       <label id="lbl-passphrase">Passphrase (optional)</label>
       <input id="passphrase" type="password" />
@@ -43,10 +48,19 @@
         document.getElementById('password').style.display = isKey ? 'none' : ''
         document.getElementById('lbl-key').style.display = isKey ? '' : 'none'
         document.getElementById('privateKey').style.display = isKey ? '' : 'none'
+        const fp = document.getElementById('filepick'); if (fp) fp.style.display = isKey ? 'flex' : 'none'
         document.getElementById('lbl-passphrase').style.display = isKey ? '' : 'none'
         document.getElementById('passphrase').style.display = isKey ? '' : 'none'
       }
       document.getElementById('auth').addEventListener('change', updateAuth)
+      document.getElementById('choose').addEventListener('click', () => document.getElementById('keyfile').click())
+      document.getElementById('keyfile').addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0]
+        if (!file) return
+        const text = await file.text().catch(() => '')
+        if (text) document.getElementById('privateKey').value = text
+        document.getElementById('fname').textContent = file ? file.name : ''
+      })
       try {
         const presetRaw = getQueryParam('preset')
         if (presetRaw) {
