@@ -334,6 +334,18 @@
         }
         return null
       }
+      function findParentFolderColor(list, id) {
+        const info = findNodeById(list, id, null)
+        if (!info) return null
+        let p = info.parent
+        while (p) {
+          if (p.type === 'folder' && typeof p.color === 'string' && p.color) return p.color
+          // climb up
+          const parentInfo = findNodeById(sessionTree, p.id, null)
+          p = parentInfo ? parentInfo.parent : null
+        }
+        return null
+      }
       function removeNodeById(id) {
         const info = findNodeById(sessionTree, id, null)
         if (!info) return false
@@ -398,7 +410,12 @@
                     const cfg = Object.assign({}, s, { id: rid })
                     await window.api.sftpConnect(cfg)
                     const title = `${s.type || 'SFTP'} ${s.name||s.host} (${s.username})`
+                    const parentColor = findParentFolderColor(sessionTree, n.id)
                     createSftpTab(rid, title)
+                    if (parentColor) {
+                      const tabEl = tabs.get(rid)
+                      if (tabEl) { tabEl.dataset.color = '1'; tabEl.style.setProperty('--tab-color', parentColor) }
+                    }
                     activateTab(rid)
                     await initSftpSplitIfNeeded(rid)
                     await navigateRemote('/')
@@ -406,7 +423,12 @@
                     // Always create a new SSH terminal/tab
                     const rid = genId('ssh')
                     const title = `${s.type || 'SSH'} ${s.name||s.host} (${s.username})`
+                    const parentColor = findParentFolderColor(sessionTree, n.id)
                     createTerminalFor(rid, title)
+                    if (parentColor) {
+                      const tabEl = tabs.get(rid)
+                      if (tabEl) { tabEl.dataset.color = '1'; tabEl.style.setProperty('--tab-color', parentColor) }
+                    }
                     const cfg = Object.assign({}, s, { id: rid })
                     await window.api.sshConnect(cfg)
                     await window.api.sshOpenPtyId(rid)
@@ -527,7 +549,9 @@
         add('New Folder', async () => {
           const name = await showInputModal('New Folder', 'Folder name', 'New Folder')
           if (!name) return
+          const picked = await showColorModal('Folder Color', '#7a5cf0')
           const node = { id: genId('fld'), type:'folder', name, expanded:true, children:[] }
+          if (picked) node.color = picked
           if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
           else targetNode.children.push(node)
           await window.api.sessionsSaveTree(sessionTree)
@@ -558,6 +582,22 @@
           await window.api.sessionsSaveTree(sessionTree)
           renderTree()
         })
+        if (targetNode && targetNode.type==='folder') {
+          add('Folder Color…', async () => {
+            const initial = (typeof targetNode.color === 'string' && targetNode.color) ? targetNode.color : '#7a5cf0'
+            const picked = await showColorModal('Folder Color', initial)
+            if (!picked) return
+            targetNode.color = picked
+            await window.api.sessionsSaveTree(sessionTree)
+            renderTree()
+          })
+          add('Clear Folder Color', async () => {
+            if (!targetNode) return
+            delete targetNode.color
+            await window.api.sessionsSaveTree(sessionTree)
+            renderTree()
+          })
+        }
         if (targetNode) {
           add('Delete…', async () => {
             const ok = await showConfirmModal('Delete', 'Delete selected item?', 'Delete', 'Cancel')
