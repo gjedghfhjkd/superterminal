@@ -82,10 +82,15 @@
       .ctx-item:hover { background:#1a1f2d; }
       .drop-target { outline:1px dashed #3a4160; background:#141a29; }
       #right { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
-      #tabs { height:36px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:flex-end; gap:6px; padding:0 8px; padding-right:180px; box-sizing:border-box; }
+      #tabs { height:36px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:flex-end; gap:6px; padding:0 8px; padding-right:220px; box-sizing:border-box; position:relative }
       .tab { cursor:pointer; padding:6px 10px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
       .tab.active { background:#0f111a; color:#ffffff; }
       .tab .close { margin-left:8px; color:#8b90a0; }
+      .tabs-actions { position:absolute; right:8px; top:6px; display:flex; gap:8px; align-items:center }
+      .tabs-action-btn { background:#1a1f2d; color:#e6e6e6; border:1px solid #2a3040; padding:6px 10px; border-radius:8px; cursor:pointer }
+      .tabs-action-btn:hover { background:#22283a }
+      [data-theme="light"] .tabs-action-btn { background:#eef1f7; color:#1f2937; border:1px solid #d7dbe7 }
+      [data-theme="light"] .tabs-action-btn:hover { background:#e9edf6 }
       #panes { position:relative; flex:1; overflow:hidden; background:#0f111a; min-height:0; }
       .pane { position:absolute; inset:0; display:none; }
       .pane.active { display:block; }
@@ -153,7 +158,7 @@
       <div id="ctx" class="ctx-menu" style="display:none"></div>
     </div>
       <div id="right">
-      <div id="tabs"><div id="theme-select-top" class="theme-select-wrap theme-top"><span id="theme-icon" class="theme-icon" aria-hidden="true"></span><select id="theme-select" class="theme-select" title="Theme"><option value="dark">Dark</option><option value="light">Light</option></select></div></div>
+      <div id="tabs"><div class="tabs-actions"><button id="tabs-tun" class="tabs-action-btn" title="Tunneling">Tunnels</button><div id="theme-select-top" class="theme-select-wrap"><span id="theme-icon" class="theme-icon" aria-hidden="true"></span><select id="theme-select" class="theme-select" title="Theme"><option value="dark">Dark</option><option value="light">Light</option></select></div></div></div>
       <div id="panes"></div>
       <div id="sftp-panel">
         <div id="sftp-split">
@@ -295,6 +300,17 @@
         tunPanel.style.display = 'none'
       }
 
+      function showTunView() {
+        const panes = document.getElementById('panes')
+        const tabsBar = document.getElementById('tabs')
+        const sftpPanel = document.getElementById('sftp-panel')
+        const tunPanel = document.getElementById('tun-panel')
+        panes.style.display = 'none'
+        tabsBar.style.display = 'flex'
+        sftpPanel.style.display = 'none'
+        tunPanel.style.display = 'flex'
+      }
+
       // Left top buttons: open session creation modals
       document.getElementById('left-ssh').onclick = async () => {
         try {
@@ -318,12 +334,7 @@
           renderTree()
         } catch (e) { alert('Create SFTP session error: ' + (e?.message||e)) }
       }
-      document.getElementById('left-tun').onclick = async () => {
-        document.getElementById('sftp-panel').style.display = 'none'
-        document.getElementById('panes').style.display = 'none'
-        document.getElementById('tabs').style.display = 'flex'
-        document.getElementById('tun-panel').style.display = 'block'
-      }
+      document.getElementById('left-tun').onclick = async () => { showTunView() }
 
       window.api.sshOnData(payload => {
         try {
@@ -352,6 +363,7 @@
       // Theme handling
       const themeSelectEl = document.getElementById('theme-select')
       const themeIconEl = document.getElementById('theme-icon')
+      const tabsTunBtn = document.getElementById('tabs-tun')
       function getThemeIconSvg(theme) {
         if (theme === 'light') {
           // Sun
@@ -388,6 +400,7 @@
         } catch { applyTheme('dark'); updateThemeSelect('dark') }
       }
       initTheme()
+      if (tabsTunBtn) { tabsTunBtn.onclick = () => showTunView() }
       if (themeSelectEl) {
         themeSelectEl.onchange = async () => {
           const theme = themeSelectEl.value
