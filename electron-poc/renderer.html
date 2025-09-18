@@ -403,9 +403,13 @@
             row.appendChild(label)
             container.appendChild(row)
 
-            row.onclick = (e) => { selectedId = n.id; renderTree() }
+            row.onclick = (e) => {
+              selectedId = n.id
+              if (n.type === 'folder') { n.expanded = !n.expanded }
+              renderTree()
+            }
             row.ondblclick = async () => {
-              if (n.type === 'folder') { n.expanded = !n.expanded; renderTree(); return }
+              if (n.type === 'folder') { return }
               if (n.type === 'session') {
                 try {
                   const s = n.session
