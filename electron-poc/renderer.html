@@ -948,7 +948,7 @@
         body.appendChild(step1); body.appendChild(step2); body.appendChild(step3)
         const actions = document.createElement('div'); actions.className='modal-actions'
         const btnCancel = document.createElement('button'); btnCancel.className='btn'; btnCancel.textContent='Cancel'
-        const btnNext = document.createElement('button'); btnNext.className='btn'; btnNext.textContent='Next'
+        const btnNext = document.createElement('button'); btnNext.className='btn primary'; btnNext.textContent='Next'
         const btnCreate = document.createElement('button'); btnCreate.className='btn primary'; btnCreate.textContent='Create'; btnCreate.style.display='none'
         actions.appendChild(btnCancel); actions.appendChild(btnNext); actions.appendChild(btnCreate)
         modal.appendChild(header); modal.appendChild(body); modal.appendChild(actions); overlay.appendChild(modal); document.body.appendChild(overlay)
