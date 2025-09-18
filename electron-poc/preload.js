@@ -60,5 +60,7 @@ contextBridge.exposeInMainWorld('api', {
   writeClipboardText: (text) => {
     try { clipboard.writeText(String(text||'')) } catch {}
   }
+  ,
+  onClipboardAction: (cb) => ipcRenderer.on('clipboard-action', (_, payload) => { try { cb && cb(payload) } catch {} })
 })
 

@@ -34,7 +34,43 @@ function createWindow() {
   })
   try { app.setName('SuperTerminal') } catch {}
   try { win.setTitle('SuperTerminal') } catch {}
+  // Hide menu to avoid accelerator conflicts and accidental devtools shortcuts
+  try { win.setMenu(null) } catch {}
+  try { win.setMenuBarVisibility(false) } catch {}
   win.loadFile('renderer.html')
+  try {
+    // Intercept global key combos for terminal copy/paste and forward to renderer
+    win.webContents.on('before-input-event', (event, input) => {
+      try {
+        if (input && input.type === 'keyDown') {
+          // Linux-friendly shortcuts
+          const ctrlShift = !!input.control && !!input.shift && !input.alt && !input.meta
+          const isKey = (code, key) => (input.code === code) || (input.key && input.key.toUpperCase && input.key.toUpperCase() === key)
+          if (ctrlShift && isKey('KeyV', 'V')) {
+            try { win.webContents.send('clipboard-action', { type: 'paste' }) } catch {}
+            event.preventDefault()
+            return
+          }
+          if (ctrlShift && isKey('KeyC', 'C')) {
+            try { win.webContents.send('clipboard-action', { type: 'copy' }) } catch {}
+            event.preventDefault()
+            return
+          }
+          // Insert variants
+          if (!!input.shift && !input.control && !input.alt && isKey('Insert', 'Insert')) {
+            try { win.webContents.send('clipboard-action', { type: 'paste' }) } catch {}
+            event.preventDefault()
+            return
+          }
+          if (!!input.control && !input.shift && !input.alt && isKey('Insert', 'Insert')) {
+            try { win.webContents.send('clipboard-action', { type: 'copy' }) } catch {}
+            event.preventDefault()
+            return
+          }
+        }
+      } catch {}
+    })
+  } catch {}
 }
 
 app.whenReady().then(createWindow)
