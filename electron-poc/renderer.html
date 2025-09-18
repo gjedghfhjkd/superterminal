@@ -5,6 +5,54 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
     <style>
+      /* Theme overrides for light mode. Dark is the default via existing styles below. */
+      [data-theme="light"] body { color:#1f2937 }
+      [data-theme="light"] #left { background:#f5f7fb; color:#1f2937; border-right:1px solid #d7dbe7 }
+      [data-theme="light"] #left-topnav { border-bottom:1px solid #d7dbe7 }
+      [data-theme="light"] .left-tab { background:#eef1f7; border:1px solid #d7dbe7; color:#1f2937 }
+      [data-theme="light"] .left-tab:hover { background:#e9edf6 }
+      [data-theme="light"] #left-header { border-bottom:1px solid #d7dbe7 }
+      [data-theme="light"] .item:hover { background:#e9edf6 }
+      [data-theme="light"] .item.selected { background:#eef1f7; outline:1px solid #d7dbe7 }
+      [data-theme="light"] .caret { border-top-color:#6b7280 }
+      [data-theme="light"] .icon svg { fill:#6b7280 }
+      [data-theme="light"] .ctx-menu { background:#ffffff; border:1px solid #d7dbe7 }
+      [data-theme="light"] .drop-target { outline:1px dashed #93c5fd; background:#e8f0ff }
+      [data-theme="light"] #tabs { background:#f5f7fb; color:#1f2937; border-bottom:1px solid #d7dbe7 }
+      [data-theme="light"] .tab { background:#eef1f7; border:1px solid #d7dbe7; color:#1f2937 }
+      [data-theme="light"] .tab.active { background:#ffffff; color:#111827 }
+      [data-theme="light"] .tab .close { color:#6b7280 }
+      [data-theme="light"] #panes { background:#ffffff }
+      [data-theme="light"] #sftp-panel { background:#ffffff; color:#1f2937 }
+      [data-theme="light"] .sftp-controls { border-bottom:1px solid #d7dbe7 }
+      [data-theme="light"] .sftp-row:hover { background:#eef2f9 }
+      [data-theme="light"] .sftp-type { color:#6b7280 }
+      [data-theme="light"] #tun-panel { background:#ffffff; color:#1f2937 }
+      [data-theme="light"] .icon-btn { border:1px solid #d7dbe7; color:#1f2937 }
+      [data-theme="light"] .icon-btn:hover { background:#e9edf6 }
+      [data-theme="light"] #tun-list { border-top:1px solid #d7dbe7 }
+      [data-theme="light"] .tun-row:hover { background:#eef2f9 }
+      [data-theme="light"] .tun-col.small { color:#6b7280 }
+      [data-theme="light"] .modal { background:#ffffff; color:#1f2937; border:1px solid #d7dbe7 }
+      [data-theme="light"] .modal-header { border-bottom:1px solid #d7dbe7 }
+      [data-theme="light"] .modal-actions { border-top:1px solid #d7dbe7 }
+      [data-theme="light"] .input { background:#ffffff; color:#111827; border:1px solid #d7dbe7 }
+      [data-theme="light"] .input:focus { border-color:#93c5fd; box-shadow:0 0 0 3px rgba(147,197,253,.35) }
+      [data-theme="light"] .btn { background:#f3f4f6; color:#111827; border:1px solid #d7dbe7 }
+      [data-theme="light"] .btn:hover { background:#e9edf6 }
+      [data-theme="light"] .btn.primary { background:#2563eb; border-color:#2563eb }
+      [data-theme="light"] .btn.primary:hover { background:#1d4ed8 }
+      [data-theme="light"] ul { border-top:1px solid #e5e7eb }
+      /* Scrollbars (light) */
+      [data-theme="light"] .tree::-webkit-scrollbar-track, [data-theme="light"] .sftp-list::-webkit-scrollbar-track, [data-theme="light"] body::-webkit-scrollbar-track, [data-theme="light"] .xterm-viewport::-webkit-scrollbar-track { background:#f1f5f9 }
+      [data-theme="light"] .tree::-webkit-scrollbar-thumb, [data-theme="light"] .sftp-list::-webkit-scrollbar-thumb, [data-theme="light"] body::-webkit-scrollbar-thumb, [data-theme="light"] .xterm-viewport::-webkit-scrollbar-thumb { background:#cbd5e1; border:2px solid #f1f5f9 }
+      [data-theme="light"] .tree::-webkit-scrollbar-thumb:hover, [data-theme="light"] .sftp-list::-webkit-scrollbar-thumb:hover, [data-theme="light"] body::-webkit-scrollbar-thumb:hover, [data-theme="light"] .xterm-viewport::-webkit-scrollbar-thumb:hover { background:#94a3b8 }
+
+      /* Theme select */
+      .theme-select { appearance:none; background:#1a1f2d; color:#e6e6e6; border:1px solid #2a3040; border-radius:8px; padding:6px 8px; cursor:pointer }
+      .theme-select:hover { background:#22283a }
+      [data-theme="light"] .theme-select { background:#eef1f7; color:#1f2937; border:1px solid #d7dbe7 }
+      [data-theme="light"] .theme-select:hover { background:#e9edf6 }
       html, body { height:100%; overflow:hidden; }
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       #left { width:320px; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
@@ -93,6 +141,10 @@
         <div id="left-ssh" class="left-tab"><span class="icon"><svg viewBox="0 0 24 24"><path d="M3 12l4-4 4 4-4 4-4-4zm10-2h8v4h-8v-4z"/></svg></span>SSH</div>
         <div id="left-sftp" class="left-tab"><span class="icon sftp"><svg viewBox="0 0 24 24"><path d="M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h16v2H4v-2zm0 4h10v2H4v-2z"/></svg></span>SFTP</div>
         <div id="left-tun" class="left-tab"><span class="icon"><svg viewBox="0 0 24 24"><path d="M4 11h16v2H4v-2zm3-5h10v2H7V6zm0 10h10v2H7v-2z"/></svg></span>Tunneling</div>
+        <select id="theme-select" class="theme-select" title="Theme">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
       </div>
       <div id="left-header">Sessions</div>
       <div id="tree" class="tree"></div>
@@ -138,11 +190,16 @@
       let currentId = null
       let draggingId = null
 
+      function getXtermTheme() {
+        const isLight = document.documentElement.getAttribute('data-theme') === 'light'
+        return isLight ? { background:'#ffffff', foreground:'#111827' } : { background:'#0f111a', foreground:'#e6e6e6' }
+      }
+
       function createTerminalFor(id, title) {
         const pane = document.createElement('div')
         pane.className = 'pane'
         panesEl.appendChild(pane)
-        const term = new Terminal({ cursorBlink:true, theme:{ background:'#0f111a', foreground:'#e6e6e6' } })
+        const term = new Terminal({ cursorBlink:true, theme:getXtermTheme() })
         const fit = new FitAddon.FitAddon()
         term.loadAddon(fit)
         term.open(pane)
@@ -289,6 +346,35 @@
         }
       }
       window.addEventListener('resize', resize)
+
+      // Theme handling
+      const themeSelectEl = document.getElementById('theme-select')
+      function applyTheme(theme) {
+        const t = (theme === 'light') ? 'light' : 'dark'
+        document.documentElement.setAttribute('data-theme', t)
+        // Update all existing terminals
+        for (const { term } of terminals.values()) {
+          try { term.setOption('theme', getXtermTheme()) } catch {}
+        }
+      }
+      function updateThemeSelect(theme) {
+        const t = (theme === 'light') ? 'light' : 'dark'
+        if (themeSelectEl) themeSelectEl.value = t
+      }
+      async function initTheme() {
+        try {
+          const res = await window.api.settingsLoad()
+          const theme = (res && res.settings && res.settings.theme) || 'dark'
+          applyTheme(theme)
+          updateThemeSelect(theme)
+        } catch { applyTheme('dark'); updateThemeSelect('dark') }
+      }
+      initTheme()
+      themeSelectEl.onchange = async () => {
+        const theme = themeSelectEl.value
+        applyTheme(theme)
+        try { await window.api.settingsSave({ theme }) } catch {}
+      }
 
       // Tree state and helpers
       let sessionTree = []

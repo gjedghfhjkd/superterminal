@@ -48,5 +48,10 @@ contextBridge.exposeInMainWorld('api', {
   tunnelStop: (id, localPort) => ipcRenderer.invoke('tunnel-stop', { id, localPort }),
   tunnelsLoad: () => ipcRenderer.invoke('tunnels-load'),
   tunnelsSave: (list) => ipcRenderer.invoke('tunnels-save', list)
+  ,
+  // Settings (theme)
+  settingsLoad: () => ipcRenderer.invoke('settings-load'),
+  settingsSave: (settings) => ipcRenderer.invoke('settings-save', settings),
+  onSettingsUpdated: (cb) => ipcRenderer.on('settings-updated', (_, s) => cb && cb(s))
 })
 
