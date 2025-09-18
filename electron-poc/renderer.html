@@ -177,6 +177,7 @@
       const ZOOM_STEP = 1
       const ZOOM_MIN = 8
       const ZOOM_MAX = 64
+      const zoomGuard = { in:false, out:false, reset:false }
 
       function closeTabById(id) {
         try {
@@ -373,19 +374,14 @@
               copySelectedText()
               return false
             }
-            // Zoom in/out/reset
+            // Zoom in/out/reset (guarded per physical press)
             if (ev.ctrlKey) {
-              if (ev.repeat) {
-                // Ignore auto-repeat: one step per physical press
-                const isZoomKey = (ev.key === '+' || ev.key === '-' || ev.key === '=' || ev.code === 'NumpadAdd' || ev.code === 'NumpadSubtract')
-                if (isZoomKey) return false
-              }
               const isPlus = (ev.key === '+' || (ev.key === '=' && ev.shiftKey) || ev.code === 'NumpadAdd')
               const isMinus = (ev.key === '-' || ev.code === 'NumpadSubtract')
               const isReset = (ev.key === '=' && !ev.shiftKey)
-              if (isPlus) { applyZoom('in'); return false }
-              if (isMinus) { applyZoom('out'); return false }
-              if (isReset) { applyZoom('reset'); return false }
+              if (isPlus) { if (!zoomGuard.in) { applyZoom('in'); zoomGuard.in = true } return false }
+              if (isMinus) { if (!zoomGuard.out) { applyZoom('out'); zoomGuard.out = true } return false }
+              if (isReset) { if (!zoomGuard.reset) { applyZoom('reset'); zoomGuard.reset = true } return false }
             }
             return true
           })
@@ -913,21 +909,20 @@
         // Ctrl+- -> zoom out
         // Ctrl+= -> reset to initial font size
         if (e.ctrlKey) {
-          if (e.repeat) {
-            const isZoomKey = (e.key === '+' || e.key === '-' || e.key === '=' || e.code === 'NumpadAdd' || e.code === 'NumpadSubtract')
-            if (isZoomKey) { e.preventDefault(); e.stopPropagation(); return }
-          }
           // If event originated inside xterm, let xterm handler manage it to avoid double handling
           try {
             const t = e.target
             if (t && typeof t.closest === 'function' && t.closest('.xterm')) {
               // Do not handle here
-              // Allow xterm custom handler above to process this
             } else {
               const isPlus = (e.key === '+' || (e.key === '=' && e.shiftKey) || e.code === 'NumpadAdd')
               const isMinus = (e.key === '-' || e.code === 'NumpadSubtract')
               const isReset = (e.key === '=' && !e.shiftKey)
               if (isPlus || isMinus || isReset) {
+                // Guard to ensure one action per physical press
+                if ((isPlus && zoomGuard.in) || (isMinus && zoomGuard.out) || (isReset && zoomGuard.reset)) {
+                  e.preventDefault(); e.stopPropagation(); return
+                }
                 const rec = currentId != null ? terminals.get(currentId) : null
                 const term = rec && rec.term
                 if (term) {
@@ -944,6 +939,9 @@
                       try { resize() } catch {}
                     }
                   } catch {}
+                  if (isPlus) zoomGuard.in = true
+                  if (isMinus) zoomGuard.out = true
+                  if (isReset) zoomGuard.reset = true
                   e.preventDefault()
                   e.stopPropagation()
                   return
@@ -975,6 +973,16 @@
           await window.api.sessionsSaveTree(sessionTree)
           renderTree()
         }
+      })
+
+      // Clear zoom guard on keyup to allow next press
+      document.addEventListener('keyup', (e) => {
+        try {
+          if (e.key === 'Control') { zoomGuard.in = zoomGuard.out = zoomGuard.reset = false; return }
+          if (e.code === 'NumpadAdd' || e.key === '+' || (e.key === '=' && e.shiftKey)) { zoomGuard.in = false }
+          if (e.code === 'NumpadSubtract' || e.key === '-') { zoomGuard.out = false }
+          if (e.key === '=' && !e.shiftKey) { zoomGuard.reset = false }
+        } catch {}
       })
 
       // Modal for input (since prompt is disabled in secure Electron)
