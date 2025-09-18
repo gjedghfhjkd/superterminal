@@ -49,6 +49,20 @@ async function saveSessionsTree(tree) {
   await writeFile(sessionsFile(), JSON.stringify(payload, null, 2))
 }
 
+// App settings (theme)
+const settingsFile = () => path.join(app.getPath('userData'), 'settings.json')
+async function loadSettings() {
+  try {
+    const txt = await readFile(settingsFile(), 'utf-8')
+    const data = JSON.parse(txt)
+    return data && typeof data === 'object' ? data : {}
+  } catch { return {} }
+}
+async function saveSettings(settings) {
+  const payload = Object.assign({}, settings)
+  await writeFile(settingsFile(), JSON.stringify(payload, null, 2))
+}
+
 // Tunnels persistence
 const tunnelsFile = () => path.join(app.getPath('userData'), 'tunnels.json')
 async function loadTunnels() {
@@ -80,6 +94,18 @@ ipcMain.handle('sessions-load', async () => {
 ipcMain.handle('sessions-save', async (evt, tree) => {
   await saveSessionsTree(tree || [])
   try { win.webContents.send('sessions-updated') } catch {}
+  return { ok: true }
+})
+
+// Settings load/save
+ipcMain.handle('settings-load', async () => {
+  const settings = await loadSettings()
+  return { ok: true, settings }
+})
+ipcMain.handle('settings-save', async (evt, settings) => {
+  const merged = Object.assign({}, await loadSettings(), settings || {})
+  await saveSettings(merged)
+  try { win.webContents.send('settings-updated', merged) } catch {}
   return { ok: true }
 })
 
