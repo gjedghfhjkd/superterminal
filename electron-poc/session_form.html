@@ -284,24 +284,13 @@
         ignoreNextUserChange = true
         const sel = document.getElementById('userSelect')
         const opt = sel && sel.selectedOptions && sel.selectedOptions[0]
-        if (!opt || !opt.dataset || !opt.dataset.user) return
         const menu = document.createElement('div')
         menu.className = 'ctx-menu'
-        const del = document.createElement('div')
-        del.className = 'ctx-item'
-        del.textContent = 'Delete'
-        del.onmousedown = async (ev) => {
-          ev.preventDefault(); ev.stopPropagation()
-          hideCtx()
-          const ok = await showConfirm('Delete user', 'Delete selected user preset?')
-          if (!ok) return
-          let user = null
-          try { user = JSON.parse(decodeURIComponent(opt.dataset.user)) } catch {}
-          if (!user || !user.id) return
+        async function removeUserById(userId) {
           try {
             const res = await window.api.usersLoad()
             const users = Array.isArray(res?.users) ? res.users : []
-            const next = users.filter(u => u && u.id !== user.id)
+            const next = users.filter(u => u && u.id !== userId)
             await window.api.usersSave(next)
             await fillUsers()
             const sel2 = document.getElementById('userSelect')
@@ -309,7 +298,52 @@
             document.getElementById('userCustom').style.display = ''
           } catch {}
         }
-        menu.appendChild(del)
+        // If current selection is a preset, add quick delete for it
+        if (opt && opt.dataset && opt.dataset.user) {
+          const del = document.createElement('div')
+          del.className = 'ctx-item'
+          del.textContent = 'Delete selected'
+          del.onmousedown = async (ev) => {
+            ev.preventDefault(); ev.stopPropagation()
+            hideCtx()
+            let user = null
+            try { user = JSON.parse(decodeURIComponent(opt.dataset.user)) } catch {}
+            if (!user || !user.id) return
+            const ok = await showConfirm('Delete user', 'Delete selected user preset?')
+            if (!ok) return
+            await removeUserById(user.id)
+          }
+          menu.appendChild(del)
+        }
+        // Populate deletions for all users
+        ;(async () => {
+          try {
+            const res = await window.api.usersLoad()
+            const users = Array.isArray(res?.users) ? res.users : []
+            if (users.length) {
+              // Divider
+              const hr = document.createElement('div')
+              hr.style.borderTop = '1px solid #2a3040'
+              hr.style.margin = '6px 0'
+              menu.appendChild(hr)
+            }
+            for (const u of users) {
+              const label = u.name ? `${u.name} — ${u.username}${u.host?`@${u.host}`:''}` : `${u.username}${u.host?`@${u.host}`:''}`
+              const it = document.createElement('div')
+              it.className = 'ctx-item'
+              it.textContent = `Delete: ${label}`
+              it.onmousedown = async (ev) => {
+                ev.preventDefault(); ev.stopPropagation()
+                hideCtx()
+                const ok = await showConfirm('Delete user', `Delete user "${label}"?`)
+                if (!ok) return
+                if (!u.id) return
+                await removeUserById(u.id)
+              }
+              menu.appendChild(it)
+            }
+          } catch {}
+        })()
         document.body.appendChild(menu)
         const x = e.clientX, y = e.clientY
         menu.style.left = x + 'px'
