@@ -648,7 +648,7 @@
 
           const close = (val) => { try { document.body.removeChild(overlay) } catch {}; resolve(val) }
           btnOk.onclick = () => close(true)
-          overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close(true) })
+          overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close(cancelLabel ? false : true) })
           setTimeout(() => btnOk.focus(), 0)
         })
       }
