@@ -4,7 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
-      body { margin:0; font-family:sans-serif; background:#0b0d14; color:#cfd3dc }
+      html, body { height:100%; }
+      body { margin:0; font-family:sans-serif; background:#0b0d14; color:#cfd3dc; overflow:auto }
       .wrap { padding:14px }
       h3 { margin:0; padding:12px 14px; border-bottom:1px solid #1f2330 }
       label { display:block; font-size:12px; margin-top:8px }
@@ -12,6 +13,28 @@
       input:focus, select:focus, textarea:focus { border-color:#3a4160; box-shadow:0 0 0 3px rgba(42,48,64,.35) }
       button { margin-top:12px; background:#2a5bd7; border:1px solid #2a5bd7; color:#fff; padding:8px 12px; border-radius:8px; cursor:pointer }
       button:hover { background:#2f66ef }
+      /* Themed scrollbars */
+      body::-webkit-scrollbar { width:10px; height:10px }
+      body::-webkit-scrollbar-track { background:#0b0d14 }
+      body::-webkit-scrollbar-thumb { background:#2a3040; border-radius:8px; border:2px solid #0b0d14 }
+      body::-webkit-scrollbar-thumb:hover { background:#3a4160 }
+      /* Dropdown */
+      .dropdown-toggle { background:#121623; color:#e6e6e6; border:1px solid #2a3040; border-radius:8px; padding:8px 10px; padding-right:34px; outline:none; cursor:pointer; position:relative; display:block; width:100%; line-height:normal; min-height:38px }
+      .dropdown-toggle::after { content:""; position:absolute; right:10px; top:50%; width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:6px solid #8b90a0; transform:translateY(-50%); pointer-events:none }
+      .dropdown-menu { position:absolute; z-index:1000; left:0; right:0; top:calc(100% + 6px); background:#0f111a; border:1px solid #2a3040; border-radius:8px; padding:6px 0; max-height:220px; overflow:auto; box-shadow:0 6px 18px rgba(0,0,0,.4) }
+      .dropdown-item { display:flex; align-items:center; gap:8px; padding:6px 10px; color:#cfd3dc; cursor:pointer }
+      .dropdown-item:hover { background:#1a1f2d }
+      .dropdown-item .label { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+      .dropdown-item .del { color:#a66; padding:2px 6px; border-radius:6px; border:1px solid #3a3040 }
+      .dropdown-item .del:hover { background:#3a1f23; color:#fff }
+      .dropdown-divider { height:1px; background:#2a3040; margin:6px 0 }
+      .dropdown-hint { color:#8b90a0; font-size:12px; padding:4px 10px }
+      /* Modal */
+      .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; z-index:1100 }
+      .modal { width:320px; max-width:90vw; background:#0b0d14; color:#cfd3dc; border:1px solid #1f2330; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.5) }
+      .modal-header { padding:12px 14px; border-bottom:1px solid #1f2330; font-weight:600 }
+      .modal-body { padding:14px }
+      .modal-actions { padding:12px 14px; border-top:1px solid #1f2330; display:flex; gap:8px; justify-content:flex-end }
     </style>
   </head>
   <body>
@@ -25,8 +48,11 @@
     <label>Port</label>
     <input id="port" value="22" />
     <label>User</label>
-    <input id="user" value="root" />
-    <label>Auth</label>
+    <div id="userSelectWrap" style="position:relative; display:block">
+      <div id="userDropdown" class="dropdown-toggle" tabindex="0" style="flex:1"></div>
+      <input id="userCustom" class="input" placeholder="username" style="display:none; width:100%" />
+      <div id="userDropdownMenu" class="dropdown-menu" style="display:none"></div>
+    </div>
     <select id="auth">
       <option value="password">Password</option>
       <option value="key">SSH key</option>
@@ -50,21 +76,232 @@
         return params.get(name)
       }
       const sessionType = (getQueryParam('type') || 'SSH').toUpperCase()
+      let selectedUser = null
+      let forcedAuth = null
+      async function fillUsers() {
+        const toggle = document.getElementById('userDropdown')
+        const menu = document.getElementById('userDropdownMenu')
+        menu.innerHTML = ''
+        const res = await window.api.usersLoad().catch(() => ({ users: [] }))
+        const users = Array.isArray(res?.users) ? res.users : []
+        // Build dropdown items
+        for (const u of users) {
+          const item = document.createElement('div')
+          item.className = 'dropdown-item'
+          const label = u.name ? `${u.name} — ${u.username}${u.host?`@${u.host}`:''}` : `${u.username}${u.host?`@${u.host}`:''}`
+          const lab = document.createElement('div'); lab.className='label'; lab.textContent = label
+          const del = document.createElement('button'); del.className='del'; del.type='button'; del.textContent='Delete'
+          del.onclick = async (e) => {
+            e.stopPropagation()
+            const ok = await showConfirm('Delete user', `Delete user "${label}"?`)
+            if (!ok) return
+            await removeUserById(u.id)
+            await fillUsers()
+            hideDropdown()
+          }
+          item.onclick = () => { selectUser(u); hideDropdown() }
+          item.appendChild(lab)
+          item.appendChild(del)
+          menu.appendChild(item)
+        }
+        if (users.length) { const div = document.createElement('div'); div.className='dropdown-divider'; menu.appendChild(div) }
+        const createIt = document.createElement('div'); createIt.className='dropdown-item'; createIt.innerHTML = '<div class="label">Create user…</div>'
+        createIt.onclick = async () => {
+          await openCreateUser()
+          await fillUsers()
+          hideDropdown()
+        }
+        menu.appendChild(createIt)
+        const customIt = document.createElement('div'); customIt.className='dropdown-item'; customIt.innerHTML = '<div class="label">Custom username…</div>'
+        customIt.onclick = () => { selectCustom(); hideDropdown() }
+        menu.appendChild(customIt)
+        // Set toggle label
+        if (users.length) { toggle.textContent = (users[0].name ? `${users[0].name} — ${users[0].username}` : users[0].username) }
+        else { toggle.textContent = 'Custom username…'; document.getElementById('userCustom').style.display = 'none' }
+        // Default selection
+        if (users.length) { applySelectedUserFromOption({ dataset: { user: encodeURIComponent(JSON.stringify(users[0])) } }) }
+        else { /* stay in label state; user can open menu to create or set custom */ }
+      }
+      function showDropdown() { const m = document.getElementById('userDropdownMenu'); m.style.display='block' }
+      function hideDropdown() { const m = document.getElementById('userDropdownMenu'); m.style.display='none' }
+      function selectUser(u) {
+        const toggle = document.getElementById('userDropdown')
+        const label = u.name ? `${u.name} — ${u.username}${u.host?`@${u.host}`:''}` : `${u.username}${u.host?`@${u.host}`:''}`
+        toggle.textContent = label
+        toggle.style.display = 'block'
+        document.getElementById('userCustom').style.display = 'none'
+        applySelectedUserFromOption({ dataset: { user: encodeURIComponent(JSON.stringify(u)) } })
+      }
+      function selectCustom() {
+        const toggle = document.getElementById('userDropdown')
+        toggle.textContent = 'Custom username…'
+        toggle.style.display = 'block'
+        document.getElementById('userCustom').style.display = ''
+        selectedUser = null
+        forcedAuth = null
+        document.getElementById('auth').style.display = ''
+        onAuthChange()
+      }
+      async function openCreateUser() {
+        try {
+          const res = await window.api.openUserWindow(null)
+          const u = res && res.user
+          if (u && u.username) {
+            const listRes = await window.api.usersLoad()
+            const users = Array.isArray(listRes?.users) ? listRes.users : []
+            u.id = u.id || ('usr_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7))
+            const idx = users.findIndex(x => x && x.id === u.id)
+            if (idx >= 0) users[idx] = u; else users.push(u)
+            await window.api.usersSave(users)
+          }
+        } catch {}
+      }
+      async function removeUserById(userId) {
+        try {
+          const res = await window.api.usersLoad()
+          const users = Array.isArray(res?.users) ? res.users : []
+          const next = users.filter(u => u && u.id !== userId)
+          await window.api.usersSave(next)
+        } catch {}
+      }
+      function applySelectedUserFromOption(opt) {
+        selectedUser = null
+        forcedAuth = null
+        const userInput = document.getElementById('userCustom')
+        const authSel = document.getElementById('auth')
+        const lblPassword = document.getElementById('lbl-password')
+        const inputPassword = document.getElementById('password')
+        const lblKey = document.getElementById('lbl-key')
+        const inputKey = document.getElementById('pkey')
+        const lblPassphrase = document.getElementById('lbl-passphrase')
+        const inputPassphrase = document.getElementById('passphrase')
+        const filepick = document.getElementById('filepick')
+        // Reset UI defaults
+        userInput.style.display = 'none'
+        authSel.style.display = ''
+        lblPassword.style.display = ''
+        inputPassword.style.display = ''
+        lblKey.style.display = 'none'
+        inputKey.style.display = 'none'
+        if (filepick) filepick.style.display = 'none'
+        lblPassphrase.style.display = 'none'
+        inputPassphrase.style.display = 'none'
+        document.getElementById('auth').value = 'password'
+        if (opt && opt.dataset.user) {
+          try { selectedUser = JSON.parse(decodeURIComponent(opt.dataset.user)) } catch {}
+        }
+        if (selectedUser) {
+          // Lock to selected username
+          userInput.value = selectedUser.username || ''
+          // If user has password, hide password method and inputs; force password auth
+          if (selectedUser.password && String(selectedUser.password).length) {
+            forcedAuth = 'password'
+            authSel.style.display = 'none'
+            lblPassword.style.display = 'none'
+            inputPassword.style.display = 'none'
+            // Key inputs also hidden to avoid conflicting creds
+            lblKey.style.display = 'none'
+            inputKey.style.display = 'none'
+            if (filepick) filepick.style.display = 'none'
+            lblPassphrase.style.display = 'none'
+            inputPassphrase.style.display = 'none'
+          } else if (selectedUser.privateKey && String(selectedUser.privateKey).length) {
+            // If user has key, force key auth and hide all auth inputs
+            forcedAuth = 'key'
+            authSel.style.display = 'none'
+            lblPassword.style.display = 'none'
+            inputPassword.style.display = 'none'
+            lblKey.style.display = 'none'
+            inputKey.style.display = 'none'
+            if (filepick) filepick.style.display = 'none'
+            lblPassphrase.style.display = 'none'
+            inputPassphrase.style.display = 'none'
+          } else {
+            // Show auth selector for cases without stored password
+            authSel.style.display = ''
+            if (selectedUser.auth) { try { authSel.value = selectedUser.auth } catch {} }
+            onAuthChange()
+          }
+        }
+      }
+      let ignoreNextUserChange = false
+      async function onUserSelectionChange() {
+        if (ignoreNextUserChange) { ignoreNextUserChange = false; return }
+        const sel = document.getElementById('userSelect')
+        const val = sel.value
+        if (val === '__create__') {
+          // Open create user modal
+          try {
+            const res = await window.api.openUserWindow(null)
+            const u = res && res.user
+            if (u && u.username) {
+              const listRes = await window.api.usersLoad()
+              const users = Array.isArray(listRes?.users) ? listRes.users : []
+              u.id = u.id || ('usr_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7))
+              const idx = users.findIndex(x => x && x.id === u.id)
+              if (idx >= 0) users[idx] = u; else users.push(u)
+              await window.api.usersSave(users)
+              await fillUsers()
+              // Select the newly created user
+              const sel2 = document.getElementById('userSelect')
+              for (const o of sel2.options) {
+                try { const x = o.dataset.user ? JSON.parse(decodeURIComponent(o.dataset.user)) : null; if (x && x.id === u.id) { o.selected = true; applySelectedUserFromOption(o); break } } catch {}
+              }
+            } else {
+              // Revert to custom if creation cancelled
+              const sel2 = document.getElementById('userSelect')
+              sel2.value = '__custom__'
+              document.getElementById('userCustom').style.display = ''
+            }
+          } catch {
+            const sel2 = document.getElementById('userSelect')
+            sel2.value = '__custom__'
+            document.getElementById('userCustom').style.display = ''
+          }
+        } else if (val === '__custom__') {
+          selectedUser = null
+          forcedAuth = null
+          document.getElementById('userCustom').style.display = ''
+          // Reset auth UI to editable
+          document.getElementById('auth').style.display = ''
+          onAuthChange()
+        } else {
+          applySelectedUserFromOption(sel.selectedOptions[0])
+        }
+      }
+      let editPreset = null
       try {
         const presetRaw = getQueryParam('preset')
         if (presetRaw) {
-          const preset = JSON.parse(decodeURIComponent(presetRaw))
-          if (preset.name) document.getElementById('name').value = preset.name
-          if (preset.host) document.getElementById('host').value = preset.host
-          if (preset.port) document.getElementById('port').value = String(preset.port)
-          if (preset.username) document.getElementById('user').value = preset.username
-          if (preset.auth) document.getElementById('auth').value = preset.auth
-          if (preset.password) document.getElementById('password').value = preset.password
-          if (preset.privateKey) document.getElementById('pkey').value = preset.privateKey
-          if (preset.passphrase) document.getElementById('passphrase').value = preset.passphrase
+          editPreset = JSON.parse(decodeURIComponent(presetRaw))
+          if (editPreset.name) document.getElementById('name').value = editPreset.name
+          if (editPreset.host) document.getElementById('host').value = editPreset.host
+          if (editPreset.port) document.getElementById('port').value = String(editPreset.port)
+          if (editPreset.auth) document.getElementById('auth').value = editPreset.auth
+          if (editPreset.password) document.getElementById('password').value = editPreset.password
+          if (editPreset.privateKey) document.getElementById('pkey').value = editPreset.privateKey
+          if (editPreset.passphrase) document.getElementById('passphrase').value = editPreset.passphrase
         }
       } catch {}
       document.getElementById('title').textContent = `Create ${sessionType} Session`
+      ;(async () => {
+        await fillUsers()
+        // If editing existing preset, try to select it in dropdown label state
+        if (editPreset && editPreset.userPreset) {
+          selectUser(editPreset.userPreset)
+        } else if (editPreset && editPreset.username) {
+          selectCustom()
+          document.getElementById('userCustom').value = editPreset.username
+        }
+        const toggle = document.getElementById('userDropdown')
+        const menu = document.getElementById('userDropdownMenu')
+        function outside(e) { if (!menu.contains(e.target) && !toggle.contains(e.target)) { hideDropdown(); document.removeEventListener('mousedown', outside) } }
+        toggle.addEventListener('click', () => { const open = menu.style.display!=='none'; if (open) hideDropdown(); else { showDropdown(); setTimeout(()=>document.addEventListener('mousedown', outside), 0) } })
+        toggle.addEventListener('keydown', (e) => { if (e.key==='Enter' || e.key===' ') { e.preventDefault(); toggle.click() } })
+        // When in custom mode (input visible), clicking on label should still open menu to switch back
+        document.getElementById('userCustom').addEventListener('contextmenu', (e) => { e.preventDefault(); toggle.click() })
+        document.getElementById('userCustom').addEventListener('mousedown', (e) => { if (e.button===2) { e.preventDefault(); toggle.click() } })
+      })()
 
       function updateAuth() {
         const isKey = document.getElementById('auth').value === 'key'
@@ -77,6 +314,7 @@
         document.getElementById('passphrase').style.display = isKey ? '' : 'none'
       }
       document.getElementById('auth').addEventListener('change', updateAuth)
+      function onAuthChange() { updateAuth() }
       updateAuth()
       document.getElementById('choose').addEventListener('click', () => document.getElementById('keyfile').click())
       document.getElementById('keyfile').addEventListener('change', async (e) => {
@@ -87,18 +325,62 @@
         document.getElementById('fname').textContent = file ? file.name : ''
       })
       document.getElementById('btn-save').onclick = async () => {
-        const sess = {
+        const sessBase = {
           type: sessionType,
           name: (document.getElementById('name').value || document.getElementById('host').value || '').trim(),
           host: document.getElementById('host').value,
           port: Number(document.getElementById('port').value),
-          username: document.getElementById('user').value,
-          auth: document.getElementById('auth').value,
-          password: document.getElementById('password').value,
-          privateKey: document.getElementById('pkey').value,
-          passphrase: document.getElementById('passphrase').value
+          username: selectedUser ? (selectedUser.username || '') : (document.getElementById('userCustom').value || 'root'),
+          auth: forcedAuth ? forcedAuth : document.getElementById('auth').value,
+          password: forcedAuth ? '' : document.getElementById('password').value,
+          privateKey: forcedAuth ? '' : document.getElementById('pkey').value,
+          passphrase: forcedAuth ? '' : document.getElementById('passphrase').value
         }
+        // Merge selected user preset if chosen; for password preset, do not duplicate password into session fields
+        let sess = Object.assign({}, selectedUser ? {
+          host: selectedUser.host || undefined,
+          port: selectedUser.port || undefined,
+          username: selectedUser.username || undefined,
+          auth: selectedUser.password ? 'password' : (selectedUser.auth || undefined),
+          userPreset: selectedUser
+        } : {}, sessBase)
         try { window.api.sessionFormSubmit(sess) } catch {}
+      }
+
+      // Context menu removed; deletion now available inline in dropdown
+
+      function showConfirm(title, message) {
+        return new Promise((resolve) => {
+          const overlay = document.createElement('div')
+          overlay.className = 'modal-overlay'
+          const modal = document.createElement('div')
+          modal.className = 'modal'
+          const header = document.createElement('div')
+          header.className = 'modal-header'
+          header.textContent = title
+          const body = document.createElement('div')
+          body.className = 'modal-body'
+          body.textContent = message
+          const actions = document.createElement('div')
+          actions.className = 'modal-actions'
+          const btnCancel = document.createElement('button')
+          btnCancel.className = 'btn'
+          btnCancel.textContent = 'Cancel'
+          const btnOk = document.createElement('button')
+          btnOk.className = 'btn'
+          btnOk.style.background = '#2a5bd7'; btnOk.style.borderColor = '#2a5bd7'
+          btnOk.textContent = 'Delete'
+          actions.appendChild(btnCancel)
+          actions.appendChild(btnOk)
+          modal.appendChild(header); modal.appendChild(body); modal.appendChild(actions)
+          overlay.appendChild(modal)
+          document.body.appendChild(overlay)
+          const close = (val) => { try { document.body.removeChild(overlay) } catch {}; resolve(val) }
+          btnCancel.onclick = () => close(false)
+          btnOk.onclick = () => close(true)
+          overlay.addEventListener('keydown', (e2) => { if (e2.key==='Escape') close(false) })
+          setTimeout(() => btnOk.focus(), 0)
+        })
       }
     </script>
   </body>
