@@ -375,6 +375,11 @@
             }
             // Zoom in/out/reset
             if (ev.ctrlKey) {
+              if (ev.repeat) {
+                // Ignore auto-repeat: one step per physical press
+                const isZoomKey = (ev.key === '+' || ev.key === '-' || ev.key === '=' || ev.code === 'NumpadAdd' || ev.code === 'NumpadSubtract')
+                if (isZoomKey) return false
+              }
               const isPlus = (ev.key === '+' || (ev.key === '=' && ev.shiftKey) || ev.code === 'NumpadAdd')
               const isMinus = (ev.key === '-' || ev.code === 'NumpadSubtract')
               const isReset = (ev.key === '=' && !ev.shiftKey)
@@ -908,31 +913,44 @@
         // Ctrl+- -> zoom out
         // Ctrl+= -> reset to initial font size
         if (e.ctrlKey) {
-          const isPlus = (e.key === '+' || (e.key === '=' && e.shiftKey) || e.code === 'NumpadAdd')
-          const isMinus = (e.key === '-' || e.code === 'NumpadSubtract')
-          const isReset = (e.key === '=' && !e.shiftKey)
-          if (isPlus || isMinus || isReset) {
-            const rec = currentId != null ? terminals.get(currentId) : null
-            const term = rec && rec.term
-            if (term) {
-              try {
-                const current = (typeof rec.currFontSize === 'number') ? rec.currFontSize : (Number(term.options && term.options.fontSize) || 15)
-                const base = (typeof rec.baseFontSize === 'number') ? rec.baseFontSize : (Number(term.options && term.options.fontSize) || 15)
-                let next = current
-                if (isPlus) next = Math.min(ZOOM_MAX, current + ZOOM_STEP)
-                else if (isMinus) next = Math.max(ZOOM_MIN, current - ZOOM_STEP)
-                else if (isReset) next = base
-                if (next !== current) {
-                  try { term.options.fontSize = next } catch {}
-                  rec.currFontSize = next
-                  try { resize() } catch {}
-                }
-              } catch {}
-              e.preventDefault()
-              e.stopPropagation()
-              return
-            }
+          if (e.repeat) {
+            const isZoomKey = (e.key === '+' || e.key === '-' || e.key === '=' || e.code === 'NumpadAdd' || e.code === 'NumpadSubtract')
+            if (isZoomKey) { e.preventDefault(); e.stopPropagation(); return }
           }
+          // If event originated inside xterm, let xterm handler manage it to avoid double handling
+          try {
+            const t = e.target
+            if (t && typeof t.closest === 'function' && t.closest('.xterm')) {
+              // Do not handle here
+              // Allow xterm custom handler above to process this
+            } else {
+              const isPlus = (e.key === '+' || (e.key === '=' && e.shiftKey) || e.code === 'NumpadAdd')
+              const isMinus = (e.key === '-' || e.code === 'NumpadSubtract')
+              const isReset = (e.key === '=' && !e.shiftKey)
+              if (isPlus || isMinus || isReset) {
+                const rec = currentId != null ? terminals.get(currentId) : null
+                const term = rec && rec.term
+                if (term) {
+                  try {
+                    const current = (typeof rec.currFontSize === 'number') ? rec.currFontSize : (Number(term.options && term.options.fontSize) || 15)
+                    const base = (typeof rec.baseFontSize === 'number') ? rec.baseFontSize : (Number(term.options && term.options.fontSize) || 15)
+                    let next = current
+                    if (isPlus) next = Math.min(ZOOM_MAX, current + ZOOM_STEP)
+                    else if (isMinus) next = Math.max(ZOOM_MIN, current - ZOOM_STEP)
+                    else if (isReset) next = base
+                    if (next !== current) {
+                      try { term.options.fontSize = next } catch {}
+                      rec.currFontSize = next
+                      try { resize() } catch {}
+                    }
+                  } catch {}
+                  e.preventDefault()
+                  e.stopPropagation()
+                  return
+                }
+              }
+            }
+          } catch {}
         }
         if (e.key === 'Delete' && selectedId) {
           const ok = await showConfirmModal('Delete', 'Delete selected item?', 'Delete', 'Cancel')
