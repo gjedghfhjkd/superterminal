@@ -6,14 +6,14 @@
     <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
     <style>
       html, body { height:100%; overflow:hidden; }
-      body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
+      body { margin:0; display:flex; height:100vh; font-family:sans-serif; cursor:var(--app-cursor, default); }
       #left { width:320px; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
       #left-topnav { padding:6px 8px; border-bottom:1px solid #1f2330; display:flex; gap:6px; align-items:center; }
       .left-tab { cursor:pointer; padding:6px 10px; border-radius:8px; border:1px solid #2a3040; color:#cfd3dc; background:#1a1f2d; display:flex; align-items:center; gap:6px; }
       .left-tab:hover { background:#22283a; }
       #left-header { padding:10px 12px; border-bottom:1px solid #1f2330; font-weight:600; letter-spacing:0.2px; }
       .tree { flex:1; overflow:auto; padding:6px 4px; }
-      .item { user-select:none; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:6px; cursor:pointer; position:relative; transition: background .15s ease, transform .12s ease, box-shadow .15s ease; }
+      .item { user-select:none; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:6px; cursor:var(--app-cursor, pointer); position:relative; transition: background .15s ease, transform .12s ease, box-shadow .15s ease; }
       .item:hover { background:#121623; transform: translateX(2px); }
       .item.selected { background:#1a1f2d; outline:1px solid #2a3040; }
       .item .icon svg, .item .label { transition: color .15s ease, fill .15s ease, opacity .15s ease; }
@@ -38,12 +38,12 @@
       .drop-target { outline:1px dashed #3a4160; background:#141a29; }
       #right { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
       #tabs { height:36px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:flex-end; gap:6px; padding:0 8px; box-sizing:border-box; }
-      .tab { cursor:pointer; padding:6px 10px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; position:relative; transition:background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease; }
+      .tab { cursor:var(--app-cursor, pointer); padding:6px 10px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; position:relative; transition:background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease; }
       .tab:hover { background:#22283a; border-color:#3a4160; }
       .tab.active { background:#0b0d14; color:#ffffff; border-color:#3a4160; box-shadow:0 0 0 1px #3a4160 inset; font-weight:600; }
       .tab.active::after { content:""; position:absolute; left:8px; right:8px; bottom:-1px; height:3px; border-radius:3px 3px 0 0; background:linear-gradient(90deg,#2f66ef,#7a5cf0); }
       .tab .title { pointer-events:none; }
-      .tab .close { margin-left:8px; color:#8b90a0; opacity:.8; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; transition:background .15s ease, color .15s ease, opacity .15s ease, box-shadow .15s ease; }
+      .tab .close { margin-left:8px; color:#8b90a0; opacity:.8; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; transition:background .15s ease, color .15s ease, opacity .15s ease, box-shadow .15s ease; cursor:pointer; }
       .tab:hover .close { opacity:.95; color:#a0a6b8; }
       .tab .close:hover { color:#e6e6e6; background:#2a3040; opacity:1; box-shadow:0 0 0 2px rgba(58,65,96,.35) inset; }
 
@@ -167,6 +167,18 @@
       const THEME_BASE = '#0b0d14'
       const THEME_ACCENT = '#2a5bd7'
       const DEFAULT_FOLDER_COLOR = THEME_BASE
+
+      function closeTabById(id) {
+        try {
+          const rec = terminals.get(id)
+          if (rec) { try { rec.term.dispose() } catch {}; try { rec.el.remove() } catch {}; terminals.delete(id) }
+          const t = tabs.get(id)
+          if (t) { try { t.remove() } catch {}; tabs.delete(id) }
+          if (currentId === id) currentId = null
+          const next = [...tabs.keys()][0]
+          if (next != null) activateTab(next)
+        } catch {}
+      }
 
       function createTerminalFor(id, title) {
         const pane = document.createElement('div')
@@ -417,12 +429,12 @@
             row.ondblclick = async () => {
               if (n.type === 'folder') { return }
               if (n.type === 'session') {
-                try {
-                  const s = n.session
-                  if ((s.type||'SSH').toUpperCase() === 'SFTP') {
-                    // Always create a new SFTP connection/tab
-                    const rid = genId('sftp')
-                    const cfg = Object.assign({}, s, { id: rid })
+                const s = n.session
+                if ((s.type||'SSH').toUpperCase() === 'SFTP') {
+                  // Create SFTP connection first, then tab
+                  const rid = genId('sftp')
+                  const cfg = Object.assign({}, s, { id: rid })
+                  try {
                     await window.api.sftpConnect(cfg)
                     const title = `${s.type || 'SFTP'} ${s.name||s.host} (${s.username})`
                     const parentColor = findParentFolderColor(sessionTree, n.id)
@@ -434,17 +446,21 @@
                     activateTab(rid)
                     await initSftpSplitIfNeeded(rid)
                     await navigateRemote('/')
-                  } else {
-                    // Always create a new SSH terminal/tab
-                    const rid = genId('ssh')
-                    const title = `${s.type || 'SSH'} ${s.name||s.host} (${s.username})`
-                    const parentColor = findParentFolderColor(sessionTree, n.id)
-                    createTerminalFor(rid, title)
-                    if (parentColor) {
-                      const tabEl = tabs.get(rid)
-                      if (tabEl) { tabEl.dataset.color = '1'; tabEl.style.setProperty('--tab-color', parentColor) }
-                    }
-                    const cfg = Object.assign({}, s, { id: rid })
+                  } catch (e) {
+                    await showErrorModal('Connection error', String(e?.message||e))
+                  }
+                } else {
+                  // Create SSH tab, attempt connect; on failure close tab and show styled error
+                  const rid = genId('ssh')
+                  const title = `${s.type || 'SSH'} ${s.name||s.host} (${s.username})`
+                  const parentColor = findParentFolderColor(sessionTree, n.id)
+                  createTerminalFor(rid, title)
+                  if (parentColor) {
+                    const tabEl = tabs.get(rid)
+                    if (tabEl) { tabEl.dataset.color = '1'; tabEl.style.setProperty('--tab-color', parentColor) }
+                  }
+                  const cfg = Object.assign({}, s, { id: rid })
+                  try {
                     await window.api.sshConnect(cfg)
                     await window.api.sshOpenPtyId(rid)
                     try { await window.api.sftpConnect(cfg) } catch {}
@@ -454,8 +470,11 @@
                     rec.term.write('\r\n[Connected]\r\n')
                     showSshView()
                     activateTab(rid)
+                  } catch (e) {
+                    closeTabById(rid)
+                    await showErrorModal('Connection error', String(e?.message||e))
                   }
-                } catch (e) { alert('Connect error: ' + (e?.message||e)) }
+                }
               }
             }
             row.oncontextmenu = (e) => { e.preventDefault(); selectedId = n.id; renderTree(); openCtxMenu(e.clientX, e.clientY, n) }
