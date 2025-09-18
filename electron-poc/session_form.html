@@ -123,6 +123,17 @@
             if (filepick) filepick.style.display = 'none'
             lblPassphrase.style.display = 'none'
             inputPassphrase.style.display = 'none'
+          } else if (selectedUser.privateKey && String(selectedUser.privateKey).length) {
+            // If user has key, force key auth and hide all auth inputs
+            forcedAuth = 'key'
+            authSel.style.display = 'none'
+            lblPassword.style.display = 'none'
+            inputPassword.style.display = 'none'
+            lblKey.style.display = 'none'
+            inputKey.style.display = 'none'
+            if (filepick) filepick.style.display = 'none'
+            lblPassphrase.style.display = 'none'
+            inputPassphrase.style.display = 'none'
           } else {
             // Show auth selector for cases without stored password
             authSel.style.display = ''
