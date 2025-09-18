@@ -580,7 +580,6 @@
         container.splice(insertIndex, 0, srcNode)
 
         await window.api.sessionsSaveTree(sessionTree)
-        renderTree()
       }
 
       function openCtxMenu(x, y, targetNode=null) {
@@ -602,7 +601,6 @@
           if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
           else targetNode.children.push(node)
           await window.api.sessionsSaveTree(sessionTree)
-          renderTree()
         })
         add('New Session', async () => {
           const res = await window.api.openSessionWindow('SSH')
@@ -612,7 +610,6 @@
           if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
           else targetNode.children.push(node)
           await window.api.sessionsSaveTree(sessionTree)
-          renderTree()
         })
         add('Edit…', async () => {
           if (!targetNode) return
@@ -630,7 +627,6 @@
             if (res.color) targetNode.color = res.color
           }
           await window.api.sessionsSaveTree(sessionTree)
-          renderTree()
         })
         if (targetNode) {
           add('Delete…', async () => {
@@ -639,7 +635,6 @@
             removeNodeById(targetNode.id)
             selectedId = null
             await window.api.sessionsSaveTree(sessionTree)
-            renderTree()
           })
         }
         menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.style.display = 'block'
@@ -961,10 +956,12 @@
       }
 
       // Load tree
+      let renderPending = null
       async function refreshSessions() {
         const res = await window.api.sessionsLoad()
         sessionTree = Array.isArray(res?.tree) ? res.tree : []
-        renderTree()
+        if (renderPending) cancelAnimationFrame(renderPending)
+        renderPending = requestAnimationFrame(() => { renderPending = null; renderTree() })
       }
       refreshSessions()
       window.api.onSessionsUpdated(() => refreshSessions())
