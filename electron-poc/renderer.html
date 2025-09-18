@@ -257,6 +257,16 @@
             try { target.dispatchEvent(mk('click')) } catch {}
           } catch {}
         }
+        const collapseInputCaret = () => {
+          try {
+            const el = xtermEl()
+            const ta = el ? el.querySelector('.xterm-helper-textarea') : null
+            if (ta && typeof ta.setSelectionRange === 'function') {
+              const len = Number(ta.value ? ta.value.length : 0)
+              try { ta.setSelectionRange(len, len) } catch {}
+            }
+          } catch {}
+        }
         const clearOsSelectionByDummy = () => {
           try {
             const dummy = document.createElement('span')
@@ -320,7 +330,7 @@
                   try { window.api.sshSendId(currentId, text) } catch {}
                 } finally {
                   try { lastSelection = '' } catch {}
-                  const clearCycle = () => { try { clearXtermSelectionDeep() } catch {}; try { term.focus() } catch {} }
+          const clearCycle = () => { try { clearXtermSelectionDeep() } catch {}; try { collapseInputCaret() } catch {}; try { term.blur?.() } catch {}; try { term.focus() } catch {} }
                   try { clearCycle() } catch {}
                   try { requestAnimationFrame(() => clearCycle()) } catch {}
                   try { setTimeout(() => clearCycle(), 0) } catch {}
