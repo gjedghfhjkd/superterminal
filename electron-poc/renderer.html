@@ -523,8 +523,10 @@
               row.style.setProperty('--my', y + 'px')
             })
             row.addEventListener('dragover', (e) => {
-              if (!draggingId || draggingId === n.id) return
-              e.preventDefault(); e.stopPropagation()
+              const hasDrag = Array.isArray(draggingIds) && draggingIds.length > 0
+              if (!hasDrag) return
+              e.preventDefault(); e.stopPropagation();
+              try { e.dataTransfer.dropEffect = 'move' } catch {}
               row.classList.add('drop-target')
             })
             row.addEventListener('dragleave', () => row.classList.remove('drop-target'))
@@ -716,13 +718,14 @@
       }
       document.getElementById('left').oncontextmenu = (e) => { if (e.target && e.target.closest('.item')) return; e.preventDefault(); openCtxMenu(e.clientX, e.clientY, null) }
       document.addEventListener('keydown', async (e) => {
-        if (e.key === 'Delete' && selectedId) {
+        if (e.key === 'Delete' && (selectedIds.size || selectedId)) {
           const ok = await showConfirmModal('Delete', 'Delete selected item?', 'Delete', 'Cancel')
           if (!ok) return
-          removeNodeById(selectedId)
-          selectedId = null
+          const ids = selectedIds.size ? Array.from(selectedIds) : (selectedId ? [selectedId] : [])
+          for (const id of ids) { removeNodeById(id) }
+          selectedId = null; selectedIds = new Set(); lastClickedId = null
           await window.api.sessionsSaveTree(sessionTree)
-        renderTree()
+          renderTree()
         }
 
       async function moveMany(sourceIds, targetNode) {
