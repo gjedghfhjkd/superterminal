@@ -39,12 +39,13 @@ contextBridge.exposeInMainWorld('api', {
   localRename: (from, to) => ipcRenderer.invoke('local-rename', { from, to }),
   localMkdir: (localPath) => ipcRenderer.invoke('local-mkdir', { path: localPath }),
   getHome: () => ipcRenderer.invoke('get-home'),
-  sftpDisconnect: (id) => ipcRenderer.invoke('sftp-disconnect', id)
-  ,
+  sftpDisconnect: (id) => ipcRenderer.invoke('sftp-disconnect', id),
+  // OS-aware path helpers (local)
+  pathJoin: (a, b) => ipcRenderer.invoke('path-join', { a, b }),
+  pathDirname: (p) => ipcRenderer.invoke('path-dirname', { p }),
   // Tunneling
   tunnelStart: (id, localHost, localPort, remoteHost, remotePort) => ipcRenderer.invoke('tunnel-start', { id, localHost, localPort, remoteHost, remotePort }),
-  tunnelStop: (id, localPort) => ipcRenderer.invoke('tunnel-stop', { id, localPort })
-  ,
+  tunnelStop: (id, localPort) => ipcRenderer.invoke('tunnel-stop', { id, localPort }),
   tunnelsLoad: () => ipcRenderer.invoke('tunnels-load'),
   tunnelsSave: (list) => ipcRenderer.invoke('tunnels-save', list)
 })

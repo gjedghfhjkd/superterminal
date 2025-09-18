@@ -221,7 +221,14 @@ ipcMain.handle('sftp-list', async (evt, remotePath) => {
   for (const rec of connections.values()) { if (rec.sftp) { first = rec.sftp; break } }
   if (!first) throw new Error('No SFTP connection')
   const list = await first.list(remotePath)
-  return list.map(e => ({ name: e.name, size: e.size, type: e.type }))
+  // Normalize: ensure basename-only names and stable types
+  return list.map(e => {
+    const raw = String(e.name || '')
+    const normalized = raw.replace(/\\+/g, '/').split('/').filter(Boolean)
+    const base = normalized.length ? normalized[normalized.length - 1] : raw
+    const type = (e.type === 'd') ? 'd' : (e.type === 'l' ? 'd' : 'file')
+    return { name: base, displayName: base, pathName: base, size: e.size, type }
+  })
 })
 
 // Per-connection SFTP list
@@ -230,13 +237,13 @@ ipcMain.handle('sftp-list-id', async (evt, payload) => {
   const rec = connections.get(id)
   if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
   const list = await rec.sftp.list(remotePath)
-  return list.map(e => ({
-    name: e.name,
-    displayName: e.name,
-    pathName: e.name,
-    size: e.size,
-    type: e.type
-  }))
+  return list.map(e => {
+    const raw = String(e.name || '')
+    const normalized = raw.replace(/\\+/g, '/').split('/').filter(Boolean)
+    const base = normalized.length ? normalized[normalized.length - 1] : raw
+    const type = (e.type === 'd') ? 'd' : (e.type === 'l' ? 'd' : 'file')
+    return { name: base, displayName: base, pathName: base, size: e.size, type }
+  })
 })
 
 // SFTP file operations
@@ -374,11 +381,15 @@ ipcMain.handle('local-list', async (evt, localPath) => {
       const name = ent.name
       let type = 'file'
       try {
-        if (ent.isDirectory()) type = 'd'
-        else if (ent.isSymbolicLink()) {
+        if (ent.isDirectory()) {
+          type = 'd'
+        } else if (ent.isSymbolicLink()) {
+          // Treat Windows junctions/symlinks as non-navigable to avoid EPERM on legacy compatibility links
           const full = path.join(dirPath, name)
-          const st = await stat(full).catch(() => null)
-          type = st && st.isDirectory() ? 'd' : 'file'
+          let st = null
+          try { st = await stat(full) } catch (e) { st = null }
+          type = 'link'
+          // If explicitly desired, we could attempt to navigate only when readable, but default to non-dir
         }
       } catch {}
       return { name, type }
@@ -393,6 +404,25 @@ ipcMain.handle('local-list', async (evt, localPath) => {
 
 ipcMain.handle('get-home', async () => {
   try { return app.getPath('home') } catch { return '/' }
+})
+
+// OS-aware path helpers for renderer (local FS only)
+ipcMain.handle('path-join', async (evt, payload) => {
+  try {
+    const a = (payload && payload.a) || ''
+    const b = (payload && payload.b) || ''
+    return path.join(a, b)
+  } catch (e) {
+    return ''
+  }
+})
+ipcMain.handle('path-dirname', async (evt, payload) => {
+  try {
+    const p = (payload && payload.p) || ''
+    return path.dirname(p)
+  } catch (e) {
+    return ''
+  }
 })
 
 ipcMain.handle('sftp-disconnect', async (evt, id) => {

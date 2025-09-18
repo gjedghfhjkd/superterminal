@@ -653,6 +653,38 @@
         })
       }
 
+      function showErrorModal(title, message) {
+        return new Promise((resolve) => {
+          const overlay = document.createElement('div')
+          overlay.className = 'modal-overlay'
+          const modal = document.createElement('div')
+          modal.className = 'modal'
+          const header = document.createElement('div')
+          header.className = 'modal-header'
+          header.textContent = title
+          const body = document.createElement('div')
+          body.className = 'modal-body'
+          const text = document.createElement('div')
+          text.style.whiteSpace = 'pre-wrap'
+          text.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+          text.textContent = message
+          body.appendChild(text)
+          const actions = document.createElement('div')
+          actions.className = 'modal-actions'
+          const btnOk = document.createElement('button')
+          btnOk.className = 'btn primary'
+          btnOk.textContent = 'OK'
+          actions.appendChild(btnOk)
+          modal.appendChild(header); modal.appendChild(body); modal.appendChild(actions)
+          overlay.appendChild(modal)
+          document.body.appendChild(overlay)
+          const close = () => { try { document.body.removeChild(overlay) } catch {}; resolve() }
+          btnOk.onclick = close
+          overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close() })
+          setTimeout(() => btnOk.focus(), 0)
+        })
+      }
+
       // Load tree
       async function refreshSessions() {
         const res = await window.api.sessionsLoad()
@@ -676,26 +708,50 @@
       const sftpRemoteRefreshBtn = document.getElementById('sftp-remote-refresh')
       // no explicit remote connect button anymore
 
-      function renderListInto(el, basePath, items, onEnterDir) {
+      async function renderListInto(el, basePath, items, onEnterDir) {
         el.innerHTML = ''
         const rows = document.createDocumentFragment()
-        if (basePath && basePath !== '/') {
-          const upRow = document.createElement('div')
-          upRow.className = 'sftp-row'
-          upRow.innerHTML = '<span class="icon"><svg viewBox="0 0 24 24"><path d="M12 5l6 6h-4v6h-4v-6H6l6-6z"/></svg></span><div class="sftp-name">..</div><div class="sftp-type"></div>'
-          upRow.onclick = () => onEnterDir(dirname(basePath))
-          rows.appendChild(upRow)
+        {
+          const isLocal = el && el.id === 'sftp-local-list'
+          let shouldShowUp = false
+          let upTarget = null
+          if (isLocal) {
+            try {
+              const up = await window.api.pathDirname(basePath)
+              if (up && up !== basePath) { shouldShowUp = true; upTarget = up }
+            } catch {}
+          } else {
+            shouldShowUp = Boolean(basePath && basePath !== '/')
+            upTarget = dirname(basePath)
+          }
+          if (shouldShowUp) {
+            const upRow = document.createElement('div')
+            upRow.className = 'sftp-row'
+            upRow.innerHTML = '<span class="icon"><svg viewBox="0 0 24 24"><path d="M12 5l6 6h-4v6h-4v-6H6l6-6z"/></svg></span><div class="sftp-name">..</div><div class="sftp-type"></div>'
+            upRow.ondblclick = () => onEnterDir(upTarget)
+            rows.appendChild(upRow)
+          }
         }
         for (const it of items || []) {
           const row = document.createElement('div')
           row.className = 'sftp-row'
-          const isDir = (it.type === 'd' || it.type === 'directory' || it.type === 'DIR')
-          const rawName = (it.pathName || it.name || '').replace(/\\+/g, '/')
-          const displayName = (it.displayName || it.name || '').split('\\\\').pop().split('/').pop()
+          const isDir = (it.type === 'd')
+          const rawName = String(it.name || it.displayName || it.pathName || '')
+          const displayName = rawName
           const pathName = rawName
-          row.innerHTML = `${isDir ? '<span class=\"icon\"><svg viewBox=\\\"0 0 24 24\\\"><path d=\\\"M10 4l2 2h8a2 2 0 012 2v1H4V6a2 2 0 012-2h4zm12 6v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8h18z\\\"/></svg></span>' : '<span class=\\\"icon\\\"><svg viewBox=\\\"0 0 24 24\\\"><path d=\\\"M4 3h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2zm3 4v2h10V7H7zm0 4v2h6v-2H7z\\\"/></svg></span>'}<div class=\"sftp-name\" title=\"${displayName}\">${displayName}</div><div class=\"sftp-type\">${isDir?'dir':'file'}</div>`
+          const folderIcon = '<span class="icon"><svg viewBox="0 0 24 24"><path d="M10 4l2 2h8a2 2 0 012 2v1H4V6a2 2 0 012-2h4zm12 6v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8h18z"/></svg></span>'
+          const fileIcon = '<span class="icon"><svg viewBox="0 0 24 24"><path d="M4 3h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2zm3 4v2h10V7H7zm0 4v2h6v-2H7z"/></svg></span>'
+          row.innerHTML = `${isDir ? folderIcon : fileIcon}<div class="sftp-name" title="${displayName}">${displayName}</div><div class="sftp-type">${isDir?'dir':'file'}</div>`
           // Navigate by double click
-          row.ondblclick = () => { if (isDir) onEnterDir(joinPath(basePath, pathName)); }
+          row.ondblclick = async () => {
+            if (!isDir) return
+            if (el && el.id === 'sftp-local-list') {
+              const next = await window.api.pathJoin(basePath, pathName)
+              onEnterDir(next)
+            } else {
+              onEnterDir(joinPath(basePath, pathName))
+            }
+          }
           // Context menu
           row.oncontextmenu = (e) => { e.preventDefault(); openSftpCtxMenu(e.clientX, e.clientY, { basePath, name: displayName, pathName, isDir, ownerEl: el }) }
           // Drag support
@@ -710,34 +766,20 @@
         el.appendChild(rows)
       }
 
-      function normalizeSftpItems(basePath, rawItems) {
-        const map = new Map()
-        for (const it of rawItems || []) {
-          let nm = (it && it.name ? String(it.name) : '').trim()
-          if (!nm || nm === '.' || nm === '..') continue
-          nm = nm.replace(/\\+/g, '/')
-          const parts = nm.split('/').filter(Boolean)
-          if (parts.length === 0) continue
-          const seg = parts[0]
-          const isDir = (it.type === 'd') || (parts.length > 1) || (/(dir|directory)/i.test(String(it.type)))
-          if (!map.has(seg)) map.set(seg, { name: seg, displayName: seg, pathName: seg, type: isDir ? 'd' : 'file' })
-          else if (isDir) { const prev = map.get(seg); prev.type = 'd'; map.set(seg, prev) }
-        }
-        const items = Array.from(map.values())
-        // Directories first, then files, and limit file name width
-        items.sort((a, b) => (a.type === b.type ? a.displayName.localeCompare(b.displayName) : a.type === 'd' ? -1 : 1))
-        return items
-      }
+      function normalizeSftpItems(basePath, rawItems) { return rawItems }
 
-      function openSftpCtxMenu(x, y, info) {
+      async function openSftpCtxMenu(x, y, info) {
         const menu = document.getElementById('ctx')
         menu.innerHTML = ''
         function add(label, handler) {
           const it = document.createElement('div'); it.className='ctx-item'; it.textContent=label; it.onmousedown=(e)=>{ e.preventDefault(); e.stopPropagation(); hideCtx(); handler() }; menu.appendChild(it)
         }
         const { basePath, name, pathName, isDir, ownerEl } = info
-        const fullPath = joinPath(basePath, (pathName || name))
         const isRemote = ownerEl && ownerEl.id === 'sftp-remote-list'
+        const fullPath = isRemote
+          ? joinPath(basePath, (pathName || name))
+          : await window.api.pathJoin(basePath, (pathName || name))
+        
         add('Rename…', async () => {
           const newName = await showInputModal('Rename', 'New name', name)
           if (!newName) return
@@ -746,7 +788,7 @@
             await window.api.sftpRename(id, fullPath, joinPath(basePath, newName))
             await navigateRemote(basePath)
           } else {
-            await window.api.localRename(fullPath, joinPath(basePath, newName))
+            await window.api.localRename(fullPath, await window.api.pathJoin(basePath, newName))
             await navigateLocal(basePath)
           }
         })
@@ -771,7 +813,7 @@
             await window.api.sftpMkdir(id, joinPath(targetDir, newName))
             await navigateRemote(targetDir)
           } else {
-            await window.api.localMkdir(joinPath(targetDir, newName))
+            await window.api.localMkdir(await window.api.pathJoin(targetDir, newName))
             await navigateLocal(targetDir)
           }
         })
@@ -787,11 +829,15 @@
           let data = null
           try { data = JSON.parse(e.dataTransfer.getData('application/json')) } catch {}
           if (!data || !data.name || !data.basePath) return
-          const srcFull = joinPath(data.basePath, (data.pathName || data.name))
+          const srcFull = (data.areaId === 'sftp-remote-list')
+            ? joinPath(data.basePath, (data.pathName || data.name))
+            : await window.api.pathJoin(data.basePath, (data.pathName || data.name))
           const dstIsRemote = id === 'sftp-remote-list'
           const srcIsRemote = data.areaId === 'sftp-remote-list'
           const dstBase = dstIsRemote ? sftpRemotePathEl.value : sftpLocalPathEl.value
-          const dstFull = joinPath(dstBase, (data.pathName || data.name))
+          const dstFull = dstIsRemote
+            ? joinPath(dstBase, (data.pathName || data.name))
+            : await window.api.pathJoin(dstBase, (data.pathName || data.name))
           try {
             if (srcIsRemote && !dstIsRemote) {
               await window.api.sftpDownload(currentId, srcFull, dstFull)
@@ -807,10 +853,12 @@
       })
 
       function joinPath(a, b) {
-        if (!a || a === '/') return '/' + (b||'').replace(/^\/+/, '')
-        return (a.replace(/\/+$/,'') + '/' + (b||'').replace(/^\/+/, ''))
+        // Use main process to handle OS-specific separators for local paths only when called for local area
+        // For remote SFTP we keep POSIX join in navigateRemote
+        return (a && a.includes('\\')) ? null : ( (!a || a === '/') ? ('/' + (b||'').replace(/^\/+/, '')) : (a.replace(/\/+$/,'') + '/' + (b||'').replace(/^\/+/, '')) )
       }
       function dirname(p) {
+        if (p && p.includes('\\')) return null
         if (!p || p === '/') return '/'
         const parts = p.replace(/\/+$/,'').split('/')
         parts.pop()
@@ -820,20 +868,19 @@
 
       async function listRemote(p) {
         const list = await window.api.sftpListById(currentId, p)
-        const normalized = p === '/' ? normalizeSftpItems(p, list) : list
-        renderListInto(sftpRemoteListEl, p, normalized, navigateRemote)
+        await renderListInto(sftpRemoteListEl, p, list, navigateRemote)
       }
       async function navigateRemote(p) {
         sftpRemotePathEl.value = p
-        try { await listRemote(p) } catch (e) { alert('SFTP list error: ' + (e?.message||e)) }
+        try { await listRemote(p) } catch (e) { showErrorModal('SFTP list error', String(e?.message||e)) }
       }
       async function listLocal(p) {
         const list = await window.api.localList(p)
-        renderListInto(sftpLocalListEl, p, list, navigateLocal)
+        await renderListInto(sftpLocalListEl, p, list, navigateLocal)
       }
       async function navigateLocal(p) {
         sftpLocalPathEl.value = p
-        try { await listLocal(p) } catch (e) { alert('Local list error: ' + (e?.message||e)) }
+        try { await listLocal(p) } catch (e) { showErrorModal('Local list error', String(e?.message||e)) }
       }
 
       async function initSftpSplitIfNeeded(id) {
@@ -853,8 +900,12 @@
       // connection is established on double-click of SFTP session in the tree
 
       sftpLocalRefreshBtn.onclick = () => navigateLocal(sftpLocalPathEl.value)
-      sftpLocalUpBtn.onclick = () => navigateLocal(dirname(sftpLocalPathEl.value))
-      sftpLocalPathEl.addEventListener('keydown', (e) => { if (e.key==='Enter') navigateLocal(sftpLocalPathEl.value) })
+      sftpLocalUpBtn.onclick = async () => {
+        const p = sftpLocalPathEl.value
+        const up = await window.api.pathDirname(p)
+        await navigateLocal(up)
+      }
+      sftpLocalPathEl.addEventListener('keydown', async (e) => { if (e.key==='Enter') { await navigateLocal(sftpLocalPathEl.value) } })
 
       // ===== Tunneling UI =====
       const tunListEl = document.getElementById('tun-list')
