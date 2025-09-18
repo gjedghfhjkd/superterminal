@@ -38,8 +38,18 @@
       .tab .close:hover { color:#e6e6e6; background:#2a3040; opacity:1; box-shadow:0 0 0 2px rgba(58,65,96,.35) inset; }
 
       /* Colored tabs */
-      .tab[data-color] { border-color: var(--tab-color, #3a4160); }
-      .tab[data-color].active { box-shadow: 0 0 0 1px var(--tab-color, #3a4160) inset; }
+      .tab[data-color] {
+        --tab-color-fallback: #3a4160;
+        --tab-color: var(--tab-color, var(--tab-color-fallback));
+        /* Blend chosen color with base surfaces; color-mix is supported in modern Chromium */
+        --tab-bg-normal: color-mix(in srgb, var(--tab-color) 18%, #1a1f2d);
+        --tab-bg-hover: color-mix(in srgb, var(--tab-color) 24%, #22283a);
+        --tab-bg-active: color-mix(in srgb, var(--tab-color) 30%, #0b0d14);
+        background: var(--tab-bg-normal);
+        border-color: var(--tab-color);
+      }
+      .tab[data-color]:hover { background: var(--tab-bg-hover); border-color: var(--tab-color); }
+      .tab[data-color].active { background: var(--tab-bg-active); color:#ffffff; border-color: var(--tab-color); box-shadow: 0 0 0 1px var(--tab-color) inset; }
       .tab[data-color]::before { content:""; position:absolute; left:0; top:4px; bottom:0; width:3px; border-radius:3px 0 0 0; background:var(--tab-color); opacity:.9; }
       .tab[data-color].active::after { background: var(--tab-color); }
       #panes { position:relative; flex:1; overflow:hidden; background:#0f111a; min-height:0; }
