@@ -56,5 +56,9 @@ contextBridge.exposeInMainWorld('api', {
   readClipboardText: () => {
     try { return clipboard.readText() } catch { return '' }
   }
+  ,
+  writeClipboardText: (text) => {
+    try { clipboard.writeText(String(text||'')) } catch {}
+  }
 })
 

@@ -200,13 +200,20 @@
         try {
           term.attachCustomKeyEventHandler((ev) => {
             try {
-              const isCtrlShiftV = !!ev && ev.ctrlKey && ev.shiftKey && (ev.key === 'V' || ev.key === 'v')
-              if (isCtrlShiftV) {
-                const txt = (window.api.readClipboardText?.() || '')
-                if (txt) {
-                  try { typeof term.paste === 'function' ? term.paste(txt) : term.write(txt) } catch {}
+              const hasCtrlShift = !!ev && ev.ctrlKey && ev.shiftKey
+              if (hasCtrlShift) {
+                const isV = ev.key === 'V' || ev.key === 'v'
+                const isC = ev.key === 'C' || ev.key === 'c'
+                if (isV) {
+                  const txt = (window.api.readClipboardText?.() || '')
+                  if (txt) { try { typeof term.paste === 'function' ? term.paste(txt) : term.write(txt) } catch {} }
+                  return false
                 }
-                return false
+                if (isC) {
+                  const sel = (typeof term.getSelection === 'function') ? term.getSelection() : ''
+                  if (sel && sel.length) { try { window.api.writeClipboardText?.(sel) } catch {} }
+                  return false
+                }
               }
             } catch {}
             return true
