@@ -53,6 +53,11 @@
       .theme-select:hover { background:#22283a }
       [data-theme="light"] .theme-select { background:#eef1f7; color:#1f2937; border:1px solid #d7dbe7 }
       [data-theme="light"] .theme-select:hover { background:#e9edf6 }
+      .theme-select-wrap { position:relative; display:flex; align-items:center }
+      .theme-icon { position:absolute; left:8px; width:16px; height:16px; color:#cfd3dc; pointer-events:none; display:inline-flex; align-items:center; justify-content:center }
+      .theme-icon svg { display:block; width:16px; height:16px; fill:currentColor }
+      .theme-select { padding-left:32px }
+      [data-theme="light"] .theme-icon { color:#6b7280 }
       html, body { height:100%; overflow:hidden; }
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       #left { width:320px; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
@@ -140,11 +145,13 @@
       <div id="left-topnav">
         <div id="left-ssh" class="left-tab"><span class="icon"><svg viewBox="0 0 24 24"><path d="M3 12l4-4 4 4-4 4-4-4zm10-2h8v4h-8v-4z"/></svg></span>SSH</div>
         <div id="left-sftp" class="left-tab"><span class="icon sftp"><svg viewBox="0 0 24 24"><path d="M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h16v2H4v-2zm0 4h10v2H4v-2z"/></svg></span>SFTP</div>
-        <div id="left-tun" class="left-tab"><span class="icon"><svg viewBox="0 0 24 24"><path d="M4 11h16v2H4v-2zm3-5h10v2H7V6zm0 10h10v2H7v-2z"/></svg></span>Tunneling</div>
-        <select id="theme-select" class="theme-select" title="Theme">
+        <div class="theme-select-wrap">
+          <span id="theme-icon" class="theme-icon" aria-hidden="true"></span>
+          <select id="theme-select" class="theme-select" title="Theme">
           <option value="dark">Dark</option>
           <option value="light">Light</option>
-        </select>
+          </select>
+        </div>
       </div>
       <div id="left-header">Sessions</div>
       <div id="tree" class="tree"></div>
@@ -349,6 +356,20 @@
 
       // Theme handling
       const themeSelectEl = document.getElementById('theme-select')
+      const themeIconEl = document.getElementById('theme-icon')
+      function getThemeIconSvg(theme) {
+        if (theme === 'light') {
+          // Sun
+          return '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.8 1.42-1.42zM1 13h3v-2H1v2zm10 10h2v-3h-2v3zm9.66-18.34l-1.41-1.41-1.8 1.79 1.42 1.42 1.79-1.8zM17.24 19.16l1.8 1.79 1.41-1.41-1.79-1.8-1.42 1.42zM20 11v2h3v-2h-3zM4.22 18.36l1.41 1.41 1.8-1.79-1.42-1.42-1.79 1.8zM12 6a6 6 0 100 12A6 6 0 0012 6zm0-5h-2v3h2V1zm5 3h3V2h-3v2z"/></svg>'
+        }
+        // Moon
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12.74 2.01a1 1 0 01.96 1.3A8 8 0 1020.7 10.3a1 1 0 011.3.96A10 10 0 1112.74 2.01z"/></svg>'
+      }
+      function setThemeIcon(theme) {
+        if (!themeIconEl) return
+        const t = (theme === 'light') ? 'light' : 'dark'
+        themeIconEl.innerHTML = getThemeIconSvg(t)
+      }
       function applyTheme(theme) {
         const t = (theme === 'light') ? 'light' : 'dark'
         document.documentElement.setAttribute('data-theme', t)
@@ -356,6 +377,7 @@
         for (const { term } of terminals.values()) {
           try { term.setOption('theme', getXtermTheme()) } catch {}
         }
+        setThemeIcon(t)
       }
       function updateThemeSelect(theme) {
         const t = (theme === 'light') ? 'light' : 'dark'
@@ -367,12 +389,14 @@
           const theme = (res && res.settings && res.settings.theme) || 'dark'
           applyTheme(theme)
           updateThemeSelect(theme)
+          setThemeIcon(theme)
         } catch { applyTheme('dark'); updateThemeSelect('dark') }
       }
       initTheme()
       themeSelectEl.onchange = async () => {
         const theme = themeSelectEl.value
         applyTheme(theme)
+        setThemeIcon(theme)
         try { await window.api.settingsSave({ theme }) } catch {}
       }
 
