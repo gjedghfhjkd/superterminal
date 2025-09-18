@@ -18,8 +18,6 @@
     <h3 id="title">Create Session</h3>
     <div class="wrap">
     <!-- Type selected by parent window via query param: SSH or SFTP -->
-    <label>User preset (optional)</label>
-    <select id="userPreset"></select>
     <label>Name</label>
     <input id="name" placeholder="Optional name (defaults to host)" />
     <label>Host</label>
@@ -27,7 +25,10 @@
     <label>Port</label>
     <input id="port" value="22" />
     <label>User</label>
-    <input id="user" value="root" />
+    <div style="display:flex; gap:8px; align-items:center">
+      <select id="userSelect" style="flex:1"></select>
+    </div>
+    <input id="userCustom" placeholder="username" style="display:none" />
     <label>Auth</label>
     <select id="auth">
       <option value="password">Password</option>
@@ -52,38 +53,151 @@
         return params.get(name)
       }
       const sessionType = (getQueryParam('type') || 'SSH').toUpperCase()
-      async function loadUsersIntoSelect() {
-        const sel = document.getElementById('userPreset')
+      let selectedUser = null
+      let forcedAuth = null
+      async function fillUsers() {
+        const sel = document.getElementById('userSelect')
         sel.innerHTML = ''
-        const none = document.createElement('option'); none.value=''; none.textContent='(none)'; sel.appendChild(none)
-        try {
-          const res = await window.api.usersLoad()
-          const users = Array.isArray(res?.users) ? res.users : []
-          for (const u of users) {
-            const opt = document.createElement('option')
-            opt.value = u.id || `${u.username || ''}@${u.host || ''}`
-            opt.textContent = `${u.username || ''}${u.host?`@${u.host}`:''}`
-            opt.dataset.user = encodeURIComponent(JSON.stringify(u))
-            sel.appendChild(opt)
-          }
-        } catch {}
+        const res = await window.api.usersLoad().catch(() => ({ users: [] }))
+        const users = Array.isArray(res?.users) ? res.users : []
+        // Build options: presets, then special actions
+        for (const u of users) {
+          const opt = document.createElement('option')
+          opt.value = u.id || `${u.username || ''}@${u.host || ''}`
+          const label = u.name ? `${u.name} — ${u.username}${u.host?`@${u.host}`:''}` : `${u.username}${u.host?`@${u.host}`:''}`
+          opt.textContent = label
+          opt.dataset.user = encodeURIComponent(JSON.stringify(u))
+          sel.appendChild(opt)
+        }
+        const divider = document.createElement('option'); divider.disabled = true; divider.textContent = '──────────'; divider.value=''; sel.appendChild(divider)
+        const create = document.createElement('option'); create.value='__create__'; create.textContent = 'Create user…'; sel.appendChild(create)
+        const custom = document.createElement('option'); custom.value='__custom__'; custom.textContent = 'Custom username…'; sel.appendChild(custom)
+        // Default selection
+        if (users.length) { sel.selectedIndex = 0; applySelectedUserFromOption(sel.options[0]) }
+        else { sel.value='__custom__'; onUserSelectionChange() }
       }
+      function applySelectedUserFromOption(opt) {
+        selectedUser = null
+        forcedAuth = null
+        const userInput = document.getElementById('userCustom')
+        const authSel = document.getElementById('auth')
+        const lblPassword = document.getElementById('lbl-password')
+        const inputPassword = document.getElementById('password')
+        const lblKey = document.getElementById('lbl-key')
+        const inputKey = document.getElementById('pkey')
+        const lblPassphrase = document.getElementById('lbl-passphrase')
+        const inputPassphrase = document.getElementById('passphrase')
+        const filepick = document.getElementById('filepick')
+        // Reset UI defaults
+        userInput.style.display = 'none'
+        authSel.style.display = ''
+        lblPassword.style.display = ''
+        inputPassword.style.display = ''
+        lblKey.style.display = 'none'
+        inputKey.style.display = 'none'
+        if (filepick) filepick.style.display = 'none'
+        lblPassphrase.style.display = 'none'
+        inputPassphrase.style.display = 'none'
+        document.getElementById('auth').value = 'password'
+        if (opt && opt.dataset.user) {
+          try { selectedUser = JSON.parse(decodeURIComponent(opt.dataset.user)) } catch {}
+        }
+        if (selectedUser) {
+          // Lock to selected username
+          userInput.value = selectedUser.username || ''
+          // If user has password, hide password method and inputs; force password auth
+          if (selectedUser.password && String(selectedUser.password).length) {
+            forcedAuth = 'password'
+            authSel.style.display = 'none'
+            lblPassword.style.display = 'none'
+            inputPassword.style.display = 'none'
+            // Key inputs also hidden to avoid conflicting creds
+            lblKey.style.display = 'none'
+            inputKey.style.display = 'none'
+            if (filepick) filepick.style.display = 'none'
+            lblPassphrase.style.display = 'none'
+            inputPassphrase.style.display = 'none'
+          } else {
+            // Show auth selector for cases without stored password
+            authSel.style.display = ''
+            if (selectedUser.auth) { try { authSel.value = selectedUser.auth } catch {} }
+            onAuthChange()
+          }
+        }
+      }
+      async function onUserSelectionChange() {
+        const sel = document.getElementById('userSelect')
+        const val = sel.value
+        if (val === '__create__') {
+          // Open create user modal
+          try {
+            const res = await window.api.openUserWindow(null)
+            const u = res && res.user
+            if (u && u.username) {
+              const listRes = await window.api.usersLoad()
+              const users = Array.isArray(listRes?.users) ? listRes.users : []
+              u.id = u.id || ('usr_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7))
+              const idx = users.findIndex(x => x && x.id === u.id)
+              if (idx >= 0) users[idx] = u; else users.push(u)
+              await window.api.usersSave(users)
+              await fillUsers()
+              // Select the newly created user
+              const sel2 = document.getElementById('userSelect')
+              for (const o of sel2.options) {
+                try { const x = o.dataset.user ? JSON.parse(decodeURIComponent(o.dataset.user)) : null; if (x && x.id === u.id) { o.selected = true; applySelectedUserFromOption(o); break } } catch {}
+              }
+            } else {
+              // Revert to custom if creation cancelled
+              const sel2 = document.getElementById('userSelect')
+              sel2.value = '__custom__'
+              document.getElementById('userCustom').style.display = ''
+            }
+          } catch {
+            const sel2 = document.getElementById('userSelect')
+            sel2.value = '__custom__'
+            document.getElementById('userCustom').style.display = ''
+          }
+        } else if (val === '__custom__') {
+          selectedUser = null
+          forcedAuth = null
+          document.getElementById('userCustom').style.display = ''
+          // Reset auth UI to editable
+          document.getElementById('auth').style.display = ''
+          onAuthChange()
+        } else {
+          applySelectedUserFromOption(sel.selectedOptions[0])
+        }
+      }
+      let editPreset = null
       try {
         const presetRaw = getQueryParam('preset')
         if (presetRaw) {
-          const preset = JSON.parse(decodeURIComponent(presetRaw))
-          if (preset.name) document.getElementById('name').value = preset.name
-          if (preset.host) document.getElementById('host').value = preset.host
-          if (preset.port) document.getElementById('port').value = String(preset.port)
-          if (preset.username) document.getElementById('user').value = preset.username
-          if (preset.auth) document.getElementById('auth').value = preset.auth
-          if (preset.password) document.getElementById('password').value = preset.password
-          if (preset.privateKey) document.getElementById('pkey').value = preset.privateKey
-          if (preset.passphrase) document.getElementById('passphrase').value = preset.passphrase
+          editPreset = JSON.parse(decodeURIComponent(presetRaw))
+          if (editPreset.name) document.getElementById('name').value = editPreset.name
+          if (editPreset.host) document.getElementById('host').value = editPreset.host
+          if (editPreset.port) document.getElementById('port').value = String(editPreset.port)
+          if (editPreset.auth) document.getElementById('auth').value = editPreset.auth
+          if (editPreset.password) document.getElementById('password').value = editPreset.password
+          if (editPreset.privateKey) document.getElementById('pkey').value = editPreset.privateKey
+          if (editPreset.passphrase) document.getElementById('passphrase').value = editPreset.passphrase
         }
       } catch {}
       document.getElementById('title').textContent = `Create ${sessionType} Session`
-      loadUsersIntoSelect()
+      ;(async () => {
+        await fillUsers()
+        const sel = document.getElementById('userSelect')
+        if (editPreset && editPreset.userPreset) {
+          for (const o of sel.options) {
+            try { const x = o.dataset.user ? JSON.parse(decodeURIComponent(o.dataset.user)) : null; if (x && ((x.id && editPreset.userPreset.id && x.id===editPreset.userPreset.id) || (x.username===editPreset.userPreset.username && String(x.host||'')===String(editPreset.userPreset.host||'') ))) { o.selected=true; applySelectedUserFromOption(o); break } } catch {}
+          }
+        } else if (editPreset && editPreset.username) {
+          sel.value = '__custom__'
+          document.getElementById('userCustom').style.display = ''
+          document.getElementById('userCustom').value = editPreset.username
+          onAuthChange()
+        }
+        document.getElementById('userSelect').addEventListener('change', onUserSelectionChange)
+      })()
 
       function updateAuth() {
         const isKey = document.getElementById('auth').value === 'key'
@@ -96,6 +210,7 @@
         document.getElementById('passphrase').style.display = isKey ? '' : 'none'
       }
       document.getElementById('auth').addEventListener('change', updateAuth)
+      function onAuthChange() { updateAuth() }
       updateAuth()
       document.getElementById('choose').addEventListener('click', () => document.getElementById('keyfile').click())
       document.getElementById('keyfile').addEventListener('change', async (e) => {
@@ -106,29 +221,24 @@
         document.getElementById('fname').textContent = file ? file.name : ''
       })
       document.getElementById('btn-save').onclick = async () => {
-        const userPresetSel = document.getElementById('userPreset')
-        let selectedUser = null
-        try { selectedUser = userPresetSel && userPresetSel.selectedOptions && userPresetSel.selectedOptions[0] ? JSON.parse(decodeURIComponent(userPresetSel.selectedOptions[0].dataset.user || '')) : null } catch {}
         const sessBase = {
           type: sessionType,
           name: (document.getElementById('name').value || document.getElementById('host').value || '').trim(),
           host: document.getElementById('host').value,
           port: Number(document.getElementById('port').value),
-          username: document.getElementById('user').value,
-          auth: document.getElementById('auth').value,
-          password: document.getElementById('password').value,
-          privateKey: document.getElementById('pkey').value,
-          passphrase: document.getElementById('passphrase').value
+          username: selectedUser ? (selectedUser.username || '') : (document.getElementById('userCustom').value || 'root'),
+          auth: forcedAuth ? forcedAuth : document.getElementById('auth').value,
+          password: forcedAuth ? '' : document.getElementById('password').value,
+          privateKey: forcedAuth ? '' : document.getElementById('pkey').value,
+          passphrase: forcedAuth ? '' : document.getElementById('passphrase').value
         }
-        // Merge selected user preset if chosen; explicit form values take precedence
+        // Merge selected user preset if chosen; for password preset, do not duplicate password into session fields
         let sess = Object.assign({}, selectedUser ? {
           host: selectedUser.host || undefined,
           port: selectedUser.port || undefined,
           username: selectedUser.username || undefined,
-          auth: selectedUser.auth || undefined,
-          password: selectedUser.password || undefined,
-          privateKey: selectedUser.privateKey || undefined,
-          passphrase: selectedUser.passphrase || undefined
+          auth: selectedUser.password ? 'password' : (selectedUser.auth || undefined),
+          userPreset: selectedUser
         } : {}, sessBase)
         try { window.api.sessionFormSubmit(sess) } catch {}
       }
