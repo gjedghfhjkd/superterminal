@@ -613,8 +613,8 @@
           if (splitBtn) {
             splitBtn.style.display = isCollapsed ? 'flex' : 'none'
             splitBtn.innerHTML = isCollapsed
-              ? '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 7 L8 12 L14 17"/></svg>'
-              : '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 7 L16 12 L10 17"/></svg>'
+              ? '<svg viewBox="0 0 24 24" width="12" height="12" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 7 L16 12 L10 17"/></svg>'
+              : '<svg viewBox="0 0 24 24" width="12" height="12" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 7 L8 12 L14 17"/></svg>'
             splitBtn.title = isCollapsed ? 'Show sidebar' : 'Hide sidebar'
           }
         }
@@ -623,9 +623,12 @@
           const saved = Number(localStorage.getItem(STORAGE_KEY)||'0')
           if (saved > 0) left.style.width = saved + 'px'
           const collapsed = localStorage.getItem(COLLAPSE_KEY)==='1'
-          if (collapsed) setCollapsed(true, { instant: true })
-        } catch {}
-        try { updateToggleUI() } catch {}
+          // Ensure button reflects state immediately on first paint
+          requestAnimationFrame(() => {
+            if (collapsed) setCollapsed(true, { instant: true })
+            else { updateToggleUI() }
+          })
+        } catch { updateToggleUI() }
         // Dragging
         splitter.addEventListener('mousedown', (e)=>{
           if (e.button!==0) return
