@@ -10,6 +10,8 @@
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       a, button, input, select, .tab, .left-tab { cursor: pointer }
       #left { width:320px; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
+      .splitter { width:6px; cursor: col-resize; background:#0b0d14; border-right:1px solid #1f2330; }
+      .splitter:hover { background:#121523 }
       /* Set document title to app name */
       /* Title also set from main, but ensure consistency */
       #left-topnav { padding:6px 8px; border-bottom:1px solid #1f2330; display:flex; gap:6px; align-items:center; }
@@ -123,16 +125,18 @@
     </style>
   </head>
   <body>
-    <div id="left">
+      <div id="left">
       <div id="left-topnav">
         <div id="left-ssh" class="left-tab"><span class="icon"><svg viewBox="0 0 24 24"><path d="M3 12l4-4 4 4-4 4-4-4zm10-2h8v4h-8v-4z"/></svg></span>SSH</div>
         <div id="left-sftp" class="left-tab"><span class="icon sftp"><svg viewBox="0 0 24 24"><path d="M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h16v2H4v-2zm0 4h10v2H4v-2z"/></svg></span>SFTP</div>
         <div id="left-tun" class="left-tab"><span class="icon"><svg viewBox="0 0 24 24"><path d="M4 11h16v2H4v-2zm3-5h10v2H7V6zm0 10h10v2H7v-2z"/></svg></span>Tunneling</div>
+          <div id="left-toggle" class="left-tab" title="Hide/Show sidebar" style="margin-left:auto"><span class="icon"><svg viewBox="0 0 24 24"><path d="M9 6l-1.4 1.4L12.2 12l-4.6 4.6L9 18l6-6-6-6zM5 5h2v14H5z"/></svg></span></div>
       </div>
       <div id="left-header">Sessions</div>
       <div id="tree" class="tree"></div>
       <div id="ctx" class="ctx-menu" style="display:none"></div>
     </div>
+      <div id="splitter" class="splitter"></div>
       <div id="right">
       <div id="tabs"></div>
       <div id="panes"></div>
@@ -172,6 +176,11 @@
       const tabsEl = document.getElementById('tabs')
       let currentId = null
       let draggingId = null
+      // Sidebar sizing state
+      const SIDEBAR_MIN = 160
+      const SIDEBAR_MAX = 600
+      const LS_SIDEBAR_W = 'sidebarWidthPx'
+      const LS_SIDEBAR_COL = 'sidebarCollapsed'
       const THEME_BASE = '#0b0d14'
       const THEME_ACCENT = '#2a5bd7'
       const DEFAULT_FOLDER_COLOR = THEME_BASE
@@ -191,6 +200,72 @@
           if (next != null) activateTab(next)
         } catch {}
       }
+
+      // Sidebar resizing and toggle
+      ;(function initSidebarSizing() {
+        const sidebar = document.getElementById('left')
+        const splitter = document.getElementById('splitter')
+        const toggleBtn = document.getElementById('left-toggle')
+        if (!sidebar || !splitter) return
+
+        function clampWidth(px) { return Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, px)) }
+        function setSidebarWidth(px, persist=true) {
+          const w = clampWidth(px)
+          sidebar.style.display = 'flex'
+          sidebar.style.width = w + 'px'
+          if (persist) { try { localStorage.setItem(LS_SIDEBAR_W, String(w)) } catch {} }
+          try { resize() } catch {}
+        }
+        function setCollapsed(flag, persist=true) {
+          if (flag) {
+            sidebar.style.display = 'none'
+          } else {
+            const stored = Number.parseInt((() => { try { return localStorage.getItem(LS_SIDEBAR_W) } catch { return null } })() || '', 10)
+            const w = Number.isFinite(stored) && stored > 0 ? stored : 320
+            setSidebarWidth(w, false)
+          }
+          if (persist) { try { localStorage.setItem(LS_SIDEBAR_COL, flag ? '1' : '0') } catch {} }
+          try { resize() } catch {}
+        }
+        // Restore state
+        const collapsed = (() => { try { return localStorage.getItem(LS_SIDEBAR_COL) === '1' } catch { return false } })()
+        if (collapsed) { setCollapsed(true, false) }
+        else {
+          const stored = Number.parseInt((() => { try { return localStorage.getItem(LS_SIDEBAR_W) } catch { return null } })() || '', 10)
+          if (Number.isFinite(stored) && stored > 0) setSidebarWidth(stored, false)
+        }
+
+        let resizing = false
+        let rafPending = false
+        function onMouseMove(e) {
+          if (!resizing) return
+          if (sidebar.style.display === 'none') { sidebar.style.display = 'flex' }
+          const next = clampWidth(e.clientX)
+          if (rafPending) return
+          rafPending = true
+          requestAnimationFrame(() => { setSidebarWidth(next); rafPending = false })
+        }
+        function onMouseUp() {
+          if (!resizing) return
+          resizing = false
+          document.removeEventListener('mousemove', onMouseMove)
+          document.removeEventListener('mouseup', onMouseUp)
+          try { resize() } catch {}
+        }
+        splitter.addEventListener('mousedown', (e) => {
+          e.preventDefault()
+          // If collapsed -> expand to stored or default
+          if (sidebar.style.display === 'none') {
+            setCollapsed(false)
+            return
+          }
+          resizing = true
+          document.addEventListener('mousemove', onMouseMove)
+          document.addEventListener('mouseup', onMouseUp)
+        })
+        splitter.addEventListener('dblclick', (e) => { e.preventDefault(); setCollapsed(sidebar.style.display !== 'none') })
+        if (toggleBtn) toggleBtn.onclick = () => setCollapsed(sidebar.style.display !== 'none')
+      })()
 
       function createTerminalFor(id, title) {
         const pane = document.createElement('div')
