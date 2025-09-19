@@ -732,21 +732,20 @@
         return true
       }
 
-      // Copy session function
+      // Copy session or folder function
       function copySession(id) {
         const info = findNodeById(sessionTree, id, null)
-        if (!info || info.node.type !== 'session') return false
+        if (!info || (info.node.type !== 'session' && info.node.type !== 'folder')) return false
         copiedSession = JSON.parse(JSON.stringify(info.node)) // Deep copy
         renderTree() // Update visual indicators
         return true
       }
 
-      // Paste session function
+      // Paste session or folder function
       async function pasteSession(targetId = null) {
         if (!copiedSession) return false
         
-        const newNode = JSON.parse(JSON.stringify(copiedSession)) // Deep copy
-        newNode.id = genId('sess') // Generate new ID
+        const newNode = generateNewIds(JSON.parse(JSON.stringify(copiedSession))) // Deep copy with new IDs
         newNode.name = (newNode.name || '') + ' (Copy)' // Add copy suffix
         
         let targetContainer = sessionTree
@@ -772,6 +771,19 @@
         await window.api.sessionsSaveTree(sessionTree)
         renderTree()
         return true
+      }
+
+      // Generate new IDs for all elements in a folder (recursive)
+      function generateNewIds(node) {
+        if (!node) return node
+        const newNode = { ...node }
+        newNode.id = genId(node.type === 'folder' ? 'fld' : 'sess')
+        
+        if (node.type === 'folder' && node.children) {
+          newNode.children = node.children.map(child => generateNewIds(child))
+        }
+        
+        return newNode
       }
 
       // Clear copied session when it's deleted or modified
@@ -815,10 +827,11 @@
             const effectiveColor = n.type === 'folder' ? (n.color || inheritedColor) : inheritedColor
             if (effectiveColor) { row.dataset.color = '1'; row.style.setProperty('--tree-color', effectiveColor) } else { delete row.dataset.color; row.style.removeProperty('--tree-color') }
             
-            // Add visual indicator for copied session
+            // Add visual indicator for copied session or folder
             if (copiedSession && copiedSession.id === n.id) {
               row.classList.add('copied')
-              row.title = 'Copied session - ready to paste'
+              const itemType = n.type === 'folder' ? 'folder' : 'session'
+              row.title = `Copied ${itemType} - ready to paste`
             }
             const caret = document.createElement('div')
             caret.className = 'caret'
@@ -1046,7 +1059,7 @@
           }
           await window.api.sessionsSaveTree(sessionTree)
         })
-        if (targetNode && targetNode.type === 'session') {
+        if (targetNode && (targetNode.type === 'session' || targetNode.type === 'folder')) {
           add('Copy', () => {
             copySession(targetNode.id)
           })
@@ -1203,16 +1216,16 @@
           await window.api.sessionsSaveTree(sessionTree)
           renderTree()
         }
-        // Copy session with Ctrl+C
+        // Copy session or folder with Ctrl+C
         if (e.ctrlKey && e.key === 'c' && selectedId) {
           const info = findNodeById(sessionTree, selectedId, null)
-          if (info && info.node.type === 'session') {
+          if (info && (info.node.type === 'session' || info.node.type === 'folder')) {
             copySession(selectedId)
             e.preventDefault()
             e.stopPropagation()
           }
         }
-        // Paste session with Ctrl+V
+        // Paste session or folder with Ctrl+V
         if (e.ctrlKey && e.key === 'v' && copiedSession) {
           await pasteSession(selectedId)
           e.preventDefault()

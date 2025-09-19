@@ -1,3 +1,3 @@
-2025/09/19-20:12:15.141 9498 Reusing MANIFEST C:\Users\Shere\projects\superterminal\electron-poc\data\Local Storage\leveldb/MANIFEST-000001
-2025/09/19-20:12:15.146 9498 Recovering log #3
-2025/09/19-20:12:15.147 9498 Reusing old log C:\Users\Shere\projects\superterminal\electron-poc\data\Local Storage\leveldb/000003.log 
+2025/09/19-20:15:44.021 a460 Reusing MANIFEST C:\Users\Shere\projects\superterminal\electron-poc\data\Local Storage\leveldb/MANIFEST-000001
+2025/09/19-20:15:44.024 a460 Recovering log #3
+2025/09/19-20:15:44.025 a460 Reusing old log C:\Users\Shere\projects\superterminal\electron-poc\data\Local Storage\leveldb/000003.log 
