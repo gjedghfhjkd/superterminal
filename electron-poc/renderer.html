@@ -253,6 +253,7 @@
             // Ignore collapse zone until user moves right to actually expand
             return
           } else if (startedFromCollapsed && x > COLLAPSE_ZONE) {
+            setCollapsed(false)
             startedFromCollapsed = false
           }
           if (x <= COLLAPSE_ZONE) {
@@ -276,7 +277,6 @@
           e.preventDefault()
           // If collapsed -> expand and start resizing from stored/default width
           if (sidebar.style.display === 'none') {
-            setCollapsed(false)
             startedFromCollapsed = true
           }
           resizing = true
