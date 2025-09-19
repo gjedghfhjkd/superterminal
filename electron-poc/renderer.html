@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
     <style>
-      :root { }
       html, body { height:100%; overflow:hidden; }
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       a, button, input, select, .tab, .left-tab { cursor: pointer }
@@ -33,6 +32,8 @@
       .item.folder { cursor:pointer }
       .item.session:hover { cursor:pointer }
       .item.selected { background:#1a1f2d; outline:1px solid #2a3040; }
+      .item.copied { background:#1a2d1a; outline:1px solid #2fbf71; }
+      .item.copied:hover { background:#1f3a1f; }
       .item .icon svg, .item .label { transition: color .15s ease, fill .15s ease, opacity .15s ease; }
       .item:hover .icon svg { fill:#aab0c0 }
       .item:hover .label { color:#e6e6e6 }
@@ -698,6 +699,7 @@
       // Tree state and helpers
       let sessionTree = []
       let selectedId = null
+      let copiedSession = null // Store copied session data
       function genId(prefix='id') { return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7) }
       function findNodeById(list, id, parent=null) {
         for (let i=0;i<list.length;i++) {
@@ -728,6 +730,56 @@
         if (!info.parent) { sessionTree.splice(info.index, 1) }
         else { info.parent.children.splice(info.index, 1) }
         return true
+      }
+
+      // Copy session function
+      function copySession(id) {
+        const info = findNodeById(sessionTree, id, null)
+        if (!info || info.node.type !== 'session') return false
+        copiedSession = JSON.parse(JSON.stringify(info.node)) // Deep copy
+        renderTree() // Update visual indicators
+        return true
+      }
+
+      // Paste session function
+      async function pasteSession(targetId = null) {
+        if (!copiedSession) return false
+        
+        const newNode = JSON.parse(JSON.stringify(copiedSession)) // Deep copy
+        newNode.id = genId('sess') // Generate new ID
+        newNode.name = (newNode.name || '') + ' (Copy)' // Add copy suffix
+        
+        let targetContainer = sessionTree
+        let insertIndex = sessionTree.length
+        
+        if (targetId) {
+          const targetInfo = findNodeById(sessionTree, targetId, null)
+          if (targetInfo) {
+            if (targetInfo.node.type === 'folder') {
+              targetContainer = targetInfo.node.children || (targetInfo.node.children = [])
+              targetInfo.node.expanded = true
+              insertIndex = targetContainer.length
+            } else {
+              // Insert after the target session
+              const parent = targetInfo.parent
+              targetContainer = parent ? parent.children : sessionTree
+              insertIndex = targetInfo.index + 1
+            }
+          }
+        }
+        
+        targetContainer.splice(insertIndex, 0, newNode)
+        await window.api.sessionsSaveTree(sessionTree)
+        renderTree()
+        return true
+      }
+
+      // Clear copied session when it's deleted or modified
+      function clearCopiedSession(id) {
+        if (copiedSession && copiedSession.id === id) {
+          copiedSession = null
+          renderTree()
+        }
       }
 
       function renderTree() {
@@ -762,6 +814,12 @@
             row.draggable = true
             const effectiveColor = n.type === 'folder' ? (n.color || inheritedColor) : inheritedColor
             if (effectiveColor) { row.dataset.color = '1'; row.style.setProperty('--tree-color', effectiveColor) } else { delete row.dataset.color; row.style.removeProperty('--tree-color') }
+            
+            // Add visual indicator for copied session
+            if (copiedSession && copiedSession.id === n.id) {
+              row.classList.add('copied')
+              row.title = 'Copied session - ready to paste'
+            }
             const caret = document.createElement('div')
             caret.className = 'caret'
             caret.style.visibility = n.type==='folder' ? 'visible' : 'hidden'
@@ -988,10 +1046,21 @@
           }
           await window.api.sessionsSaveTree(sessionTree)
         })
+        if (targetNode && targetNode.type === 'session') {
+          add('Copy', () => {
+            copySession(targetNode.id)
+          })
+        }
+        if (copiedSession) {
+          add('Paste', async () => {
+            await pasteSession(targetNode ? targetNode.id : null)
+          })
+        }
         if (targetNode) {
           add('Delete…', async () => {
             const ok = await showConfirmModal('Delete', 'Delete selected item?', 'Delete', 'Cancel')
             if (!ok) return
+            clearCopiedSession(targetNode.id) // Clear copied session if it's being deleted
             removeNodeById(targetNode.id)
             selectedId = null
             await window.api.sessionsSaveTree(sessionTree)
@@ -1113,6 +1182,7 @@
         if (e.key === 'Delete' && selectedId) {
           const ok = await showConfirmModal('Delete', 'Delete selected item?', 'Delete', 'Cancel')
           if (!ok) return
+          clearCopiedSession(selectedId) // Clear copied session if it's being deleted
           removeNodeById(selectedId)
           selectedId = null
           await window.api.sessionsSaveTree(sessionTree)
@@ -1132,6 +1202,21 @@
           }
           await window.api.sessionsSaveTree(sessionTree)
           renderTree()
+        }
+        // Copy session with Ctrl+C
+        if (e.ctrlKey && e.key === 'c' && selectedId) {
+          const info = findNodeById(sessionTree, selectedId, null)
+          if (info && info.node.type === 'session') {
+            copySession(selectedId)
+            e.preventDefault()
+            e.stopPropagation()
+          }
+        }
+        // Paste session with Ctrl+V
+        if (e.ctrlKey && e.key === 'v' && copiedSession) {
+          await pasteSession(selectedId)
+          e.preventDefault()
+          e.stopPropagation()
         }
       })
 
