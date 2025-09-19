@@ -9,7 +9,11 @@
       html, body { height:100%; overflow:hidden; }
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       a, button, input, select, .tab, .left-tab { cursor: pointer }
-      #left { width:320px; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
+      #left { width:320px; min-width:180px; max-width:60vw; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
+      /* Splitter between left and right */
+      #splitter { width:6px; cursor: col-resize; background: transparent; position: relative; }
+      #splitter:hover { background: rgba(255,255,255,0.04); }
+      #splitter::after { content:""; position:absolute; top:0; bottom:0; left:2px; right:2px; border-left:1px solid #1f2330; border-right:1px solid #1f2330; opacity:.6 }
       /* Set document title to app name */
       /* Title also set from main, but ensure consistency */
       #left-topnav { padding:6px 8px; border-bottom:1px solid #1f2330; display:flex; gap:6px; align-items:center; }
@@ -133,6 +137,7 @@
       <div id="tree" class="tree"></div>
       <div id="ctx" class="ctx-menu" style="display:none"></div>
     </div>
+    <div id="splitter" title="Drag to resize sidebar"></div>
       <div id="right">
       <div id="tabs"></div>
       <div id="panes"></div>
@@ -537,6 +542,79 @@
         }
       }
       window.addEventListener('resize', resize)
+      // Sidebar resize + collapse
+      ;(function initSidebarResize(){
+        const left = document.getElementById('left')
+        const splitter = document.getElementById('splitter')
+        const STORAGE_KEY = 'sidebar-width'
+        const COLLAPSE_KEY = 'sidebar-collapsed'
+        let startX = 0
+        let startW = 0
+        let dragging = false
+        function applyWidth(px){
+          try {
+            const min = 120
+            const max = Math.max(240, Math.round(window.innerWidth*0.6))
+            const clamped = Math.max(min, Math.min(max, Math.round(px)))
+            left.style.width = clamped + 'px'
+            try { localStorage.setItem(STORAGE_KEY, String(clamped)) } catch {}
+            try { resize() } catch {}
+          } catch {}
+        }
+        function setCollapsed(collapsed){
+          if (collapsed) {
+            left.dataset.collapsed = '1'
+            left.style.width = '0px'
+            left.style.borderRightColor = 'transparent'
+          } else {
+            delete left.dataset.collapsed
+            const saved = Number(localStorage.getItem(STORAGE_KEY)||'320') || 320
+            left.style.borderRightColor = '#1f2330'
+            applyWidth(saved)
+          }
+          try { localStorage.setItem(COLLAPSE_KEY, collapsed?'1':'0') } catch {}
+          try { resize() } catch {}
+        }
+        // Restore state
+        try {
+          const saved = Number(localStorage.getItem(STORAGE_KEY)||'0')
+          if (saved > 0) left.style.width = saved + 'px'
+          const collapsed = localStorage.getItem(COLLAPSE_KEY)==='1'
+          if (collapsed) setCollapsed(true)
+        } catch {}
+        // Dragging
+        splitter.addEventListener('mousedown', (e)=>{
+          if (e.button!==0) return
+          dragging = true
+          startX = e.clientX
+          startW = left.getBoundingClientRect().width
+          document.body.style.userSelect = 'none'
+        })
+        window.addEventListener('mousemove', (e)=>{
+          if (!dragging) return
+          const dx = e.clientX - startX
+          applyWidth(startW + dx)
+        })
+        window.addEventListener('mouseup', ()=>{
+          if (!dragging) return
+          dragging = false
+          document.body.style.userSelect = ''
+        })
+        // Double click splitter to collapse/expand
+        splitter.addEventListener('dblclick', ()=>{
+          const isCollapsed = left.dataset.collapsed==='1'
+          setCollapsed(!isCollapsed)
+        })
+        // Keyboard toggle: Ctrl+B (like VS Code)
+        document.addEventListener('keydown', (e)=>{
+          if (e.ctrlKey && (e.key==='b' || e.key==='B')) {
+            const isCollapsed = left.dataset.collapsed==='1'
+            setCollapsed(!isCollapsed)
+            e.preventDefault()
+            e.stopPropagation()
+          }
+        })
+      })()
 
       // Tree state and helpers
       let sessionTree = []
