@@ -58,21 +58,62 @@
       }
     },
     {
-      "id": "fld_mfr3sjcipzxtf",
+      "id": "fld_mfr3woyg5nhnw",
       "type": "folder",
-      "name": "New Folder11",
+      "name": "New Folder1",
       "expanded": true,
       "children": [
         {
-          "id": "fld_mfr3sut6004jn",
+          "id": "sess_mfr3wzkbwwao2",
+          "type": "session",
+          "name": "localhost (root) (Copy)",
+          "session": {
+            "type": "SSH",
+            "name": "localhost",
+            "host": "localhost",
+            "port": 22,
+            "username": "root",
+            "auth": "password",
+            "password": "",
+            "privateKey": "",
+            "passphrase": ""
+          }
+        }
+      ],
+      "color": "#0b0d14"
+    },
+    {
+      "id": "fld_mfr3wr3hj0pco",
+      "type": "folder",
+      "name": "New Folder2",
+      "expanded": true,
+      "children": [
+        {
+          "id": "fld_mfr3x2el0gfm2",
           "type": "folder",
-          "name": "New Folder12321 (Copy)",
-          "expanded": false,
+          "name": "New Folder1",
+          "expanded": true,
           "children": [
             {
-              "id": "sess_mfr3sut6fxz2b",
+              "id": "sess_mfr3x2el3cvmw",
               "type": "session",
-              "name": "localhost (root) (Copy) (Copy)",
+              "name": "localhost (root) (Copy)",
+              "session": {
+                "type": "SSH",
+                "name": "localhost",
+                "host": "localhost",
+                "port": 22,
+                "username": "root",
+                "auth": "password",
+                "password": "",
+                "privateKey": "",
+                "passphrase": ""
+              }
+            },
+            {
+              "id": "sess_mfr3zpuv8r5w4",
+              "type": "session",
+              "name": "localhost (root) (Copy)",
               "session": {
                 "type": "SSH",
                 "name": "localhost",
@@ -89,15 +130,15 @@
           "color": "#0b0d14"
         },
         {
-          "id": "fld_mfr3vpqqzdoo6",
+          "id": "fld_mfr3znbcl9ols",
           "type": "folder",
-          "name": "New Folder12321",
+          "name": "New Folder1",
           "expanded": true,
           "children": [
             {
-              "id": "sess_mfr3vpqqgbjee",
+              "id": "sess_mfr3znbci36mg",
               "type": "session",
-              "name": "localhost (root) (Copy) (Copy)",
+              "name": "localhost (root) (Copy)",
               "session": {
                 "type": "SSH",
                 "name": "localhost",

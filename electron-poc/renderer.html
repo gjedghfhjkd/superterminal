@@ -734,11 +734,17 @@
 
       // Copy session or folder function
       function copySession(id) {
+        console.log('copySession called with id:', id)
         const info = findNodeById(sessionTree, id, null)
-        if (!info || (info.node.type !== 'session' && info.node.type !== 'folder')) return false
+        if (!info || (info.node.type !== 'session' && info.node.type !== 'folder')) {
+          console.log('Invalid item or not found')
+          return false
+        }
+        console.log('Copying item:', info.node.name, 'type:', info.node.type)
         copiedSession = JSON.parse(JSON.stringify(info.node)) // Deep copy
         selectedId = null // Clear selection after copying
-        renderTree() // Update visual indicators
+        console.log('Copied session set, selectedId cleared')
+        renderTree() // Update visual indicators and clear selection
         return true
       }
 
@@ -834,7 +840,8 @@
         function renderList(list, container, inheritedColor) {
           list.forEach(n => {
             const row = document.createElement('div')
-            row.className = 'item ' + (n.type==='folder'?'folder':'session') + (n.expanded ? ' expanded' : '') + (selectedId===n.id?' selected':'')
+            const isSelected = selectedId === n.id
+            row.className = 'item ' + (n.type==='folder'?'folder':'session') + (n.expanded ? ' expanded' : '') + (isSelected ? ' selected' : '')
             row.dataset.id = n.id
             row.draggable = true
             const effectiveColor = n.type === 'folder' ? (n.color || inheritedColor) : inheritedColor
@@ -1231,11 +1238,15 @@
         }
         // Copy session or folder with Ctrl+C
         if (e.ctrlKey && e.key === 'c' && selectedId) {
+          console.log('Ctrl+C pressed, selectedId:', selectedId)
           const info = findNodeById(sessionTree, selectedId, null)
           if (info && (info.node.type === 'session' || info.node.type === 'folder')) {
+            console.log('Calling copySession for:', info.node.name)
             copySession(selectedId)
             e.preventDefault()
             e.stopPropagation()
+          } else {
+            console.log('No valid item to copy')
           }
         }
         // Paste session or folder with Ctrl+V
