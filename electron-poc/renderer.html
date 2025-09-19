@@ -13,7 +13,7 @@
       .splitter { width:14px; cursor: col-resize; background:#0b0d14; border-right:1px solid #1f2330; position:relative; }
       .splitter:hover { background:#121523 }
       .splitter.collapsed { cursor: default; background:#0b0d14; border-right:1px solid #1f2330 }
-      .splitter .expand-btn { display:flex; position:absolute; left:0; top:50%; transform:translateY(-50%); width:14px; height:28px; padding:0; border:1px solid #2a3040; border-radius:6px; background:#1a1f2d; color:#cfd3dc; align-items:center; justify-content:center; cursor:pointer }
+      .splitter .expand-btn { display:flex; position:absolute; left:0; top:50%; transform:translateY(-50%); width:14px; height:14px; padding:0; border:1px solid #2a3040; border-radius:6px; background:#1a1f2d; color:#cfd3dc; align-items:center; justify-content:center; cursor:pointer }
       .splitter .expand-btn:hover { background:#22283a }
       .splitter .expand-btn svg { transition: transform .15s ease }
       .splitter:not(.collapsed) .expand-btn svg { transform: rotate(180deg) }
@@ -140,7 +140,7 @@
       <div id="tree" class="tree"></div>
       <div id="ctx" class="ctx-menu" style="display:none"></div>
     </div>
-      <div id="splitter" class="splitter"><button id="splitter-expand" class="expand-btn" title="Show sidebar"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M9 6l-1.4 1.4L12.2 12l-4.6 4.6L9 18l6-6-6-6z"/></svg></button></div>
+      <div id="splitter" class="splitter"><button id="splitter-expand" class="expand-btn" title="Show sidebar" style="left:0; right:0; margin:0 auto"><svg viewBox="0 0 24 24" width="12" height="12"><path fill="currentColor" d="M9 6l-1.4 1.4L12.2 12l-4.6 4.6L9 18l6-6-6-6z"/></svg></button></div>
       <div id="right">
       <div id="tabs"></div>
       <div id="panes"></div>
