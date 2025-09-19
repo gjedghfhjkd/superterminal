@@ -9,12 +9,13 @@
       html, body { height:100%; overflow:hidden; }
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       a, button, input, select, .tab, .left-tab { cursor: pointer }
-      #left { width:320px; min-width:180px; max-width:60vw; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
+      #left { width:320px; min-width:180px; max-width:60vw; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; transition: width .2s ease, border-right-color .2s ease; }
+      #left.no-transition { transition: none !important }
       #left[data-collapsed="1"] { width:0 !important; min-width:0 !important; overflow:hidden; border-right-color: transparent; }
       /* Splitter between left and right */
-      #splitter { width:6px; cursor: col-resize; background: transparent; position: relative; }
-      #splitter:hover { background: rgba(255,255,255,0.04); }
-      #splitter::after { content:""; position:absolute; top:0; bottom:0; left:2px; right:2px; border-left:1px solid #1f2330; border-right:1px solid #1f2330; opacity:.6 }
+      #splitter { width:28px; cursor: col-resize; background:linear-gradient(180deg,#1e2333,#131726); position: relative; border-left:1px solid #2a3040; border-right:1px solid #2a3040; }
+      #splitter:hover { background:linear-gradient(180deg,#262c40,#171b2b); border-left-color:#3a4160; border-right-color:#3a4160 }
+      #splitter::after { content:none }
       #splitter .splitter-btn { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:linear-gradient(180deg,#1e2333,#131726); border:1px solid #2a3040; border-radius:50%; color:#cfd3dc; width:28px; height:28px; display:none; align-items:center; justify-content:center; padding:0; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.45); z-index:5 }
       #splitter .splitter-btn:hover { background:linear-gradient(180deg,#262c40,#171b2b); border-color:#3a4160 }
       #splitter .splitter-btn svg { display:block }
@@ -588,15 +589,15 @@
           const isCollapsed = left.dataset.collapsed==='1'
           if (leftBtn) {
             leftBtn.innerHTML = isCollapsed
-              ? '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 7 L16 12 L10 17"/></svg>'
-              : '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 7 L8 12 L14 17"/></svg>'
+              ? '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 7 L8 12 L14 17"/></svg>'
+              : '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 7 L16 12 L10 17"/></svg>'
             leftBtn.title = isCollapsed ? 'Show sidebar' : 'Hide sidebar'
           }
           if (splitBtn) {
             splitBtn.style.display = isCollapsed ? 'flex' : 'none'
             splitBtn.innerHTML = isCollapsed
-              ? '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 7 L16 12 L10 17"/></svg>'
-              : '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 7 L8 12 L14 17"/></svg>'
+              ? '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 7 L8 12 L14 17"/></svg>'
+              : '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 7 L16 12 L10 17"/></svg>'
             splitBtn.title = isCollapsed ? 'Show sidebar' : 'Hide sidebar'
           }
         }
@@ -622,6 +623,7 @@
           } else {
             startW = left.getBoundingClientRect().width
           }
+          left.classList.add('no-transition')
           document.body.style.userSelect = 'none'
         })
         window.addEventListener('mousemove', (e)=>{
@@ -633,6 +635,7 @@
           if (!dragging) return
           dragging = false
           document.body.style.userSelect = ''
+          left.classList.remove('no-transition')
         })
         // Double click splitter to collapse/expand
         splitter.addEventListener('dblclick', ()=>{
