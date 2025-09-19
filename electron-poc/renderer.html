@@ -244,10 +244,17 @@
 
         let resizing = false
         let rafPending = false
+        let startedFromCollapsed = false
         function onMouseMove(e) {
           if (!resizing) return
           if (sidebar.style.display === 'none') { sidebar.style.display = 'flex' }
           const x = e.clientX
+          if (startedFromCollapsed && x <= COLLAPSE_ZONE) {
+            // Ignore collapse zone until user moves right to actually expand
+            return
+          } else if (startedFromCollapsed && x > COLLAPSE_ZONE) {
+            startedFromCollapsed = false
+          }
           if (x <= COLLAPSE_ZONE) {
             setCollapsed(true)
             onMouseUp()
@@ -267,8 +274,11 @@
         }
         splitter.addEventListener('mousedown', (e) => {
           e.preventDefault()
-          // If collapsed -> ignore drag, only arrow toggles
-          if (sidebar.style.display === 'none') { return }
+          // If collapsed -> expand and start resizing from stored/default width
+          if (sidebar.style.display === 'none') {
+            setCollapsed(false)
+            startedFromCollapsed = true
+          }
           resizing = true
           document.addEventListener('mousemove', onMouseMove)
           document.addEventListener('mouseup', onMouseUp)
