@@ -643,7 +643,8 @@
                   const cfg = Object.assign({}, s, { id: rid })
                   try {
                     await window.api.sftpConnect(cfg)
-                    const title = `${s.type || 'SFTP'} ${s.name||s.host} (${s.username})`
+                    const remoteHost = (s.host || s.hostname || 'host')
+                    const title = s.name ? `${s.name}, ${remoteHost}${s.username ? ` (${s.username})` : ''}` : `${remoteHost}`
                     const parentColor = findParentFolderColor(sessionTree, n.id)
                     createSftpTab(rid, title)
                     if (parentColor) {
@@ -659,7 +660,8 @@
                 } else {
                   // Create SSH tab, attempt connect; on failure close tab and show styled error
                   const rid = genId('ssh')
-                  const title = `${s.type || 'SSH'} ${s.name||s.host} (${s.username})`
+                  const remoteHost = (s.host || s.hostname || 'host')
+                  const title = s.name ? `${s.name}, ${remoteHost}${s.username ? ` (${s.username})` : ''}` : `${remoteHost}`
                   const parentColor = findParentFolderColor(sessionTree, n.id)
                   createTerminalFor(rid, title)
                   if (parentColor) {
