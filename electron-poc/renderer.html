@@ -10,6 +10,7 @@
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       a, button, input, select, .tab, .left-tab { cursor: pointer }
       #left { width:320px; min-width:180px; max-width:60vw; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
+      #left[data-collapsed="1"] { width:0 !important; min-width:0 !important; overflow:hidden; border-right-color: transparent; }
       /* Splitter between left and right */
       #splitter { width:6px; cursor: col-resize; background: transparent; position: relative; }
       #splitter:hover { background: rgba(255,255,255,0.04); }
@@ -553,8 +554,9 @@
         let dragging = false
         function applyWidth(px){
           try {
-            const min = 120
+            const min = 140
             const max = Math.max(240, Math.round(window.innerWidth*0.6))
+            if (px <= 24) { setCollapsed(true); return }
             const clamped = Math.max(min, Math.min(max, Math.round(px)))
             left.style.width = clamped + 'px'
             try { localStorage.setItem(STORAGE_KEY, String(clamped)) } catch {}
@@ -564,12 +566,9 @@
         function setCollapsed(collapsed){
           if (collapsed) {
             left.dataset.collapsed = '1'
-            left.style.width = '0px'
-            left.style.borderRightColor = 'transparent'
           } else {
             delete left.dataset.collapsed
             const saved = Number(localStorage.getItem(STORAGE_KEY)||'320') || 320
-            left.style.borderRightColor = '#1f2330'
             applyWidth(saved)
           }
           try { localStorage.setItem(COLLAPSE_KEY, collapsed?'1':'0') } catch {}
@@ -587,7 +586,15 @@
           if (e.button!==0) return
           dragging = true
           startX = e.clientX
-          startW = left.getBoundingClientRect().width
+          const isCollapsed = left.dataset.collapsed==='1'
+          if (isCollapsed) {
+            // Expand from collapsed on drag
+            delete left.dataset.collapsed
+            startW = Number(localStorage.getItem(STORAGE_KEY)||'320') || 320
+            left.style.width = '1px'
+          } else {
+            startW = left.getBoundingClientRect().width
+          }
           document.body.style.userSelect = 'none'
         })
         window.addEventListener('mousemove', (e)=>{
