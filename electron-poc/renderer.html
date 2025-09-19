@@ -247,6 +247,7 @@
         let rafPending = false
         let startedFromCollapsed = false
         let dragStartX = 0
+        let expandedDuringDrag = false
         function onMouseMove(e) {
           if (!resizing) return
           const x = e.clientX
@@ -255,10 +256,13 @@
             if (delta <= DRAG_THRESHOLD) { return }
             setCollapsed(false)
             startedFromCollapsed = false
+            expandedDuringDrag = true
+            const nextW = clampWidth(x)
+            setSidebarWidth(nextW)
             // After expanding, allow width set below
           }
           if (sidebar.style.display === 'none') { sidebar.style.display = 'flex' }
-          if (x <= COLLAPSE_ZONE) {
+          if (!expandedDuringDrag && x <= COLLAPSE_ZONE) {
             setCollapsed(true)
             onMouseUp()
             return
@@ -271,6 +275,7 @@
         function onMouseUp() {
           if (!resizing) return
           resizing = false
+          expandedDuringDrag = false
           document.removeEventListener('mousemove', onMouseMove)
           document.removeEventListener('mouseup', onMouseUp)
           try { resize() } catch {}
