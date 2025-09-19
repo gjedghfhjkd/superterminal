@@ -183,6 +183,7 @@
       // Sidebar sizing state
       const SIDEBAR_MIN = 160
       const COLLAPSE_ZONE = 20
+      const DRAG_THRESHOLD = 5
       const SIDEBAR_MAX = 600
       const LS_SIDEBAR_W = 'sidebarWidthPx'
       const LS_SIDEBAR_COL = 'sidebarCollapsed'
@@ -245,17 +246,18 @@
         let resizing = false
         let rafPending = false
         let startedFromCollapsed = false
+        let dragStartX = 0
         function onMouseMove(e) {
           if (!resizing) return
-          if (sidebar.style.display === 'none') { sidebar.style.display = 'flex' }
           const x = e.clientX
-          if (startedFromCollapsed && x <= COLLAPSE_ZONE) {
-            // Ignore collapse zone until user moves right to actually expand
-            return
-          } else if (startedFromCollapsed && x > COLLAPSE_ZONE) {
+          if (startedFromCollapsed) {
+            const delta = x - dragStartX
+            if (delta <= DRAG_THRESHOLD) { return }
             setCollapsed(false)
             startedFromCollapsed = false
+            // After expanding, allow width set below
           }
+          if (sidebar.style.display === 'none') { sidebar.style.display = 'flex' }
           if (x <= COLLAPSE_ZONE) {
             setCollapsed(true)
             onMouseUp()
@@ -278,6 +280,7 @@
           // If collapsed -> expand and start resizing from stored/default width
           if (sidebar.style.display === 'none') {
             startedFromCollapsed = true
+            dragStartX = e.clientX
           }
           resizing = true
           document.addEventListener('mousemove', onMouseMove)
