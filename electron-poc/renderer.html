@@ -45,12 +45,13 @@
       .drop-target { outline:1px dashed #3a4160; background:#141a29; }
       #right { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
       #tabs { height:36px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:flex-end; gap:6px; padding:0 8px; box-sizing:border-box; }
-      .tab { cursor: pointer; padding:6px 10px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; position:relative; transition:background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease; }
+      .tab { cursor: pointer; padding:4px 7px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:174px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; position:relative; transition:background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease; display:flex; align-items:center; }
       .tab:hover { background:#22283a; border-color:#3a4160; }
       .tab.active { background:#0b0d14; color:#ffffff; border-color:#3a4160; box-shadow:0 0 0 1px #3a4160 inset; font-weight:600; }
       .tab.active::after { content:""; position:absolute; left:8px; right:8px; bottom:-1px; height:3px; border-radius:3px 3px 0 0; background:linear-gradient(90deg,#2f66ef,#7a5cf0); }
-      .tab .title { pointer-events:none; }
+      .tab .title { pointer-events:none; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
       .tab .close { margin-left:8px; color:#8b90a0; opacity:.8; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; transition:background .15s ease, color .15s ease, opacity .15s ease, box-shadow .15s ease; cursor:pointer; }
+      .tab .close { flex: 0 0 auto }
       .tab:hover .close { opacity:.95; color:#a0a6b8; }
       .tab .close:hover { color:#e6e6e6; background:#2a3040; opacity:1; box-shadow:0 0 0 2px rgba(58,65,96,.35) inset; }
 
@@ -643,7 +644,8 @@
                   const cfg = Object.assign({}, s, { id: rid })
                   try {
                     await window.api.sftpConnect(cfg)
-                    const title = `${s.type || 'SFTP'} ${s.name||s.host} (${s.username})`
+                    const remoteHost = (s.host || s.hostname || 'host')
+                    const title = s.name ? `${s.name}` : `${remoteHost}`
                     const parentColor = findParentFolderColor(sessionTree, n.id)
                     createSftpTab(rid, title)
                     if (parentColor) {
@@ -659,7 +661,8 @@
                 } else {
                   // Create SSH tab, attempt connect; on failure close tab and show styled error
                   const rid = genId('ssh')
-                  const title = `${s.type || 'SSH'} ${s.name||s.host} (${s.username})`
+                  const remoteHost = (s.host || s.hostname || 'host')
+                  const title = s.name ? `${s.name}` : `${remoteHost}`
                   const parentColor = findParentFolderColor(sessionTree, n.id)
                   createTerminalFor(rid, title)
                   if (parentColor) {
