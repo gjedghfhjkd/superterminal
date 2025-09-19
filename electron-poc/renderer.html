@@ -10,12 +10,13 @@
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       a, button, input, select, .tab, .left-tab { cursor: pointer }
       #left { width:320px; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
-      .splitter { width:6px; cursor: col-resize; background:#0b0d14; border-right:1px solid #1f2330; position:relative; }
+      .splitter { width:14px; cursor: col-resize; background:#0b0d14; border-right:1px solid #1f2330; position:relative; }
       .splitter:hover { background:#121523 }
-      .splitter.collapsed { width:14px; cursor: default; background:#0b0d14; border-right:1px solid #1f2330 }
-      .splitter .expand-btn { display:none; position:absolute; left:0; top:50%; transform:translateY(-50%); width:14px; height:28px; padding:0; border:1px solid #2a3040; border-radius:6px; background:#1a1f2d; color:#cfd3dc; align-items:center; justify-content:center; cursor:pointer }
+      .splitter.collapsed { cursor: default; background:#0b0d14; border-right:1px solid #1f2330 }
+      .splitter .expand-btn { display:flex; position:absolute; left:0; top:50%; transform:translateY(-50%); width:14px; height:28px; padding:0; border:1px solid #2a3040; border-radius:6px; background:#1a1f2d; color:#cfd3dc; align-items:center; justify-content:center; cursor:pointer }
       .splitter .expand-btn:hover { background:#22283a }
-      .splitter.collapsed .expand-btn { display:flex }
+      .splitter .expand-btn svg { transition: transform .15s ease }
+      .splitter:not(.collapsed) .expand-btn svg { transform: rotate(180deg) }
       /* Set document title to app name */
       /* Title also set from main, but ensure consistency */
       #left-topnav { padding:6px 8px; border-bottom:1px solid #1f2330; display:flex; gap:6px; align-items:center; }
@@ -271,7 +272,15 @@
         })
         splitter.addEventListener('dblclick', (e) => { e.preventDefault(); setCollapsed(sidebar.style.display !== 'none') })
         const expandBtn = document.getElementById('splitter-expand')
-        if (expandBtn) expandBtn.onclick = (e) => { e.stopPropagation(); setCollapsed(false) }
+        if (expandBtn) {
+          expandBtn.addEventListener('mousedown', (e) => { e.stopPropagation(); e.preventDefault() })
+          expandBtn.addEventListener('click', (e) => {
+            e.stopPropagation()
+            e.preventDefault()
+            const willCollapse = (sidebar.style.display !== 'none')
+            setCollapsed(!willCollapse)
+          })
+        }
         if (toggleBtn) toggleBtn.onclick = () => setCollapsed(sidebar.style.display !== 'none')
       })()
 
