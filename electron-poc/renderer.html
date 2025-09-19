@@ -182,6 +182,7 @@
       let draggingId = null
       // Sidebar sizing state
       const SIDEBAR_MIN = 160
+      const COLLAPSE_ZONE = 20
       const SIDEBAR_MAX = 600
       const LS_SIDEBAR_W = 'sidebarWidthPx'
       const LS_SIDEBAR_COL = 'sidebarCollapsed'
@@ -246,7 +247,13 @@
         function onMouseMove(e) {
           if (!resizing) return
           if (sidebar.style.display === 'none') { sidebar.style.display = 'flex' }
-          const next = clampWidth(e.clientX)
+          const x = e.clientX
+          if (x <= COLLAPSE_ZONE) {
+            setCollapsed(true)
+            onMouseUp()
+            return
+          }
+          const next = clampWidth(x)
           if (rafPending) return
           rafPending = true
           requestAnimationFrame(() => { setSidebarWidth(next); rafPending = false })
