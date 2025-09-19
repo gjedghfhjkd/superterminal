@@ -10,8 +10,12 @@
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       a, button, input, select, .tab, .left-tab { cursor: pointer }
       #left { width:320px; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
-      .splitter { width:6px; cursor: col-resize; background:#0b0d14; border-right:1px solid #1f2330; }
+      .splitter { width:6px; cursor: col-resize; background:#0b0d14; border-right:1px solid #1f2330; position:relative; }
       .splitter:hover { background:#121523 }
+      .splitter.collapsed { width:14px; cursor: default; background:#0b0d14; border-right:1px solid #1f2330 }
+      .splitter .expand-btn { display:none; position:absolute; left:0; top:50%; transform:translateY(-50%); width:14px; height:28px; padding:0; border:1px solid #2a3040; border-radius:6px; background:#1a1f2d; color:#cfd3dc; align-items:center; justify-content:center; cursor:pointer }
+      .splitter .expand-btn:hover { background:#22283a }
+      .splitter.collapsed .expand-btn { display:flex }
       /* Set document title to app name */
       /* Title also set from main, but ensure consistency */
       #left-topnav { padding:6px 8px; border-bottom:1px solid #1f2330; display:flex; gap:6px; align-items:center; }
@@ -136,7 +140,7 @@
       <div id="tree" class="tree"></div>
       <div id="ctx" class="ctx-menu" style="display:none"></div>
     </div>
-      <div id="splitter" class="splitter"></div>
+      <div id="splitter" class="splitter"><button id="splitter-expand" class="expand-btn" title="Show sidebar"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M9 6l-1.4 1.4L12.2 12l-4.6 4.6L9 18l6-6-6-6z"/></svg></button></div>
       <div id="right">
       <div id="tabs"></div>
       <div id="panes"></div>
@@ -219,10 +223,12 @@
         function setCollapsed(flag, persist=true) {
           if (flag) {
             sidebar.style.display = 'none'
+            splitter.classList.add('collapsed')
           } else {
             const stored = Number.parseInt((() => { try { return localStorage.getItem(LS_SIDEBAR_W) } catch { return null } })() || '', 10)
             const w = Number.isFinite(stored) && stored > 0 ? stored : 320
             setSidebarWidth(w, false)
+            splitter.classList.remove('collapsed')
           }
           if (persist) { try { localStorage.setItem(LS_SIDEBAR_COL, flag ? '1' : '0') } catch {} }
           try { resize() } catch {}
@@ -264,6 +270,8 @@
           document.addEventListener('mouseup', onMouseUp)
         })
         splitter.addEventListener('dblclick', (e) => { e.preventDefault(); setCollapsed(sidebar.style.display !== 'none') })
+        const expandBtn = document.getElementById('splitter-expand')
+        if (expandBtn) expandBtn.onclick = (e) => { e.stopPropagation(); setCollapsed(false) }
         if (toggleBtn) toggleBtn.onclick = () => setCollapsed(sidebar.style.display !== 'none')
       })()
 
