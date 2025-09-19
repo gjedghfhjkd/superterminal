@@ -12,12 +12,13 @@
       #left { width:320px; min-width:180px; max-width:60vw; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; transition: width .22s ease, border-right-color .22s ease; }
       #left.no-transition { transition: none !important }
       #left[data-collapsed="1"] { overflow:hidden; border-right-color: transparent; min-width:0 !important }
+      #left[data-collapsed="1"] #left-header, #left[data-collapsed="1"] #tree { display:none }
       #left.animating { min-width:0 !important }
       /* Splitter between left and right */
-      #splitter { width:28px; cursor: col-resize; background:linear-gradient(180deg,#1e2333,#131726); position: relative; border-left:1px solid #2a3040; border-right:1px solid #2a3040; }
+      #splitter { width:14px; cursor: col-resize; background:linear-gradient(180deg,#1e2333,#131726); position: relative; border-left:1px solid #2a3040; border-right:1px solid #2a3040; }
       #splitter:hover { background:linear-gradient(180deg,#262c40,#171b2b); border-left-color:#3a4160; border-right-color:#3a4160 }
       #splitter::after { content:none }
-      #splitter .splitter-btn { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:linear-gradient(180deg,#1e2333,#131726); border:1px solid #2a3040; border-radius:50%; color:#cfd3dc; width:28px; height:28px; display:none; align-items:center; justify-content:center; padding:0; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.45); z-index:5 }
+      #splitter .splitter-btn { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:linear-gradient(180deg,#1e2333,#131726); border:1px solid #2a3040; border-radius:50%; color:#cfd3dc; width:14px; height:14px; display:none; align-items:center; justify-content:center; padding:0; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.45); z-index:5 }
       #splitter .splitter-btn:hover { background:linear-gradient(180deg,#262c40,#171b2b); border-color:#3a4160 }
       #splitter .splitter-btn svg { display:block }
       /* Set document title to app name */
