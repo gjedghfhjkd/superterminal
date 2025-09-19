@@ -131,11 +131,10 @@
   </head>
   <body>
       <div id="left">
-      <div id="left-topnav">
+        <div id="left-topnav">
         <div id="left-ssh" class="left-tab"><span class="icon"><svg viewBox="0 0 24 24"><path d="M3 12l4-4 4 4-4 4-4-4zm10-2h8v4h-8v-4z"/></svg></span>SSH</div>
         <div id="left-sftp" class="left-tab"><span class="icon sftp"><svg viewBox="0 0 24 24"><path d="M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h16v2H4v-2zm0 4h10v2H4v-2z"/></svg></span>SFTP</div>
         <div id="left-tun" class="left-tab"><span class="icon"><svg viewBox="0 0 24 24"><path d="M4 11h16v2H4v-2zm3-5h10v2H7V6zm0 10h10v2H7v-2z"/></svg></span>Tunneling</div>
-          <div id="left-toggle" class="left-tab" title="Hide/Show sidebar" style="margin-left:auto"><span class="icon"><svg viewBox="0 0 24 24"><path d="M9 6l-1.4 1.4L12.2 12l-4.6 4.6L9 18l6-6-6-6zM5 5h2v14H5z"/></svg></span></div>
       </div>
       <div id="left-header">Sessions</div>
       <div id="tree" class="tree"></div>
@@ -210,7 +209,7 @@
       ;(function initSidebarSizing() {
         const sidebar = document.getElementById('left')
         const splitter = document.getElementById('splitter')
-        const toggleBtn = document.getElementById('left-toggle')
+        const toggleBtn = null
         if (!sidebar || !splitter) return
 
         function clampWidth(px) { return Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, px)) }
@@ -261,16 +260,14 @@
         }
         splitter.addEventListener('mousedown', (e) => {
           e.preventDefault()
-          // If collapsed -> expand to stored or default
-          if (sidebar.style.display === 'none') {
-            setCollapsed(false)
-            return
-          }
+          // If collapsed -> ignore drag, only arrow toggles
+          if (sidebar.style.display === 'none') { return }
           resizing = true
           document.addEventListener('mousemove', onMouseMove)
           document.addEventListener('mouseup', onMouseUp)
         })
-        splitter.addEventListener('dblclick', (e) => { e.preventDefault(); setCollapsed(sidebar.style.display !== 'none') })
+        // Disable double-click toggle; only arrow button controls collapse/expand
+        splitter.addEventListener('dblclick', (e) => { e.preventDefault() })
         const expandBtn = document.getElementById('splitter-expand')
         if (expandBtn) {
           expandBtn.addEventListener('mousedown', (e) => { e.stopPropagation(); e.preventDefault() })
@@ -281,7 +278,7 @@
             setCollapsed(!willCollapse)
           })
         }
-        if (toggleBtn) toggleBtn.onclick = () => setCollapsed(sidebar.style.display !== 'none')
+        // No topnav toggle
       })()
 
       function createTerminalFor(id, title) {
