@@ -15,9 +15,12 @@
       #splitter { width:6px; cursor: col-resize; background: transparent; position: relative; }
       #splitter:hover { background: rgba(255,255,255,0.04); }
       #splitter::after { content:""; position:absolute; top:0; bottom:0; left:2px; right:2px; border-left:1px solid #1f2330; border-right:1px solid #1f2330; opacity:.6 }
-      #splitter .splitter-btn { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:#1a1f2d; border:1px solid #2a3040; border-radius:8px; color:#cfd3dc; width:24px; height:28px; display:none; align-items:center; justify-content:center; padding:0; cursor:pointer }
-      #splitter .splitter-btn:hover { background:#22283a }
-      #left-collapse-btn { margin-left:auto }
+      #splitter .splitter-btn { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:linear-gradient(180deg,#1e2333,#131726); border:1px solid #2a3040; border-radius:50%; color:#cfd3dc; width:28px; height:28px; display:none; align-items:center; justify-content:center; padding:0; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.45); z-index:5 }
+      #splitter .splitter-btn:hover { background:linear-gradient(180deg,#262c40,#171b2b); border-color:#3a4160 }
+      #splitter .splitter-btn svg { display:block }
+      #left-collapse-btn { margin-left:auto; width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; background:linear-gradient(180deg,#1e2333,#131726); border:1px solid #2a3040; box-shadow:0 2px 8px rgba(0,0,0,.3); padding:0 }
+      #left-collapse-btn:hover { background:linear-gradient(180deg,#262c40,#171b2b); border-color:#3a4160; box-shadow:0 4px 14px rgba(0,0,0,.4) }
+      #left-collapse-btn svg { display:block }
       /* Set document title to app name */
       /* Title also set from main, but ensure consistency */
       #left-topnav { padding:6px 8px; border-bottom:1px solid #1f2330; display:flex; gap:6px; align-items:center; }
@@ -136,13 +139,13 @@
         <div id="left-ssh" class="left-tab"><span class="icon"><svg viewBox="0 0 24 24"><path d="M3 12l4-4 4 4-4 4-4-4zm10-2h8v4h-8v-4z"/></svg></span>SSH</div>
         <div id="left-sftp" class="left-tab"><span class="icon sftp"><svg viewBox="0 0 24 24"><path d="M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h16v2H4v-2zm0 4h10v2H4v-2z"/></svg></span>SFTP</div>
         <div id="left-tun" class="left-tab"><span class="icon"><svg viewBox="0 0 24 24"><path d="M4 11h16v2H4v-2zm3-5h10v2H7V6zm0 10h10v2H7v-2z"/></svg></span>Tunneling</div>
-        <button id="left-collapse-btn" class="icon-btn" title="Toggle sidebar"></button>
+        <button id="left-collapse-btn" class="icon-btn" title="Toggle sidebar" aria-label="Toggle sidebar"></button>
       </div>
       <div id="left-header">Sessions</div>
       <div id="tree" class="tree"></div>
       <div id="ctx" class="ctx-menu" style="display:none"></div>
     </div>
-    <div id="splitter" title="Drag to resize sidebar"><button id="splitter-toggle" class="splitter-btn" title="Toggle sidebar"></button></div>
+    <div id="splitter" title="Drag to resize sidebar"><button id="splitter-toggle" class="splitter-btn" title="Toggle sidebar" aria-label="Toggle sidebar"></button></div>
       <div id="right">
       <div id="tabs"></div>
       <div id="panes"></div>
@@ -585,15 +588,15 @@
           const isCollapsed = left.dataset.collapsed==='1'
           if (leftBtn) {
             leftBtn.innerHTML = isCollapsed
-              ? '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M9 6l6 6-6 6V6z"/></svg>'
-              : '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M15 6l-6 6 6 6V6z"/></svg>'
+              ? '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 7 L16 12 L10 17"/></svg>'
+              : '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 7 L8 12 L14 17"/></svg>'
             leftBtn.title = isCollapsed ? 'Show sidebar' : 'Hide sidebar'
           }
           if (splitBtn) {
             splitBtn.style.display = isCollapsed ? 'flex' : 'none'
             splitBtn.innerHTML = isCollapsed
-              ? '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M9 6l6 6-6 6V6z"/></svg>'
-              : '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M15 6l-6 6 6 6V6z"/></svg>'
+              ? '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 7 L16 12 L10 17"/></svg>'
+              : '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 7 L8 12 L14 17"/></svg>'
             splitBtn.title = isCollapsed ? 'Show sidebar' : 'Hide sidebar'
           }
         }
