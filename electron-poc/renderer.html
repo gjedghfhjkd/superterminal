@@ -11,7 +11,8 @@
       a, button, input, select, .tab, .left-tab { cursor: pointer }
       #left { width:320px; min-width:180px; max-width:60vw; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; transition: width .22s ease, border-right-color .22s ease; }
       #left.no-transition { transition: none !important }
-      #left[data-collapsed="1"] { overflow:hidden; border-right-color: transparent; }
+      #left[data-collapsed="1"] { overflow:hidden; border-right-color: transparent; min-width:0 !important }
+      #left.animating { min-width:0 !important }
       /* Splitter between left and right */
       #splitter { width:28px; cursor: col-resize; background:linear-gradient(180deg,#1e2333,#131726); position: relative; border-left:1px solid #2a3040; border-right:1px solid #2a3040; }
       #splitter:hover { background:linear-gradient(180deg,#262c40,#171b2b); border-left-color:#3a4160; border-right-color:#3a4160 }
@@ -578,21 +579,27 @@
               left.offsetHeight; // force reflow
               left.classList.remove('no-transition')
             } else {
+              left.classList.add('animating')
               left.style.width = current + 'px'
               requestAnimationFrame(() => { left.style.width = '0px' })
+              const onEnd = (ev) => { if (ev && ev.propertyName !== 'width') return; left.removeEventListener('transitionend', onEnd); left.classList.remove('animating') }
+              left.addEventListener('transitionend', onEnd)
             }
           } else {
-            delete left.dataset.collapsed
             const target = Number(localStorage.getItem(STORAGE_KEY)||'320') || 320
             if (options.instant) {
+              delete left.dataset.collapsed
               left.classList.add('no-transition')
               left.style.width = target + 'px'
               left.offsetHeight; // force reflow
               left.classList.remove('no-transition')
             } else {
-              // start from 0 to animate to saved width
+              // Animate from 0 -> target while temporarily allowing min-width:0
+              left.classList.add('animating')
               left.style.width = '0px'
-              requestAnimationFrame(() => { left.style.width = target + 'px' })
+              requestAnimationFrame(() => { delete left.dataset.collapsed; left.style.width = target + 'px' })
+              const onEnd2 = (ev) => { if (ev && ev.propertyName !== 'width') return; left.removeEventListener('transitionend', onEnd2); left.classList.remove('animating') }
+              left.addEventListener('transitionend', onEnd2)
             }
           }
           try { localStorage.setItem(COLLAPSE_KEY, collapsed?'1':'0') } catch {}
@@ -605,8 +612,8 @@
           if (splitBtn) {
             splitBtn.style.display = isCollapsed ? 'flex' : 'none'
             splitBtn.innerHTML = isCollapsed
-              ? '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 7 L16 12 L10 17"/></svg>'
-              : '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 7 L8 12 L14 17"/></svg>'
+              ? '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 7 L8 12 L14 17"/></svg>'
+              : '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#cfd3dc" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 7 L16 12 L10 17"/></svg>'
             splitBtn.title = isCollapsed ? 'Show sidebar' : 'Hide sidebar'
           }
         }
@@ -621,6 +628,9 @@
         // Dragging
         splitter.addEventListener('mousedown', (e)=>{
           if (e.button!==0) return
+          // Don't start drag when clicking the toggle button
+          const isOnButton = e.target && e.target.closest && e.target.closest('.splitter-btn')
+          if (isOnButton) return
           dragging = true
           startX = e.clientX
           const isCollapsed = left.dataset.collapsed==='1'
