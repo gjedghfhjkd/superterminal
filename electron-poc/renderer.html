@@ -274,8 +274,8 @@
           expandBtn.addEventListener('click', (e) => {
             e.stopPropagation()
             e.preventDefault()
-            const willCollapse = (sidebar.style.display !== 'none')
-            setCollapsed(!willCollapse)
+            const isVisible = (sidebar.style.display !== 'none')
+            setCollapsed(isVisible)
           })
         }
         // No topnav toggle
