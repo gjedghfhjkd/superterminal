@@ -56,6 +56,65 @@
         "privateKey": "",
         "passphrase": ""
       }
+    },
+    {
+      "id": "fld_mfr3sjcipzxtf",
+      "type": "folder",
+      "name": "New Folder11",
+      "expanded": true,
+      "children": [
+        {
+          "id": "fld_mfr3sut6004jn",
+          "type": "folder",
+          "name": "New Folder12321 (Copy)",
+          "expanded": false,
+          "children": [
+            {
+              "id": "sess_mfr3sut6fxz2b",
+              "type": "session",
+              "name": "localhost (root) (Copy) (Copy)",
+              "session": {
+                "type": "SSH",
+                "name": "localhost",
+                "host": "localhost",
+                "port": 22,
+                "username": "root",
+                "auth": "password",
+                "password": "",
+                "privateKey": "",
+                "passphrase": ""
+              }
+            }
+          ],
+          "color": "#0b0d14"
+        },
+        {
+          "id": "fld_mfr3vpqqzdoo6",
+          "type": "folder",
+          "name": "New Folder12321",
+          "expanded": true,
+          "children": [
+            {
+              "id": "sess_mfr3vpqqgbjee",
+              "type": "session",
+              "name": "localhost (root) (Copy) (Copy)",
+              "session": {
+                "type": "SSH",
+                "name": "localhost",
+                "host": "localhost",
+                "port": 22,
+                "username": "root",
+                "auth": "password",
+                "password": "",
+                "privateKey": "",
+                "passphrase": ""
+              }
+            }
+          ],
+          "color": "#0b0d14"
+        }
+      ],
+      "color": "#0b0d14"
     }
   ]
 }

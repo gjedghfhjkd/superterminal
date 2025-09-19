@@ -737,6 +737,7 @@
         const info = findNodeById(sessionTree, id, null)
         if (!info || (info.node.type !== 'session' && info.node.type !== 'folder')) return false
         copiedSession = JSON.parse(JSON.stringify(info.node)) // Deep copy
+        selectedId = null // Clear selection after copying
         renderTree() // Update visual indicators
         return true
       }
@@ -746,7 +747,19 @@
         if (!copiedSession) return false
         
         const newNode = generateNewIds(JSON.parse(JSON.stringify(copiedSession))) // Deep copy with new IDs
-        newNode.name = (newNode.name || '') + ' (Copy)' // Add copy suffix
+        
+        // Smart naming: only add (Copy) suffix if not pasting into a folder
+        let shouldAddCopySuffix = true
+        if (targetId) {
+          const targetInfo = findNodeById(sessionTree, targetId, null)
+          if (targetInfo && targetInfo.node.type === 'folder') {
+            shouldAddCopySuffix = false // Don't add (Copy) when pasting into a folder
+          }
+        }
+        
+        if (shouldAddCopySuffix) {
+          newNode.name = (newNode.name || '') + ' (Copy)'
+        }
         
         let targetContainer = sessionTree
         let insertIndex = sessionTree.length
