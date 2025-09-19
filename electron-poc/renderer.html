@@ -9,11 +9,22 @@
       html, body { height:100%; overflow:hidden; }
       body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
       a, button, input, select, .tab, .left-tab { cursor: pointer }
-      #left { width:320px; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; }
+      #left { width:290px; min-width:180px; max-width:60vw; display:flex; flex-direction:column; padding:0; border-right:1px solid #1f2330; box-sizing:border-box; background:#0b0d14; color:#cfd3dc; transition: width .22s ease, border-right-color .22s ease; }
+      #left.no-transition { transition: none !important }
+      #left[data-collapsed="1"] { overflow:hidden; border-right-color: transparent; min-width:0 !important }
+      #left[data-collapsed="1"] #left-header, #left[data-collapsed="1"] #tree { display:none }
+      #left.animating { min-width:0 !important }
+      /* Splitter between left and right */
+      #splitter { width:8px; cursor: default; background:linear-gradient(180deg,#1e2333,#131726); position: relative; border-left:1px solid #2a3040; border-right:1px solid #2a3040; }
+      #splitter:hover { background:linear-gradient(180deg,#262c40,#171b2b); border-left-color:#3a4160; border-right-color:#3a4160 }
+      #splitter::after { content:none }
+      #splitter .splitter-btn { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:linear-gradient(180deg,#1e2333,#131726); border:1px solid #2a3040; border-radius:50%; color:#cfd3dc; width:12px; height:12px; display:none; align-items:center; justify-content:center; padding:0; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.45); z-index:5 }
+      #splitter .splitter-btn:hover { background:linear-gradient(180deg,#262c40,#171b2b); border-color:#3a4160 }
+      #splitter .splitter-btn svg { display:block }
       /* Set document title to app name */
       /* Title also set from main, but ensure consistency */
-      #left-topnav { padding:6px 8px; border-bottom:1px solid #1f2330; display:flex; gap:6px; align-items:center; }
-      .left-tab { cursor:pointer; padding:6px 10px; border-radius:8px; border:1px solid #2a3040; color:#cfd3dc; background:#1a1f2d; display:flex; align-items:center; gap:6px; }
+      #left-topnav { padding:6px 0px 6px 0px; border-bottom:1px solid #1f2330; display:flex; gap:6px; align-items:center; margin-left: 0; }
+      .left-tab { cursor:pointer; padding:6px 10px; border-radius:8px; border:1px solid #2a3040; color:#cfd3dc; background:#1a1f2d; display:flex; align-items:center; gap:6px; margin:0; }
       .left-tab:hover { background:#22283a; }
       #left-header { padding:10px 12px; border-bottom:1px solid #1f2330; font-weight:600; letter-spacing:0.2px; }
       .tree { flex:1; overflow:auto; padding:6px 4px; }
@@ -133,6 +144,7 @@
       <div id="tree" class="tree"></div>
       <div id="ctx" class="ctx-menu" style="display:none"></div>
     </div>
+    <div id="splitter" title="Drag to resize sidebar"><button id="splitter-toggle" class="splitter-btn" title="Toggle sidebar" aria-label="Toggle sidebar"></button></div>
       <div id="right">
       <div id="tabs"></div>
       <div id="panes"></div>
@@ -537,6 +549,151 @@
         }
       }
       window.addEventListener('resize', resize)
+      // Sidebar resize + collapse
+      ;(function initSidebarResize(){
+        const left = document.getElementById('left')
+        const splitter = document.getElementById('splitter')
+        const STORAGE_KEY = 'sidebar-width'
+        const COLLAPSE_KEY = 'sidebar-collapsed'
+        let startX = 0
+        let startW = 0
+        let dragging = false
+        function applyWidth(px){
+          try {
+            const min = 180
+            const max = 400 // Fixed maximum width instead of 60% of screen
+            if (px <= 24) { setCollapsed(true); return }
+            const clamped = Math.max(min, Math.min(max, Math.round(px)))
+            left.style.width = clamped + 'px'
+            try { localStorage.setItem(STORAGE_KEY, String(clamped)) } catch {}
+            try { resize() } catch {}
+          } catch {}
+        }
+        function setCollapsed(collapsed, opts){
+          const options = opts || {}
+          if (collapsed) {
+            const current = Math.round(left.getBoundingClientRect().width)
+            left.dataset.collapsed = '1'
+            if (options.instant) {
+              left.classList.add('no-transition')
+              left.style.width = '0px'
+              left.offsetHeight; // force reflow
+              left.classList.remove('no-transition')
+            } else {
+              left.classList.add('animating')
+              left.style.width = current + 'px'
+              requestAnimationFrame(() => { left.style.width = '0px' })
+              const onEnd = (ev) => { if (ev && ev.propertyName !== 'width') return; left.removeEventListener('transitionend', onEnd); left.classList.remove('animating') }
+              left.addEventListener('transitionend', onEnd)
+            }
+          } else {
+            const target = Number(localStorage.getItem(STORAGE_KEY)||'290') || 290
+            if (options.instant) {
+              delete left.dataset.collapsed
+              left.classList.add('no-transition')
+              left.style.width = target + 'px'
+              left.offsetHeight; // force reflow
+              left.classList.remove('no-transition')
+            } else {
+              // Animate from 0 -> target while temporarily allowing min-width:0
+              left.classList.add('animating')
+              left.style.width = '0px'
+              requestAnimationFrame(() => { 
+                delete left.dataset.collapsed; 
+                left.style.width = target + 'px'
+                // Update UI after dataset is updated
+                setTimeout(() => updateToggleUI(), 10)
+              })
+              const onEnd2 = (ev) => { if (ev && ev.propertyName !== 'width') return; left.removeEventListener('transitionend', onEnd2); left.classList.remove('animating') }
+              left.addEventListener('transitionend', onEnd2)
+            }
+          }
+          try { localStorage.setItem(COLLAPSE_KEY, collapsed?'1':'0') } catch {}
+          try { resize() } catch {}
+          // updateToggleUI() is called separately for animated case above
+          if (collapsed) {
+            try { updateToggleUI() } catch {}
+          }
+        }
+        function updateToggleUI(){
+          const splitBtn = document.getElementById('splitter-toggle')
+          const isCollapsed = left.dataset.collapsed==='1'
+          console.log('updateToggleUI: isCollapsed =', isCollapsed, 'dataset.collapsed =', left.dataset.collapsed)
+          if (splitBtn) {
+            splitBtn.style.display = 'flex' // Always show the button
+            splitBtn.innerHTML = isCollapsed
+              ? '<span style="color: #cfd3dc; font-size: 10px;">→</span>'
+              : '<span style="color: #cfd3dc; font-size: 10px;">←</span>'
+            splitBtn.title = isCollapsed ? 'Show sidebar' : 'Hide sidebar'
+          }
+        }
+        // Restore state
+        try {
+          const saved = Number(localStorage.getItem(STORAGE_KEY)||'0')
+          // Force new width - always set to 290px
+          left.style.width = '290px'
+          localStorage.setItem(STORAGE_KEY, '290')
+          // Always start with sidebar open (not collapsed)
+          delete left.dataset.collapsed
+          // Ensure button reflects state immediately on first paint
+          requestAnimationFrame(() => {
+            updateToggleUI()
+          })
+        } catch { updateToggleUI() }
+        // Dragging disabled - only toggle button works
+        // splitter.addEventListener('mousedown', (e)=>{
+        //   if (e.button!==0) return
+        //   // Don't start drag when clicking the toggle button
+        //   const isOnButton = e.target && e.target.closest && e.target.closest('.splitter-btn')
+        //   if (isOnButton) return
+        //   dragging = true
+        //   startX = e.clientX
+        //   const isCollapsed = left.dataset.collapsed==='1'
+        //   if (isCollapsed) {
+        //     // Expand from collapsed on drag
+        //     delete left.dataset.collapsed
+        //     startW = Number(localStorage.getItem(STORAGE_KEY)||'320') || 320
+        //     left.style.width = '1px'
+        //   } else {
+        //     startW = left.getBoundingClientRect().width
+        //   }
+        //   left.classList.add('no-transition')
+        //   document.body.style.userSelect = 'none'
+        // })
+        // window.addEventListener('mousemove', (e)=>{
+        //   if (!dragging) return
+        //   const dx = e.clientX - startX
+        //   applyWidth(startW + dx)
+        // })
+        // window.addEventListener('mouseup', ()=>{
+        //   if (!dragging) return
+        //   dragging = false
+        //   document.body.style.userSelect = ''
+        //   left.classList.remove('no-transition')
+        // })
+        // Double click splitter disabled - only toggle button works
+        // splitter.addEventListener('dblclick', ()=>{
+        //   const isCollapsed = left.dataset.collapsed==='1'
+        //   setCollapsed(!isCollapsed)
+        // })
+        // Buttons
+        try {
+          const splitBtn = document.getElementById('splitter-toggle')
+          if (splitBtn) splitBtn.onclick = () => { 
+            const isCollapsed = left.dataset.collapsed==='1'
+            setCollapsed(!isCollapsed) 
+          }
+        } catch {}
+        // Keyboard toggle: Ctrl+B (like VS Code)
+        document.addEventListener('keydown', (e)=>{
+          if (e.ctrlKey && (e.key==='b' || e.key==='B')) {
+            const isCollapsed = left.dataset.collapsed==='1'
+            setCollapsed(!isCollapsed)
+            e.preventDefault()
+            e.stopPropagation()
+          }
+        })
+      })()
 
       // Tree state and helpers
       let sessionTree = []
