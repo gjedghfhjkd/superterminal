@@ -34,6 +34,7 @@
       .item.selected { background:#1a1f2d; outline:1px solid #2a3040; }
       .item.copied { background:#1a2d1a; outline:1px solid #2fbf71; }
       .item.copied:hover { background:#1f3a1f; }
+      .no-selection .item.selected { background:transparent !important; outline:none !important; }
       .item .icon svg, .item .label { transition: color .15s ease, fill .15s ease, opacity .15s ease; }
       .item:hover .icon svg { fill:#aab0c0 }
       .item:hover .label { color:#e6e6e6 }
@@ -699,7 +700,13 @@
       // Tree state and helpers
       let sessionTree = []
       let selectedId = null
-      let copiedSession = null // Store copied session data
+      let selectedIdStack = []
+      let copiedSession = null
+      
+      // Function to track selectedId changes
+      function setSelectedId(newId) {
+        selectedId = newId
+      }
       function genId(prefix='id') { return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7) }
       function findNodeById(list, id, parent=null) {
         for (let i=0;i<list.length;i++) {
@@ -734,17 +741,15 @@
 
       // Copy session or folder function
       function copySession(id) {
-        console.log('copySession called with id:', id)
         const info = findNodeById(sessionTree, id, null)
         if (!info || (info.node.type !== 'session' && info.node.type !== 'folder')) {
-          console.log('Invalid item or not found')
           return false
         }
-        console.log('Copying item:', info.node.name, 'type:', info.node.type)
+        
         copiedSession = JSON.parse(JSON.stringify(info.node)) // Deep copy
-        selectedId = null // Clear selection after copying
-        console.log('Copied session set, selectedId cleared')
+        setSelectedId(null) // Clear selection after copying
         renderTree() // Update visual indicators and clear selection
+        
         return true
       }
 
@@ -789,6 +794,9 @@
         targetContainer.splice(insertIndex, 0, newNode)
         await window.api.sessionsSaveTree(sessionTree)
         renderTree()
+        
+        // Clear copied session after successful paste
+        copiedSession = null
         return true
       }
 
@@ -831,7 +839,7 @@
           const t = e && e.target
           if (t && t.closest && t.closest('.item')) return
           if (selectedId != null) {
-            selectedId = null
+            setSelectedId(null)
             try { hideCtx() } catch {}
             renderTree()
           }
@@ -878,7 +886,7 @@
             container.appendChild(row)
 
             row.onclick = (e) => {
-              selectedId = n.id
+              setSelectedId(n.id)
               if (n.type === 'folder') { n.expanded = !n.expanded }
               renderTree()
             }
@@ -935,7 +943,12 @@
                 }
               }
             }
-            row.oncontextmenu = (e) => { e.preventDefault(); selectedId = n.id; renderTree(); openCtxMenu(e.clientX, e.clientY, n) }
+            row.oncontextmenu = (e) => { 
+              e.preventDefault(); 
+              setSelectedId(n.id); 
+              renderTree(); 
+              openCtxMenu(e.clientX, e.clientY, n) 
+            }
 
             // Drag and drop
             row.addEventListener('dragstart', (e) => {
@@ -1095,7 +1108,7 @@
             if (!ok) return
             clearCopiedSession(targetNode.id) // Clear copied session if it's being deleted
             removeNodeById(targetNode.id)
-            selectedId = null
+            setSelectedId(null)
             await window.api.sessionsSaveTree(sessionTree)
           })
         }
@@ -1238,15 +1251,11 @@
         }
         // Copy session or folder with Ctrl+C
         if (e.ctrlKey && e.key === 'c' && selectedId) {
-          console.log('Ctrl+C pressed, selectedId:', selectedId)
           const info = findNodeById(sessionTree, selectedId, null)
           if (info && (info.node.type === 'session' || info.node.type === 'folder')) {
-            console.log('Calling copySession for:', info.node.name)
             copySession(selectedId)
             e.preventDefault()
             e.stopPropagation()
-          } else {
-            console.log('No valid item to copy')
           }
         }
         // Paste session or folder with Ctrl+V
@@ -1514,6 +1523,20 @@
       }
       refreshSessions()
       window.api.onSessionsUpdated(() => refreshSessions())
+      
+      // Click outside to clear selection
+      document.addEventListener('click', (e) => {
+        // Check if click is on a tree item or outside the tree
+        const isTreeItem = e.target.closest('.item')
+        const treeContainer = document.getElementById('tree')
+        const isInsideTree = treeContainer && treeContainer.contains(e.target)
+        
+        if (!isTreeItem && !isInsideTree) {
+          setSelectedId(null)
+          renderTree()
+        }
+      })
+      
 
 
       // ===== SFTP UI =====

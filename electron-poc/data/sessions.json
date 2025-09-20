@@ -2,159 +2,75 @@
   "version": 2,
   "tree": [
     {
-      "id": "sess_mfr3kwlk3hwnf",
-      "type": "session",
-      "name": "localhost (sheremetev)",
-      "session": {
-        "host": "178.72.131.203",
-        "port": 22,
-        "username": "sheremetev",
-        "auth": "password",
-        "userPreset": {
-          "id": "usr_mfr3po6kp6tya",
-          "username": "sheremetev",
-          "auth": "password",
-          "password": "master3000!",
-          "privateKey": "",
-          "passphrase": ""
-        },
-        "type": "SSH",
-        "name": "localhost",
-        "password": "",
-        "privateKey": "",
-        "passphrase": ""
-      }
-    },
-    {
-      "id": "sess_mfr3kuphfnvxw",
-      "type": "session",
-      "name": "localhost (root)",
-      "session": {
-        "type": "SSH",
-        "name": "localhost",
-        "host": "localhost",
-        "port": 22,
-        "username": "root",
-        "auth": "password",
-        "password": "",
-        "privateKey": "",
-        "passphrase": ""
-      }
-    },
-    {
-      "id": "sess_mfr3kyo2a6tem",
-      "type": "session",
-      "name": "localhost (root) (Copy)",
-      "session": {
-        "type": "SSH",
-        "name": "localhost",
-        "host": "localhost",
-        "port": 22,
-        "username": "root",
-        "auth": "password",
-        "password": "",
-        "privateKey": "",
-        "passphrase": ""
-      }
-    },
-    {
-      "id": "fld_mfr3woyg5nhnw",
+      "id": "fld_mfrxh5zzm5b4j",
       "type": "folder",
-      "name": "New Folder1",
+      "name": "New Folder (Copy)",
       "expanded": true,
-      "children": [
-        {
-          "id": "sess_mfr3wzkbwwao2",
-          "type": "session",
-          "name": "localhost (root) (Copy)",
-          "session": {
-            "type": "SSH",
-            "name": "localhost",
-            "host": "localhost",
-            "port": 22,
-            "username": "root",
-            "auth": "password",
-            "password": "",
-            "privateKey": "",
-            "passphrase": ""
-          }
-        }
-      ],
+      "children": [],
       "color": "#0b0d14"
     },
     {
-      "id": "fld_mfr3wr3hj0pco",
+      "id": "fld_mfrxh600veoif",
       "type": "folder",
-      "name": "New Folder2",
+      "name": "New Folder (Copy)",
       "expanded": true,
-      "children": [
-        {
-          "id": "fld_mfr3x2el0gfm2",
-          "type": "folder",
-          "name": "New Folder1",
-          "expanded": true,
-          "children": [
-            {
-              "id": "sess_mfr3x2el3cvmw",
-              "type": "session",
-              "name": "localhost (root) (Copy)",
-              "session": {
-                "type": "SSH",
-                "name": "localhost",
-                "host": "localhost",
-                "port": 22,
-                "username": "root",
-                "auth": "password",
-                "password": "",
-                "privateKey": "",
-                "passphrase": ""
-              }
-            },
-            {
-              "id": "sess_mfr3zpuv8r5w4",
-              "type": "session",
-              "name": "localhost (root) (Copy)",
-              "session": {
-                "type": "SSH",
-                "name": "localhost",
-                "host": "localhost",
-                "port": 22,
-                "username": "root",
-                "auth": "password",
-                "password": "",
-                "privateKey": "",
-                "passphrase": ""
-              }
-            }
-          ],
-          "color": "#0b0d14"
-        },
-        {
-          "id": "fld_mfr3znbcl9ols",
-          "type": "folder",
-          "name": "New Folder1",
-          "expanded": true,
-          "children": [
-            {
-              "id": "sess_mfr3znbci36mg",
-              "type": "session",
-              "name": "localhost (root) (Copy)",
-              "session": {
-                "type": "SSH",
-                "name": "localhost",
-                "host": "localhost",
-                "port": 22,
-                "username": "root",
-                "auth": "password",
-                "password": "",
-                "privateKey": "",
-                "passphrase": ""
-              }
-            }
-          ],
-          "color": "#0b0d14"
-        }
-      ],
+      "children": [],
+      "color": "#0b0d14"
+    },
+    {
+      "id": "fld_mfrxh6jtdyghv",
+      "type": "folder",
+      "name": "New Folder (Copy)",
+      "expanded": false,
+      "children": [],
+      "color": "#0b0d14"
+    },
+    {
+      "id": "fld_mfrxh6jt3htbf",
+      "type": "folder",
+      "name": "New Folder (Copy)",
+      "expanded": true,
+      "children": [],
+      "color": "#0b0d14"
+    },
+    {
+      "id": "fld_mfrxieec2cls9",
+      "type": "folder",
+      "name": "New Folder (Copy) (Copy)",
+      "expanded": false,
+      "children": [],
+      "color": "#0b0d14"
+    },
+    {
+      "id": "fld_mfrxig7opkfqg",
+      "type": "folder",
+      "name": "New Folder (Copy) (Copy) (Copy)",
+      "expanded": true,
+      "children": [],
+      "color": "#0b0d14"
+    },
+    {
+      "id": "fld_mfrximdhfhmpv",
+      "type": "folder",
+      "name": "New Folder (Copy) (Copy) (Copy) (Copy)",
+      "expanded": false,
+      "children": [],
+      "color": "#0b0d14"
+    },
+    {
+      "id": "fld_mfrxjj8upfgmv",
+      "type": "folder",
+      "name": "New Folder (Copy) (Copy) (Copy) (Copy)",
+      "expanded": false,
+      "children": [],
+      "color": "#0b0d14"
+    },
+    {
+      "id": "fld_mfrxjp78maj9w",
+      "type": "folder",
+      "name": "New Folder (Copy) (Copy)",
+      "expanded": true,
+      "children": [],
       "color": "#0b0d14"
     }
   ]
