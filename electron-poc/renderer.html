@@ -509,6 +509,7 @@
           const node = { id: genId('sess'), type:'session', name: `${s.name||s.host} (${s.username})`, session: s }
           sessionTree.push(node)
           await window.api.sessionsSaveTree(sessionTree)
+          saveToHistory() // Save to history after creation
           renderTree()
         } catch (e) { alert('Create SSH session error: ' + (e?.message||e)) }
       }
@@ -520,6 +521,7 @@
           const node = { id: genId('sess'), type:'session', name: `${s.name||s.host} (${s.username})`, session: s }
           sessionTree.push(node)
           await window.api.sessionsSaveTree(sessionTree)
+          saveToHistory() // Save to history after creation
           renderTree()
         } catch (e) { alert('Create SFTP session error: ' + (e?.message||e)) }
       }
@@ -702,13 +704,145 @@
       // Tree state and helpers
       let sessionTree = []
       let selectedId = null
+      let selectedIds = [] // Array of selected IDs for multi-selection
       let selectedIdStack = []
       let copiedSession = null
       let cutMode = false // true if item was cut, false if copied
+      let multiSelectMode = false // true when selecting multiple items
+      let copiedFromContext = null // Store the context where items were copied from
+      let history = [] // Array to store history of tree states
+      let historyIndex = -1 // Current position in history
+      const MAX_HISTORY = 50 // Maximum number of history entries
+      let isUndoRedoOperation = false // Flag to prevent history reset during undo/redo
       
       // Function to track selectedId changes
       function setSelectedId(newId) {
         selectedId = newId
+      }
+      
+      // Add item to multi-selection
+      function addToSelection(id) {
+        if (!selectedIds.includes(id)) {
+          selectedIds.push(id)
+        }
+      }
+      
+      // Remove item from multi-selection
+      function removeFromSelection(id) {
+        const index = selectedIds.indexOf(id)
+        if (index > -1) {
+          selectedIds.splice(index, 1)
+        }
+      }
+      
+      // Clear all selections
+      function clearSelection() {
+        selectedId = null
+        selectedIds = []
+        multiSelectMode = false
+        // Don't clear copiedFromContext - we need it for paste operations
+      }
+      
+      // Clear copy state completely
+      function clearCopyState() {
+        copiedSession = null
+        cutMode = false
+        copiedFromContext = null
+        // Clear all visual indicators
+        document.querySelectorAll('.item.copied, .item.cut').forEach(el => {
+          el.classList.remove('copied', 'cut')
+          el.title = ''
+        })
+      }
+      
+      // Save current state to history
+      function saveToHistory() {
+        const state = JSON.parse(JSON.stringify(sessionTree)) // Deep copy
+        historyIndex++
+        
+        // Remove any states after current index
+        history = history.slice(0, historyIndex)
+        
+        // Add new state
+        history.push(state)
+        
+        // Limit history size
+        if (history.length > MAX_HISTORY) {
+          history.shift()
+          historyIndex--
+        }
+      }
+      
+      // Undo last operation
+      async function undo() {
+        if (historyIndex > 0) {
+          historyIndex--
+          const previousState = history[historyIndex]
+          sessionTree = JSON.parse(JSON.stringify(previousState)) // Deep copy
+          await window.api.sessionsSaveTree(sessionTree)
+          clearSelection()
+          renderTree()
+          return true
+        }
+        return false
+      }
+      
+      // Redo last undone operation
+      async function redo() {
+        if (historyIndex < history.length - 1) {
+          historyIndex++
+          const nextState = history[historyIndex]
+          sessionTree = JSON.parse(JSON.stringify(nextState)) // Deep copy
+          await window.api.sessionsSaveTree(sessionTree)
+          clearSelection()
+          renderTree()
+          return true
+        }
+        return false
+      }
+      
+      // Check if item is selected
+      function isSelected(id) {
+        return selectedId === id || selectedIds.includes(id)
+      }
+      
+      // Select range of items between startId and endId
+      function selectRange(startId, endId) {
+        // Find all items in the tree (flattened)
+        const allItems = []
+        function collectItems(list, parent = null) {
+          list.forEach((item, index) => {
+            allItems.push({ ...item, index, parent })
+            if (item.children) {
+              collectItems(item.children, item)
+            }
+          })
+        }
+        collectItems(sessionTree)
+        
+        // Find start and end positions
+        const startIndex = allItems.findIndex(item => item.id === startId)
+        const endIndex = allItems.findIndex(item => item.id === endId)
+        
+        if (startIndex === -1 || endIndex === -1) {
+          // If we can't find the items, just add the end item
+          addToSelection(endId)
+          return
+        }
+        
+        // Clear current selection
+        selectedIds.length = 0
+        
+        // Select all items between start and end (inclusive)
+        const minIndex = Math.min(startIndex, endIndex)
+        const maxIndex = Math.max(startIndex, endIndex)
+        
+        for (let i = minIndex; i <= maxIndex; i++) {
+          const item = allItems[i]
+          if (item.type === 'session' || item.type === 'folder') {
+            addToSelection(item.id)
+          }
+        }
       }
       function genId(prefix='id') { return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7) }
       function findNodeById(list, id, parent=null) {
@@ -751,7 +885,37 @@
         
         copiedSession = JSON.parse(JSON.stringify(info.node)) // Deep copy
         cutMode = false // Mark as copied, not cut
+        copiedFromContext = info.parent ? info.parent.id : null // Store parent context
         setSelectedId(null) // Clear selection after copying
+        renderTree() // Update visual indicators and clear selection
+        
+        return true
+      }
+      
+      // Copy multiple sessions or folders function
+      function copyMultipleSessions() {
+        if (selectedIds.length === 0) return false
+        
+        const items = []
+        let parentContext = null
+        
+        for (const id of selectedIds) {
+          const info = findNodeById(sessionTree, id, null)
+          if (info && (info.node.type === 'session' || info.node.type === 'folder')) {
+            items.push(JSON.parse(JSON.stringify(info.node)))
+            // Store parent context (assuming all selected items are from the same parent)
+            if (parentContext === null) {
+              parentContext = info.parent ? info.parent.id : null
+            }
+          }
+        }
+        
+        if (items.length === 0) return false
+        
+        copiedSession = items // Store array of items
+        cutMode = false // Mark as copied, not cut
+        copiedFromContext = parentContext // Store parent context
+        clearSelection() // Clear selection after copying
         renderTree() // Update visual indicators and clear selection
         
         return true
@@ -766,8 +930,69 @@
         
         copiedSession = JSON.parse(JSON.stringify(info.node)) // Deep copy
         cutMode = true // Mark as cut
+        copiedFromContext = info.parent ? info.parent.id : null // Store parent context
         setSelectedId(null) // Clear selection after cutting
         renderTree() // Update visual indicators and clear selection
+        
+        return true
+      }
+      
+      // Cut multiple sessions or folders function
+      function cutMultipleSessions() {
+        if (selectedIds.length === 0) return false
+        
+        const items = []
+        let parentContext = null
+        
+        for (const id of selectedIds) {
+          const info = findNodeById(sessionTree, id, null)
+          if (info && (info.node.type === 'session' || info.node.type === 'folder')) {
+            items.push(JSON.parse(JSON.stringify(info.node)))
+            // Store parent context (assuming all selected items are from the same parent)
+            if (parentContext === null) {
+              parentContext = info.parent ? info.parent.id : null
+            }
+          }
+        }
+        
+        if (items.length === 0) return false
+        
+        copiedSession = items // Store array of items
+        cutMode = true // Mark as cut
+        copiedFromContext = parentContext // Store parent context
+        clearSelection() // Clear selection after cutting
+        renderTree() // Update visual indicators and clear selection
+        
+        return true
+      }
+      
+      // Delete multiple sessions or folders function
+      async function deleteMultipleSessions() {
+        if (selectedIds.length === 0) {
+          return false
+        }
+        
+        // Delete all selected items
+        for (const id of selectedIds) {
+          const info = findNodeById(sessionTree, id, null)
+          if (info && (info.node.type === 'session' || info.node.type === 'folder')) {
+            // Clear copied session if it's being deleted
+            clearCopiedSession(id)
+            
+            // Remove from tree
+            if (info.parent) {
+              info.parent.children.splice(info.index, 1)
+            } else {
+              sessionTree.splice(info.index, 1)
+            }
+          }
+        }
+        
+        // Save changes
+        await window.api.sessionsSaveTree(sessionTree)
+        saveToHistory() // Save to history after deletion
+        clearSelection() // Clear selection after deletion
+        renderTree() // Update tree
         
         return true
       }
@@ -776,7 +1001,9 @@
       async function pasteSession(targetId = null) {
         if (!copiedSession) return false
         
-        const newNode = generateNewIds(JSON.parse(JSON.stringify(copiedSession))) // Deep copy with new IDs
+        // Handle both single item and multiple items
+        const items = Array.isArray(copiedSession) ? copiedSession : [copiedSession]
+        const newItems = items.map(item => generateNewIds(JSON.parse(JSON.stringify(item))))
         
         // Smart naming: only add (Copy) suffix if copying (not cutting) and not pasting into a folder
         let shouldAddCopySuffix = true
@@ -787,11 +1014,30 @@
           if (targetInfo && targetInfo.node.type === 'folder') {
             shouldAddCopySuffix = false // Don't add (Copy) when pasting into a folder
           }
+        } else {
+          // If no targetId, we're pasting to root
+          // Check if any of the items already have (Copy) suffix
+          const hasCopySuffix = newItems.some(item => {
+            if (!item.name) return false
+            // Check if name ends with (Copy) or contains multiple (Copy) suffixes
+            return item.name.endsWith(' (Copy)') || item.name.includes(' (Copy) (Copy)')
+          })
+          if (hasCopySuffix) {
+            shouldAddCopySuffix = false // Don't add (Copy) if items already have it
+          } else {
+            shouldAddCopySuffix = true // Add (Copy) for first-time copying to root
+          }
         }
         
-        if (shouldAddCopySuffix) {
-          newNode.name = (newNode.name || '') + ' (Copy)'
-        }
+        // Apply naming to all items
+        newItems.forEach(newNode => {
+          if (shouldAddCopySuffix) {
+            // Only add (Copy) if the item doesn't already have it
+            if (!newNode.name || (!newNode.name.endsWith(' (Copy)') && !newNode.name.includes(' (Copy) (Copy)'))) {
+              newNode.name = (newNode.name || '') + ' (Copy)'
+            }
+          }
+        })
         
         let targetContainer = sessionTree
         let insertIndex = sessionTree.length
@@ -812,22 +1058,29 @@
           }
         }
         
-        targetContainer.splice(insertIndex, 0, newNode)
+        // Insert all items
+        targetContainer.splice(insertIndex, 0, ...newItems)
         
-        // If this was a cut operation, remove the original item
+        // If this was a cut operation, remove the original items
         if (cutMode) {
-          const originalInfo = findNodeById(sessionTree, copiedSession.id, null)
-          if (originalInfo) {
-            removeNodeById(copiedSession.id)
+          for (const item of items) {
+            const originalInfo = findNodeById(sessionTree, item.id, null)
+            if (originalInfo) {
+              removeNodeById(item.id)
+            }
           }
         }
         
         await window.api.sessionsSaveTree(sessionTree)
+        saveToHistory() // Save to history after paste
         renderTree()
         
-        // Clear copied session after successful paste
-        copiedSession = null
-        cutMode = false
+        // Clear copy state after successful paste
+        clearCopyState()
+        // Force re-render to clear visual indicators
+        setTimeout(() => {
+          renderTree()
+        }, 0)
         return true
       }
 
@@ -846,10 +1099,18 @@
 
       // Clear copied session when it's deleted or modified
       function clearCopiedSession(id) {
-        if (copiedSession && copiedSession.id === id) {
-          copiedSession = null
-          cutMode = false
-          renderTree()
+        if (copiedSession) {
+          if (Array.isArray(copiedSession)) {
+            // Check if any item in the array matches the id
+            const hasItem = copiedSession.some(item => item.id === id)
+            if (hasItem) {
+              clearCopyState()
+              renderTree()
+            }
+          } else if (copiedSession.id === id) {
+            clearCopyState()
+            renderTree()
+          }
         }
       }
 
@@ -880,10 +1141,20 @@
         function renderList(list, container, inheritedColor) {
           list.forEach(n => {
             const row = document.createElement('div')
-            const isSelected = selectedId === n.id
-            const isCut = cutMode && copiedSession && copiedSession.id === n.id
-            const isCopied = !cutMode && copiedSession && copiedSession.id === n.id
-            row.className = 'item ' + (n.type==='folder'?'folder':'session') + (n.expanded ? ' expanded' : '') + (isSelected ? ' selected' : '') + (isCut ? ' cut' : '') + (isCopied ? ' copied' : '')
+            const itemSelected = isSelected(n.id)
+            let isCut = false
+            let isCopied = false
+            
+            if (copiedSession) {
+              if (Array.isArray(copiedSession)) {
+                isCut = cutMode && copiedSession.some(item => item.id === n.id)
+                isCopied = !cutMode && copiedSession.some(item => item.id === n.id)
+              } else {
+                isCut = cutMode && copiedSession.id === n.id
+                isCopied = !cutMode && copiedSession.id === n.id
+              }
+            }
+            row.className = 'item ' + (n.type==='folder'?'folder':'session') + (n.expanded ? ' expanded' : '') + (itemSelected ? ' selected' : '') + (isCut ? ' cut' : '') + (isCopied ? ' copied' : '')
             row.dataset.id = n.id
             row.draggable = true
             const effectiveColor = n.type === 'folder' ? (n.color || inheritedColor) : inheritedColor
@@ -920,7 +1191,29 @@
             container.appendChild(row)
 
             row.onclick = (e) => {
-              setSelectedId(n.id)
+              if (e.shiftKey && selectedId) {
+                // Range selection with Shift+click
+                multiSelectMode = true
+                selectRange(selectedId, n.id)
+                setSelectedId(n.id) // Set as primary selection
+              } else if (e.ctrlKey || e.metaKey) {
+                // Toggle selection with Ctrl+click
+                if (isSelected(n.id)) {
+                  removeFromSelection(n.id)
+                  if (selectedId === n.id) {
+                    selectedId = selectedIds.length > 0 ? selectedIds[selectedIds.length - 1] : null
+                  }
+                } else {
+                  addToSelection(n.id)
+                  setSelectedId(n.id) // Set as primary selection
+                }
+              } else {
+                // Single selection
+                clearSelection()
+                setSelectedId(n.id)
+                addToSelection(n.id) // Add to multi-selection array too
+              }
+              
               if (n.type === 'folder') { n.expanded = !n.expanded }
               renderTree()
             }
@@ -1078,6 +1371,7 @@
         container.splice(insertIndex, 0, srcNode)
 
         await window.api.sessionsSaveTree(sessionTree)
+        saveToHistory() // Save to history after drag and drop
       }
 
       function openCtxMenu(x, y, targetNode=null) {
@@ -1097,8 +1391,16 @@
           const node = { id: genId('fld'), type:'folder', name: res.name, expanded:true, children:[] }
           if (res.color) node.color = res.color
           if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
-          else targetNode.children.push(node)
+          else {
+            targetNode.children.push(node)
+            // Auto-expand folder when creating folder inside it
+            if (!targetNode.expanded) {
+              targetNode.expanded = true
+            }
+          }
           await window.api.sessionsSaveTree(sessionTree)
+          saveToHistory() // Save to history after creation
+          renderTree() // Update tree display
         })
         add('New Session', async () => {
           const res = await window.api.openSessionWindow('SSH')
@@ -1106,8 +1408,16 @@
           if (!s) return
           const node = { id: genId('sess'), type:'session', name: `${s.name||s.host} (${s.username})`, session: s }
           if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
-          else targetNode.children.push(node)
+          else {
+            targetNode.children.push(node)
+            // Auto-expand folder when creating session inside it
+            if (!targetNode.expanded) {
+              targetNode.expanded = true
+            }
+          }
           await window.api.sessionsSaveTree(sessionTree)
+          saveToHistory() // Save to history after creation
+          renderTree() // Update tree display
         })
         add('Edit…', async () => {
           if (!targetNode) return
@@ -1125,18 +1435,63 @@
             if (res.color) targetNode.color = res.color
           }
           await window.api.sessionsSaveTree(sessionTree)
+          saveToHistory() // Save to history after edit
+          renderTree() // Update tree display
         })
         if (targetNode && (targetNode.type === 'session' || targetNode.type === 'folder')) {
           add('Copy', () => {
-            copySession(targetNode.id)
+            if (selectedIds.length > 0) {
+              copyMultipleSessions()
+            } else {
+              copySession(targetNode.id)
+            }
           })
           add('Cut', () => {
-            cutSession(targetNode.id)
+            if (selectedIds.length > 0) {
+              cutMultipleSessions()
+            } else {
+              cutSession(targetNode.id)
+            }
           })
         }
         if (copiedSession) {
           add('Paste', async () => {
             await pasteSession(targetNode ? targetNode.id : null)
+          })
+        }
+        if (historyIndex > 0) {
+          add('Undo', async () => {
+            await undo()
+          })
+        }
+        if (historyIndex < history.length - 1) {
+          add('Redo', async () => {
+            await redo()
+          })
+        }
+        if (selectedIds.length > 0 || selectedId) {
+          add('Delete', async () => {
+            if (selectedIds.length > 1 || (selectedIds.length === 1 && selectedId && selectedIds.includes(selectedId))) {
+              await deleteMultipleSessions()
+            } else if (selectedId) {
+              const info = findNodeById(sessionTree, selectedId, null)
+              if (info && (info.node.type === 'session' || info.node.type === 'folder')) {
+                // Clear copied session if it's being deleted
+                clearCopiedSession(selectedId)
+                
+                // Remove from tree
+                if (info.parent) {
+                  info.parent.children.splice(info.index, 1)
+                } else {
+                  sessionTree.splice(info.index, 1)
+                }
+                
+                // Save changes
+                await window.api.sessionsSaveTree(sessionTree)
+                setSelectedId(null)
+                renderTree()
+              }
+            }
           })
         }
         if (targetNode) {
@@ -1147,6 +1502,8 @@
             removeNodeById(targetNode.id)
             setSelectedId(null)
             await window.api.sessionsSaveTree(sessionTree)
+            saveToHistory() // Save to history after deletion
+            renderTree() // Update tree display
           })
         }
         menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.style.display = 'block'
@@ -1205,6 +1562,10 @@
       }
       document.getElementById('left').oncontextmenu = (e) => { if (e.target && e.target.closest('.item')) return; e.preventDefault(); openCtxMenu(e.clientX, e.clientY, null) }
       document.addEventListener('keydown', async (e) => {
+        // Save selection state at the very beginning of keydown event
+        const currentSelectedId = selectedId
+        const currentSelectedIds = [...selectedIds]
+        const currentMultiSelectMode = multiSelectMode
         // Copy selection on Ctrl+Shift+C when a terminal is active
         if ((e.key === 'c' || e.key === 'C') && e.ctrlKey && e.shiftKey) {
           const active = currentId != null ? terminals.get(currentId) : null
@@ -1284,31 +1645,88 @@
             info.node.name = newName
           }
           await window.api.sessionsSaveTree(sessionTree)
+          saveToHistory() // Save to history after rename
           renderTree()
         }
         // Copy session or folder with Ctrl+C
-        if (e.ctrlKey && e.key === 'c' && selectedId) {
-          const info = findNodeById(sessionTree, selectedId, null)
-          if (info && (info.node.type === 'session' || info.node.type === 'folder')) {
-            copySession(selectedId)
-            e.preventDefault()
-            e.stopPropagation()
+        if (e.ctrlKey && e.key === 'c' && (selectedId || selectedIds.length > 0)) {
+          if (selectedIds.length > 1 || (selectedIds.length === 1 && selectedId && selectedIds.includes(selectedId))) {
+            copyMultipleSessions()
+          } else if (selectedId) {
+            const info = findNodeById(sessionTree, selectedId, null)
+            if (info && (info.node.type === 'session' || info.node.type === 'folder')) {
+              copySession(selectedId)
+            }
           }
+          e.preventDefault()
+          e.stopPropagation()
         }
         // Cut session or folder with Ctrl+X
-        if (e.ctrlKey && e.key === 'x' && selectedId) {
-          const info = findNodeById(sessionTree, selectedId, null)
-          if (info && (info.node.type === 'session' || info.node.type === 'folder')) {
-            cutSession(selectedId)
-            e.preventDefault()
-            e.stopPropagation()
+        if (e.ctrlKey && e.key === 'x' && (selectedId || selectedIds.length > 0)) {
+          if (selectedIds.length > 1 || (selectedIds.length === 1 && selectedId && selectedIds.includes(selectedId))) {
+            cutMultipleSessions()
+          } else if (selectedId) {
+            const info = findNodeById(sessionTree, selectedId, null)
+            if (info && (info.node.type === 'session' || info.node.type === 'folder')) {
+              cutSession(selectedId)
+            }
           }
+          e.preventDefault()
+          e.stopPropagation()
         }
         // Paste session or folder with Ctrl+V
         if (e.ctrlKey && e.key === 'v' && copiedSession) {
-          await pasteSession(selectedId)
+          // If we have a selected item, paste into it, otherwise use the original context
+          const targetId = selectedId || copiedFromContext
+          await pasteSession(targetId)
           e.preventDefault()
           e.stopPropagation()
+        }
+        // Undo with Ctrl+Z
+        if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+          await undo()
+          e.preventDefault()
+          e.stopPropagation()
+        }
+        // Redo with Ctrl+Y or Ctrl+Shift+Z
+        if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) {
+          await redo()
+          e.preventDefault()
+          e.stopPropagation()
+        }
+        // Delete selected sessions or folders with Delete key
+        if (e.key === 'Delete' || e.keyCode === 46) {
+          if (currentSelectedIds.length > 0) {
+            // Multi-delete - temporarily restore selection
+            selectedId = currentSelectedId
+            selectedIds = [...currentSelectedIds]
+            multiSelectMode = currentMultiSelectMode
+            await deleteMultipleSessions()
+            e.preventDefault()
+            e.stopPropagation()
+          } else if (currentSelectedId) {
+            // Single delete
+            const info = findNodeById(sessionTree, currentSelectedId, null)
+            if (info && (info.node.type === 'session' || info.node.type === 'folder')) {
+              // Clear copied session if it's being deleted
+              clearCopiedSession(currentSelectedId)
+              
+              // Remove from tree
+              if (info.parent) {
+                info.parent.children.splice(info.index, 1)
+              } else {
+                sessionTree.splice(info.index, 1)
+              }
+              
+              // Save changes
+              await window.api.sessionsSaveTree(sessionTree)
+              saveToHistory() // Save to history after deletion
+              setSelectedId(null)
+              renderTree()
+            }
+            e.preventDefault()
+            e.stopPropagation()
+          }
         }
       })
 
@@ -1564,11 +1982,17 @@
       async function refreshSessions() {
         const res = await window.api.sessionsLoad()
         sessionTree = Array.isArray(res?.tree) ? res.tree : []
+        
+        // Initialize history with current state
+        history = [JSON.parse(JSON.stringify(sessionTree))]
+        historyIndex = 0
+        
         if (renderPending) cancelAnimationFrame(renderPending)
         renderPending = requestAnimationFrame(() => { renderPending = null; renderTree() })
       }
       refreshSessions()
-      window.api.onSessionsUpdated(() => refreshSessions())
+      // Disable automatic session updates to prevent history reset
+      // window.api.onSessionsUpdated(() => refreshSessions())
       
       // Click outside to clear selection
       document.addEventListener('click', (e) => {
@@ -1578,7 +2002,7 @@
         const isInsideTree = treeContainer && treeContainer.contains(e.target)
         
         if (!isTreeItem && !isInsideTree) {
-          setSelectedId(null)
+          clearSelection()
           renderTree()
         }
       })
