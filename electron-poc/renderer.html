@@ -1385,59 +1385,72 @@
           menu.appendChild(it)
         }
         const isFolder = targetNode && targetNode.type==='folder'
-        add('New Folder', async () => {
-          const res = await showFolderModal('New Folder', 'New Folder', DEFAULT_FOLDER_COLOR, 'Create')
-          if (!res) return
-          const node = { id: genId('fld'), type:'folder', name: res.name, expanded:true, children:[] }
-          if (res.color) node.color = res.color
-          if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
-          else {
-            targetNode.children.push(node)
-            // Auto-expand folder when creating folder inside it
-            if (!targetNode.expanded) {
-              targetNode.expanded = true
+        const isSession = targetNode && targetNode.type==='session'
+        
+        // Only show "New Folder" if not clicking on a session
+        if (!isSession) {
+          add('New Folder', async () => {
+            const res = await showFolderModal('New Folder', 'New Folder', DEFAULT_FOLDER_COLOR, 'Create')
+            if (!res) return
+            const node = { id: genId('fld'), type:'folder', name: res.name, expanded:true, children:[] }
+            if (res.color) node.color = res.color
+            if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
+            else {
+              targetNode.children.push(node)
+              // Auto-expand folder when creating folder inside it
+              if (!targetNode.expanded) {
+                targetNode.expanded = true
+              }
             }
-          }
-          await window.api.sessionsSaveTree(sessionTree)
-          saveToHistory() // Save to history after creation
-          renderTree() // Update tree display
-        })
-        add('New Session', async () => {
-          const res = await window.api.openSessionWindow('SSH')
-          const s = res && res.session
-          if (!s) return
-          const node = { id: genId('sess'), type:'session', name: `${s.name||s.host} (${s.username})`, session: s }
-          if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
-          else {
-            targetNode.children.push(node)
-            // Auto-expand folder when creating session inside it
-            if (!targetNode.expanded) {
-              targetNode.expanded = true
-            }
-          }
-          await window.api.sessionsSaveTree(sessionTree)
-          saveToHistory() // Save to history after creation
-          renderTree() // Update tree display
-        })
-        add('Edit…', async () => {
-          if (!targetNode) return
-          if (targetNode.type==='session') {
-            const present = targetNode.session || {}
-            const res = await window.api.openSessionWindowPreset((present.type||'SSH'), present)
+            await window.api.sessionsSaveTree(sessionTree)
+            saveToHistory() // Save to history after creation
+            renderTree() // Update tree display
+          })
+        }
+        
+        // Only show "New Session" if not clicking on a session
+        if (!isSession) {
+          add('New Session', async () => {
+            const res = await window.api.openSessionWindow('SSH')
             const s = res && res.session
             if (!s) return
-            targetNode.session = s
-            targetNode.name = `${s.name||s.host} (${s.username})`
-          } else if (targetNode.type==='folder') {
-            const res = await showFolderModal('Edit Folder', targetNode.name || 'Folder', (typeof targetNode.color==='string' && targetNode.color) ? targetNode.color : DEFAULT_FOLDER_COLOR, 'Save')
-            if (!res) return
-            targetNode.name = res.name || targetNode.name
-            if (res.color) targetNode.color = res.color
-          }
-          await window.api.sessionsSaveTree(sessionTree)
-          saveToHistory() // Save to history after edit
-          renderTree() // Update tree display
-        })
+            const node = { id: genId('sess'), type:'session', name: `${s.name||s.host} (${s.username})`, session: s }
+            if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
+            else {
+              targetNode.children.push(node)
+              // Auto-expand folder when creating session inside it
+              if (!targetNode.expanded) {
+                targetNode.expanded = true
+              }
+            }
+            await window.api.sessionsSaveTree(sessionTree)
+            saveToHistory() // Save to history after creation
+            renderTree() // Update tree display
+          })
+        }
+        
+        // Only show "Edit" if clicking on a node (not empty area)
+        if (targetNode) {
+          add('Edit…', async () => {
+            if (!targetNode) return
+            if (targetNode.type==='session') {
+              const present = targetNode.session || {}
+              const res = await window.api.openSessionWindowPreset((present.type||'SSH'), present)
+              const s = res && res.session
+              if (!s) return
+              targetNode.session = s
+              targetNode.name = `${s.name||s.host} (${s.username})`
+            } else if (targetNode.type==='folder') {
+              const res = await showFolderModal('Edit Folder', targetNode.name || 'Folder', (typeof targetNode.color==='string' && targetNode.color) ? targetNode.color : DEFAULT_FOLDER_COLOR, 'Save')
+              if (!res) return
+              targetNode.name = res.name || targetNode.name
+              if (res.color) targetNode.color = res.color
+            }
+            await window.api.sessionsSaveTree(sessionTree)
+            saveToHistory() // Save to history after edit
+            renderTree() // Update tree display
+          })
+        }
         if (targetNode && (targetNode.type === 'session' || targetNode.type === 'folder')) {
           add('Copy', () => {
             if (selectedIds.length > 0) {
@@ -1469,7 +1482,56 @@
             await redo()
           })
         }
-        if (selectedIds.length > 0 || selectedId) {
+        
+        // Only show "Create Tunnel" if clicking on a session (not folder or empty area)
+        if (targetNode && targetNode.type === 'session') {
+          add('Create Tunnel…', async () => {
+            // Smart tunnel creation - find the best session to use
+            let targetSession = null
+            
+            // Priority 1: If we have a selected session, use it
+            if (selectedId) {
+              const info = findNodeById(sessionTree, selectedId, null)
+              if (info && info.node.type === 'session') {
+                targetSession = info.node
+              }
+            }
+            
+            // Priority 2: If we have selected items, find first session among them
+            if (!targetSession && selectedIds.length > 0) {
+              const firstSelectedSession = selectedIds.find(id => {
+                const info = findNodeById(sessionTree, id, null)
+                return info && info.node.type === 'session'
+              })
+              if (firstSelectedSession) {
+                const info = findNodeById(sessionTree, firstSelectedSession, null)
+                targetSession = info.node
+              }
+            }
+            
+            // Priority 3: If we clicked on a session, use it
+            if (!targetSession && targetNode && targetNode.type === 'session') {
+              targetSession = targetNode
+            }
+            
+            // Priority 4: If we clicked on a folder, find first session in it
+            if (!targetSession && targetNode && targetNode.type === 'folder') {
+              targetSession = findFirstSessionInFolder(targetNode)
+            }
+            
+            // Priority 5: Find any session in the tree
+            if (!targetSession) {
+              targetSession = findFirstSessionInTree()
+            }
+            
+            if (targetSession) {
+              await createTunnelForSession(targetSession)
+            } else {
+              await showConfirmModal('No Sessions', 'No sessions found. Create a session first.', 'OK', '')
+            }
+          })
+        }
+        if ((selectedIds.length > 0 || selectedId) && targetNode) {
           add('Delete', async () => {
             if (selectedIds.length > 1 || (selectedIds.length === 1 && selectedId && selectedIds.includes(selectedId))) {
               await deleteMultipleSessions()
@@ -1492,18 +1554,6 @@
                 renderTree()
               }
             }
-          })
-        }
-        if (targetNode) {
-          add('Delete…', async () => {
-            const ok = await showConfirmModal('Delete', 'Delete selected item?', 'Delete', 'Cancel')
-            if (!ok) return
-            clearCopiedSession(targetNode.id) // Clear copied session if it's being deleted
-            removeNodeById(targetNode.id)
-            setSelectedId(null)
-            await window.api.sessionsSaveTree(sessionTree)
-            saveToHistory() // Save to history after deletion
-            renderTree() // Update tree display
           })
         }
         menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.style.display = 'block'
@@ -2225,6 +2275,89 @@
       const tunListEl = document.getElementById('tun-list')
       const tunCreateBtn = document.getElementById('tun-create')
       let tunnels = [] // persisted list: { id, sessionId, name, localHost, localPort, remoteHost, remotePort, active }
+      
+      // Find first session in folder (recursive)
+      function findFirstSessionInFolder(folder) {
+        if (!folder.children) return null
+        for (const child of folder.children) {
+          if (child.type === 'session') {
+            return child
+          } else if (child.type === 'folder') {
+            const found = findFirstSessionInFolder(child)
+            if (found) return found
+          }
+        }
+        return null
+      }
+      
+      // Find first session in entire tree
+      function findFirstSessionInTree() {
+        for (const item of sessionTree) {
+          if (item.type === 'session') {
+            return item
+          } else if (item.type === 'folder') {
+            const found = findFirstSessionInFolder(item)
+            if (found) return found
+          }
+        }
+        return null
+      }
+      
+      // Create tunnel for specific session
+      async function createTunnelForSession(sessNode) {
+        // Modal wizard
+        const overlay = document.createElement('div'); overlay.className='modal-overlay'
+        const modal = document.createElement('div'); modal.className='modal'
+        const header = document.createElement('div'); header.className='modal-header'; header.textContent='Create Tunnel'
+        const body = document.createElement('div'); body.className='modal-body'
+        const step1 = document.createElement('div'); step1.style.display='flex'; step1.style.gap='8px'; step1.style.alignItems='center'
+        step1.innerHTML = '<span>Local port</span>'
+        const inLocal = document.createElement('input'); inLocal.className='input'; inLocal.placeholder='8080'; inLocal.value='8080'
+        step1.appendChild(inLocal)
+        const step2 = document.createElement('div'); step2.style.display='none'; step2.style.gap='8px'; step2.style.alignItems='center'
+        step2.innerHTML = '<span>Remote port</span>'
+        const inRemote = document.createElement('input'); inRemote.className='input'; inRemote.placeholder='80'; inRemote.value='80'
+        step2.appendChild(inRemote)
+        const step3 = document.createElement('div'); step3.style.display='none'; step3.style.gap='8px'; step3.style.alignItems='center'
+        step3.innerHTML = '<span>Name (optional)</span>'
+        const inName = document.createElement('input'); inName.className='input'; inName.placeholder='My tunnel'
+        step3.appendChild(inName)
+        body.appendChild(step1); body.appendChild(step2); body.appendChild(step3)
+        const actions = document.createElement('div'); actions.className='modal-actions'
+        const btnNext = document.createElement('button'); btnNext.className='btn primary'; btnNext.textContent='Next'
+        const btnCancel = document.createElement('button'); btnCancel.className='btn'; btnCancel.textContent='Cancel'
+        const btnCreate = document.createElement('button'); btnCreate.className='btn primary'; btnCreate.textContent='Create'; btnCreate.style.display='none'
+        actions.appendChild(btnNext); actions.appendChild(btnCancel); actions.appendChild(btnCreate)
+        modal.appendChild(header); modal.appendChild(body); modal.appendChild(actions)
+        overlay.appendChild(modal); document.body.appendChild(overlay)
+        const close = () => { document.body.removeChild(overlay) }
+        btnCancel.onclick = close
+        let step = 1
+        btnNext.onclick = () => {
+          if (step === 1) {
+            step1.style.display='none'; step2.style.display='flex'; step++
+            inRemote.focus()
+          } else if (step === 2) {
+            step2.style.display='none'; step3.style.display='flex'; step++
+            btnNext.style.display='none'; btnCreate.style.display='inline-block'
+            inName.focus()
+          }
+        }
+        btnCreate.onclick = async () => {
+          const localPort = Number(inLocal.value || '0')
+          const remotePort = Number(inRemote.value || '0')
+          if (!localPort || !remotePort) { alert('Ports are required'); return }
+          const name = (inName.value || '').trim()
+          // Add tunnel inactive by default
+          const entry = { id: genId('tun'), sessionId: sessNode.id, sessionCfg: sessNode.session, name, localHost:'127.0.0.1', localPort, remoteHost, remotePort, active:false }
+          tunnels.push(entry)
+          await window.api.tunnelsSave(tunnels)
+          renderTunnels()
+          close()
+        }
+        overlay.addEventListener('keydown', (e) => { if (e.key==='Escape') close() })
+        setTimeout(() => inLocal.focus(), 0)
+      }
 
       function renderTunnels() {
         tunListEl.innerHTML = ''

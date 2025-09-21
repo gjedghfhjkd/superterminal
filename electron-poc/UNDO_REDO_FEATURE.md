@@ -79,3 +79,4 @@ All tree-modifying operations are now tracked in history:
 - **Experiment Freedom**: Users can try different arrangements without fear
 - **Professional UX**: Standard undo/redo behavior expected in modern applications
 - **Comprehensive Coverage**: All tree operations are undoable
+
