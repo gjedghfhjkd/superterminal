@@ -135,6 +135,14 @@
         const out = Object.assign({}, base, { name, localHost, localPort, remoteHost, remotePort, sessionId, sessionCfg })
         try { window.api.tunnelFormSubmit(out) } catch {}
       }
+      
+      // Handle ESC key to close the tunnel window
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          // Close the window without saving
+          try { window.api.tunnelFormSubmit(null) } catch {}
+        }
+      })
     </script>
   </body>
   </html>

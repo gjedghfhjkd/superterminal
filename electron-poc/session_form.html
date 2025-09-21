@@ -346,6 +346,14 @@
         } : {}, sessBase)
         try { window.api.sessionFormSubmit(sess) } catch {}
       }
+      
+      // Handle ESC key to close the session creation window
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          // Close the window without saving
+          try { window.api.sessionFormSubmit(null) } catch {}
+        }
+      })
 
       // Context menu removed; deletion now available inline in dropdown
 
