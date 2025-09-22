@@ -2348,6 +2348,7 @@
           const remotePort = Number(inRemote.value || '0')
           if (!localPort || !remotePort) { alert('Ports are required'); return }
           const name = (inName.value || '').trim()
+          const remoteHost = (sessNode.session && (sessNode.session.host || sessNode.session.hostname)) || '127.0.0.1'
           // Add tunnel inactive by default
           const entry = { id: genId('tun'), sessionId: sessNode.id, sessionCfg: sessNode.session, name, localHost:'127.0.0.1', localPort, remoteHost, remotePort, active:false }
           tunnels.push(entry)
