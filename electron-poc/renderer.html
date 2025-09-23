@@ -391,6 +391,16 @@
               copySelectedText()
               return false
             }
+            // Toggle sidebar with Ctrl+B even when focus is inside xterm
+            if ((ev.key === 'b' || ev.key === 'B') && ev.ctrlKey) {
+              try {
+                if (!window.__sidebarToggleGuard) {
+                  window.__sidebarToggleGuard = true
+                  window.toggleSidebar && window.toggleSidebar()
+                }
+              } catch {}
+              return false
+            }
             // Zoom in/out/reset (guarded per physical press)
             if (ev.ctrlKey) {
               const isPlus = (ev.key === '+' || (ev.key === '=' && ev.shiftKey) || ev.code === 'NumpadAdd')
@@ -403,8 +413,23 @@
             return true
           })
         } catch {}
-        term.onData(data => { if (currentId != null) window.api.sshSendId(currentId, data) })
-        terminals.set(id, { term, el: pane, fit, baseFontSize: initialFontSize, currFontSize: initialFontSize })
+        term.onData(data => {
+          // Detect Ctrl+D (EOT) to optionally auto-close tab after PTY ends
+          try {
+            if (data && data.indexOf && data.indexOf('\x04') !== -1) {
+              const rec = terminals.get(id)
+              if (rec) {
+                rec.pendingCtrlDClose = true
+                // Clear flag after a short window; if PTY closes within this window, we'll close the tab
+                clearTimeout(rec._ctrldTimer)
+                rec._ctrldTimer = setTimeout(() => { try { rec.pendingCtrlDClose = false } catch {} }, 1500)
+                terminals.set(id, rec)
+              }
+            }
+          } catch {}
+          if (currentId != null) window.api.sshSendId(currentId, data)
+        })
+        terminals.set(id, { term, el: pane, fit, baseFontSize: initialFontSize, currFontSize: initialFontSize, ptyClosed: false, pendingCtrlDClose: false })
 
         const tab = document.createElement('div')
         tab.className = 'tab'
@@ -540,9 +565,61 @@
             return
           }
           const rec = payload && terminals.get(payload.id)
-          if (rec) rec.term.write(payload.data)
+          if (rec) {
+            // Detect PTY closed marker emitted by main process and mark as closed
+            try {
+              if (payload && typeof payload.data === 'string' && payload.data.indexOf('[PTY closed]') !== -1) {
+                rec.ptyClosed = true
+                terminals.set(payload.id, rec)
+                // If user just sent Ctrl+D, close the tab automatically
+                if (rec.pendingCtrlDClose) {
+                  closeTabById(payload.id)
+                  return
+                }
+                // Inform user how to reconnect
+                try {
+                  rec.term.write('\r\nPress Ctrl + R to reconnect\r\n')
+                } catch {}
+              }
+            } catch {}
+            rec.term.write(payload.data)
+          }
         } catch {}
       })
+
+      async function reconnectTerminal(id) {
+        try {
+          const rec = terminals.get(id)
+          if (!rec || !rec.sessionCfg) {
+            // Best-effort: try to recover session config from active tab title by matching original session
+            // If not available, show message
+            await showErrorModal('Reconnect error', 'No session config found for this tab')
+            return
+          }
+          // Ensure any stale connection is dropped
+          try { await window.api.sshDisconnect?.(id) } catch (e) { try { console.warn('[reconnect] sshDisconnect failed', e) } catch {} }
+          // Ensure auth fields present on reconnect: prefer userPreset saved in sessionCfg
+          const cfg = Object.assign({}, rec.sessionCfg?.userPreset ? { ...rec.sessionCfg, ...rec.sessionCfg.userPreset } : rec.sessionCfg, { id })
+          try { console.log('[reconnect] sshConnect', cfg) } catch {}
+          await window.api.sshConnect(cfg)
+          try { console.log('[reconnect] sshOpenPtyId') } catch {}
+          try {
+            await window.api.sshOpenPtyId(id)
+          } catch (e1) {
+            try { console.warn('[reconnect] sshOpenPtyId failed, retrying once...', e1) } catch {}
+            await new Promise(r => setTimeout(r, 400))
+            await window.api.sshOpenPtyId(id)
+          }
+          try { await window.api.sftpConnect(cfg) } catch (e) { try { console.warn('[reconnect] sftpConnect warn', e) } catch {} }
+          try { rec.fit.fit() } catch (e) { try { console.warn('[reconnect] fit warn', e) } catch {} }
+          try { window.api.sshResizeId(id, rec.term.cols, rec.term.rows) } catch (e) { try { console.warn('[reconnect] resize warn', e) } catch {} }
+          rec.ptyClosed = false
+          terminals.set(id, rec)
+        } catch (e) {
+          try { console.error('[reconnect] error', e) } catch {}
+          await showErrorModal('Reconnect error', String(e?.message||e))
+        }
+      }
       function resize() {
         const active = currentId != null ? terminals.get(currentId) : null
         if (!active) return
@@ -585,11 +662,12 @@
               left.style.width = '0px'
               left.offsetHeight; // force reflow
               left.classList.remove('no-transition')
+              try { requestAnimationFrame(() => resize()) } catch {}
             } else {
               left.classList.add('animating')
               left.style.width = current + 'px'
               requestAnimationFrame(() => { left.style.width = '0px' })
-              const onEnd = (ev) => { if (ev && ev.propertyName !== 'width') return; left.removeEventListener('transitionend', onEnd); left.classList.remove('animating') }
+              const onEnd = (ev) => { if (ev && ev.propertyName !== 'width') return; left.removeEventListener('transitionend', onEnd); left.classList.remove('animating'); try { resize() } catch {} }
               left.addEventListener('transitionend', onEnd)
             }
           } else {
@@ -600,6 +678,7 @@
               left.style.width = target + 'px'
               left.offsetHeight; // force reflow
               left.classList.remove('no-transition')
+              try { requestAnimationFrame(() => resize()) } catch {}
             } else {
               // Animate from 0 -> target while temporarily allowing min-width:0
               left.classList.add('animating')
@@ -610,12 +689,12 @@
                 // Update UI after dataset is updated
                 setTimeout(() => updateToggleUI(), 10)
               })
-              const onEnd2 = (ev) => { if (ev && ev.propertyName !== 'width') return; left.removeEventListener('transitionend', onEnd2); left.classList.remove('animating') }
+              const onEnd2 = (ev) => { if (ev && ev.propertyName !== 'width') return; left.removeEventListener('transitionend', onEnd2); left.classList.remove('animating'); try { resize() } catch {} }
               left.addEventListener('transitionend', onEnd2)
             }
           }
           try { localStorage.setItem(COLLAPSE_KEY, collapsed?'1':'0') } catch {}
-          try { resize() } catch {}
+          try { if (options.instant) resize() } catch {}
           // updateToggleUI() is called separately for animated case above
           if (collapsed) {
             try { updateToggleUI() } catch {}
@@ -691,12 +770,24 @@
           }
         } catch {}
         // Keyboard toggle: Ctrl+B (like VS Code)
+        window.toggleSidebar = () => {
+          const isCollapsed = left.dataset.collapsed==='1'
+          setCollapsed(!isCollapsed)
+        }
+        // Prevent key repeat from toggling multiple times while holding the keys
+        window.__sidebarToggleGuard = false
         document.addEventListener('keydown', (e)=>{
           if (e.ctrlKey && (e.key==='b' || e.key==='B')) {
-            const isCollapsed = left.dataset.collapsed==='1'
-            setCollapsed(!isCollapsed)
+            if (window.__sidebarToggleGuard) { e.preventDefault(); e.stopPropagation(); return }
+            window.__sidebarToggleGuard = true
+            window.toggleSidebar()
             e.preventDefault()
             e.stopPropagation()
+          }
+        })
+        document.addEventListener('keyup', (e)=>{
+          if (e.key==='b' || e.key==='B' || e.key==='Control') {
+            window.__sidebarToggleGuard = false
           }
         })
       })()
@@ -1258,6 +1349,7 @@
                     await window.api.sshOpenPtyId(rid)
                     try { await window.api.sftpConnect(cfg) } catch {}
                     const rec = terminals.get(rid)
+                    if (rec) { rec.sessionCfg = s; terminals.set(rid, rec) }
                     try { rec.fit.fit() } catch {}
                     try { window.api.sshResizeId(rid, rec.term.cols, rec.term.rows) } catch {}
                     // Removed explicit "[Connected]" banner and extra CRLF to avoid redundant line on first connect
@@ -1743,6 +1835,20 @@
           await redo()
           e.preventDefault()
           e.stopPropagation()
+        }
+        // Reconnect current terminal with Ctrl+R
+        if (e.ctrlKey && (e.key === 'r' || e.key === 'R')) {
+          const activeId = currentId
+          if (activeId != null) {
+            const rec = terminals.get(activeId)
+            if (rec && (rec.ptyClosed || rec.sessionCfg)) {
+              e.preventDefault(); e.stopPropagation()
+              try { rec.term.write('\r\n[Reconnecting...]\r\n') } catch {}
+              try { console.log('[reconnect] start', { id: activeId, ptyClosed: !!rec.ptyClosed, hasCfg: !!rec.sessionCfg }) } catch {}
+              await reconnectTerminal(activeId)
+              return
+            }
+          }
         }
         // Delete selected sessions or folders with Delete key
         if (e.key === 'Delete' || e.keyCode === 46) {
