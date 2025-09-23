@@ -208,12 +208,13 @@ ipcMain.handle('ssh-connect', async (evt, cfg) => {
     const id = cfg.id
     const ssh = new SSHClient()
     ssh.on('ready', () => {
+      try { console.log('[ssh-connect] ready', id) } catch {}
       let rec = connections.get(id) || {}
       rec.ssh = ssh
       connections.set(id, rec)
       resolve({ ok: true })
     })
-    ssh.on('error', (e) => reject(new Error(String(e))))
+    ssh.on('error', (e) => { try { console.error('[ssh-connect] error', e) } catch {}; reject(new Error(String(e))) })
     const conn = {
       host: cfg.host, port: cfg.port, username: cfg.username,
       readyTimeout: 10000
@@ -240,6 +241,7 @@ ipcMain.handle('ssh-connect', async (evt, cfg) => {
       conn.privateKey = key
       if (cfg.passphrase) conn.passphrase = cfg.passphrase
     }
+    try { console.log('[ssh-connect] connecting', { id, host: conn.host, port: conn.port, username: conn.username }) } catch {}
     ssh.connect(conn)
   })
 })
@@ -263,6 +265,7 @@ ipcMain.handle('ssh-open-pty-id', async (evt, payload) => {
       connections.set(id, rec)
       stream.on('data', (d) => win.webContents.send('ssh-data', { id, data: d.toString('utf8') }))
       stream.on('close', () => win.webContents.send('ssh-data', { id, data: '\r\n[PTY closed]\r\n' }))
+      try { stream.stderr && stream.stderr.on && stream.stderr.on('data', (d) => win.webContents.send('ssh-data', { id, data: d.toString('utf8') })) } catch {}
       resolve({ ok: true })
     })
   })
@@ -328,7 +331,7 @@ ipcMain.handle('tunnel-start', async (evt, payload) => {
     })
   })
   await new Promise((resolve, reject) => {
-    server.on('error', reject)
+    server.on('error', (e) => { try { console.error('[tunnel-start] server error', e) } catch {}; reject(e) })
     server.listen(localPort, localHost, resolve)
   })
   forwards.set(key, { server, sockets, streams })
