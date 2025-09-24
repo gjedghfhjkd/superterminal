@@ -20,6 +20,7 @@ try {
 } catch {}
 
 let win
+let terminalHasFocus = false
 function createWindow() {
   win = new BrowserWindow({
     width: 1200,
@@ -34,8 +35,22 @@ function createWindow() {
   })
   try { app.setName('SuperTerminal') } catch {}
   try { win.setTitle('SuperTerminal') } catch {}
+  try {
+    win.webContents.on('before-input-event', (event, input) => {
+      try {
+        const isCtrlW = (input && (input.control || input.meta) && String(input.key || '').toLowerCase() === 'w')
+        // Block Ctrl/Cmd+W only when terminal is NOT focused (allow terminals to handle it)
+        if (isCtrlW && !terminalHasFocus) { event.preventDefault() }
+      } catch {}
+    })
+  } catch {}
   win.loadFile('renderer.html')
 }
+// Focus coordination from renderer
+import { ipcMain as _ipcMain } from 'electron'
+ipcMain.on('terminal-focus', (_e, focused) => {
+  try { terminalHasFocus = !!focused } catch {}
+})
 
 app.whenReady().then(createWindow)
 
