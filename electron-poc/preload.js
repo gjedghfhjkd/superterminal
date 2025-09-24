@@ -59,6 +59,8 @@ contextBridge.exposeInMainWorld('api', {
   usersSave: (list) => ipcRenderer.invoke('users-save', list),
   onUsersUpdated: (cb) => ipcRenderer.on('users-updated', cb),
   openUserWindow: (preset=null) => ipcRenderer.invoke('open-user-window', { preset }),
-  userFormSubmit: (user) => ipcRenderer.send('user-form-submit', user)
+  userFormSubmit: (user) => ipcRenderer.send('user-form-submit', user),
+  // Focus state for terminal to coordinate global shortcuts
+  setTerminalFocus: (focused) => ipcRenderer.send('terminal-focus', !!focused)
 })
 

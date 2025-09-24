@@ -217,6 +217,7 @@
         term.loadAddon(fit)
         term.open(pane)
         term.focus()
+        try { window.api.setTerminalFocus(true) } catch {}
         const initialFontSize = (() => { try { return Number(term.options && term.options.fontSize) || 15 } catch { return 15 } })()
         const applyZoom = (mode) => {
           try {
@@ -429,6 +430,10 @@
           } catch {}
           if (currentId != null) window.api.sshSendId(currentId, data)
         })
+        try {
+          term.onFocus(() => { try { window.api.setTerminalFocus(true) } catch {} })
+          term.onBlur(() => { try { window.api.setTerminalFocus(false) } catch {} })
+        } catch {}
         terminals.set(id, { term, el: pane, fit, baseFontSize: initialFontSize, currFontSize: initialFontSize, ptyClosed: false, pendingCtrlDClose: false })
 
         const tab = document.createElement('div')
@@ -454,6 +459,28 @@
         }
         tab.appendChild(close)
         tab.onclick = () => activateTab(id)
+        // Drag support for tab reordering
+        try {
+          tab.draggable = true
+          tab.addEventListener('dragstart', (e) => {
+            draggingId = id
+            try { e.dataTransfer.setData('text/plain', id) } catch {}
+            e.dataTransfer.effectAllowed = 'move'
+          })
+          tab.addEventListener('dragend', () => { draggingId = null })
+          tab.addEventListener('dragover', (e) => {
+            if (!draggingId || draggingId === id) return
+            e.preventDefault(); e.stopPropagation()
+            tab.classList.add('drop-target')
+          })
+          tab.addEventListener('dragleave', () => tab.classList.remove('drop-target'))
+          tab.addEventListener('drop', (e) => {
+            e.preventDefault(); e.stopPropagation(); tab.classList.remove('drop-target')
+            const dragId = draggingId
+            if (!dragId || dragId === id) return
+            reorderTabs(dragId, id)
+          })
+        } catch {}
         tab.oncontextmenu = (e) => { e.preventDefault(); openTabCtxMenu(e.clientX, e.clientY, id) }
         tabsEl.appendChild(tab)
         tabs.set(id, tab)
@@ -483,6 +510,28 @@
         }
         tab.appendChild(close)
         tab.onclick = () => { activateTab(id); showSftpView() }
+        // Drag support for tab reordering
+        try {
+          tab.draggable = true
+          tab.addEventListener('dragstart', (e) => {
+            draggingId = id
+            try { e.dataTransfer.setData('text/plain', id) } catch {}
+            e.dataTransfer.effectAllowed = 'move'
+          })
+          tab.addEventListener('dragend', () => { draggingId = null })
+          tab.addEventListener('dragover', (e) => {
+            if (!draggingId || draggingId === id) return
+            e.preventDefault(); e.stopPropagation()
+            tab.classList.add('drop-target')
+          })
+          tab.addEventListener('dragleave', () => tab.classList.remove('drop-target'))
+          tab.addEventListener('drop', (e) => {
+            e.preventDefault(); e.stopPropagation(); tab.classList.remove('drop-target')
+            const dragId = draggingId
+            if (!dragId || dragId === id) return
+            reorderTabs(dragId, id)
+          })
+        } catch {}
         tab.oncontextmenu = (e) => { e.preventDefault(); openTabCtxMenu(e.clientX, e.clientY, id) }
         tabsEl.appendChild(tab)
         tabs.set(id, tab)
@@ -500,6 +549,22 @@
         } else {
           showSftpView()
         }
+      }
+
+      // Reorder tabs in the DOM and maintain Maps ordering (visual only uses DOM order)
+      function reorderTabs(sourceId, targetId) {
+        try {
+          const srcEl = tabs.get(sourceId)
+          const tgtEl = tabs.get(targetId)
+          if (!srcEl || !tgtEl || srcEl === tgtEl) return
+          const parent = tabsEl
+          const children = Array.from(parent.children)
+          const srcIndex = children.indexOf(srcEl)
+          const tgtIndex = children.indexOf(tgtEl)
+          if (srcIndex < 0 || tgtIndex < 0) return
+          if (srcIndex < tgtIndex) parent.insertBefore(srcEl, tgtEl.nextSibling)
+          else parent.insertBefore(srcEl, tgtEl)
+        } catch {}
       }
 
       // View toggling between SSH (terminal panes) and SFTP panel
