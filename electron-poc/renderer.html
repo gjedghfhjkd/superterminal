@@ -1610,8 +1610,25 @@
         
         // Only show "New Session" if not clicking on a session
         if (!isSession) {
-          add('New Session', async () => {
+          add('New SSH Session', async () => {
             const res = await window.api.openSessionWindow('SSH')
+            const s = res && res.session
+            if (!s) return
+            const node = { id: genId('sess'), type:'session', name: `${s.name||s.host} (${s.username})`, session: s }
+            if (!targetNode || targetNode.type!=='folder') sessionTree.push(node)
+            else {
+              targetNode.children.push(node)
+              // Auto-expand folder when creating session inside it
+              if (!targetNode.expanded) {
+                targetNode.expanded = true
+              }
+            }
+            await window.api.sessionsSaveTree(sessionTree)
+            saveToHistory() // Save to history after creation
+            renderTree() // Update tree display
+          })
+          add('New SFTP Session', async () => {
+            const res = await window.api.openSessionWindow('SFTP')
             const s = res && res.session
             if (!s) return
             const node = { id: genId('sess'), type:'session', name: `${s.name||s.host} (${s.username})`, session: s }
