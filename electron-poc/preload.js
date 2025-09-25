@@ -16,12 +16,14 @@ contextBridge.exposeInMainWorld('api', {
   sftpDelete: (id, remotePath, isDir) => ipcRenderer.invoke('sftp-delete', { id, path: remotePath, isDir }),
   sftpRename: (id, from, to) => ipcRenderer.invoke('sftp-rename', { id, from, to }),
   sftpMkdir: (id, remotePath) => ipcRenderer.invoke('sftp-mkdir', { id, path: remotePath }),
+  sftpTouch: (id, remotePath) => ipcRenderer.invoke('sftp-touch', { id, path: remotePath }),
   sftpUpload: (id, local, remote) => ipcRenderer.invoke('sftp-upload', { id, local, remote }),
   sftpDownload: (id, remote, local) => ipcRenderer.invoke('sftp-download', { id, remote, local }),
   sftpUploadDir: (id, localDir, remoteDir) => ipcRenderer.invoke('sftp-upload-dir', { id, localDir, remoteDir }),
   sftpDownloadDir: (id, remoteDir, localDir) => ipcRenderer.invoke('sftp-download-dir', { id, remoteDir, localDir }),
   onSftpProgress: (cb) => ipcRenderer.on('sftp-progress', (_, payload) => cb(payload)),
   sftpCancel: (id) => ipcRenderer.send('sftp-cancel', id),
+  sftpHome: (id) => ipcRenderer.invoke('sftp-home', id),
 
   sessionsLoad: () => ipcRenderer.invoke('sessions-load'),
   sessionsAdd: (session) => ipcRenderer.invoke('sessions-add', session),
@@ -42,6 +44,7 @@ contextBridge.exposeInMainWorld('api', {
   localDelete: (localPath, isDir) => ipcRenderer.invoke('local-delete', { path: localPath, isDir }),
   localRename: (from, to) => ipcRenderer.invoke('local-rename', { from, to }),
   localMkdir: (localPath) => ipcRenderer.invoke('local-mkdir', { path: localPath }),
+  localTouch: (localPath) => ipcRenderer.invoke('local-touch', { path: localPath }),
   getHome: () => ipcRenderer.invoke('get-home'),
   sftpDisconnect: (id) => ipcRenderer.invoke('sftp-disconnect', id),
   // OS-aware path helpers (local)
