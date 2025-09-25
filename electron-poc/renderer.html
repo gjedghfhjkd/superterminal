@@ -1713,7 +1713,19 @@
             }
           })
         }
-        menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.style.display = 'block'
+        function clampToViewport(x, y, el) {
+          try {
+            const vw = window.innerWidth || document.documentElement.clientWidth
+            const vh = window.innerHeight || document.documentElement.clientHeight
+            const w = el.offsetWidth || 220
+            const h = el.offsetHeight || 200
+            const nx = Math.max(0, Math.min(x, vw - w - 6))
+            const ny = Math.max(0, Math.min(y, vh - h - 6))
+            return { x: nx, y: ny }
+          } catch { return { x, y } }
+        }
+        const pos1 = clampToViewport(x, y, menu)
+        menu.style.left = pos1.x + 'px'; menu.style.top = pos1.y + 'px'; menu.style.display = 'block'
         setTimeout(() => {
           const onDoc = (e) => {
             if (!menu.contains(e.target)) { hideCtx(); document.removeEventListener('mousedown', onDoc) }
@@ -1761,7 +1773,19 @@
           const closeBtn = tabs.get(tabId)?.querySelector('.close')
           if (closeBtn) closeBtn.click()
         })
-        menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.style.display = 'block'
+        function clampToViewport(x, y, el) {
+          try {
+            const vw = window.innerWidth || document.documentElement.clientWidth
+            const vh = window.innerHeight || document.documentElement.clientHeight
+            const w = el.offsetWidth || 220
+            const h = el.offsetHeight || 200
+            const nx = Math.max(0, Math.min(x, vw - w - 6))
+            const ny = Math.max(0, Math.min(y, vh - h - 6))
+            return { x: nx, y: ny }
+          } catch { return { x, y } }
+        }
+        const pos2 = clampToViewport(x, y, menu)
+        menu.style.left = pos2.x + 'px'; menu.style.top = pos2.y + 'px'; menu.style.display = 'block'
         setTimeout(() => {
           const onDoc = (e) => { if (!menu.contains(e.target)) { hideCtx(); document.removeEventListener('mousedown', onDoc) } }
           document.addEventListener('mousedown', onDoc)
@@ -1798,35 +1822,9 @@
               const isPlus = (e.key === '+' || (e.key === '=' && e.shiftKey) || e.code === 'NumpadAdd')
               const isMinus = (e.key === '-' || e.code === 'NumpadSubtract')
               const isReset = (e.key === '=' && !e.shiftKey)
-              if (isPlus || isMinus || isReset) {
-                // Guard to ensure one action per physical press
-                if ((isPlus && zoomGuard.in) || (isMinus && zoomGuard.out) || (isReset && zoomGuard.reset)) {
-                  e.preventDefault(); e.stopPropagation(); return
-                }
-                const rec = currentId != null ? terminals.get(currentId) : null
-                const term = rec && rec.term
-                if (term) {
-                  try {
-                    const current = (typeof rec.currFontSize === 'number') ? rec.currFontSize : (Number(term.options && term.options.fontSize) || 15)
-                    const base = (typeof rec.baseFontSize === 'number') ? rec.baseFontSize : (Number(term.options && term.options.fontSize) || 15)
-                    let next = current
-                    if (isPlus) next = Math.min(ZOOM_MAX, current + ZOOM_STEP)
-                    else if (isMinus) next = Math.max(ZOOM_MIN, current - ZOOM_STEP)
-                    else if (isReset) next = base
-                    if (next !== current) {
-                      try { term.options.fontSize = next } catch {}
-                      rec.currFontSize = next
-                      try { resize() } catch {}
-                    }
-                  } catch {}
-                  if (isPlus) zoomGuard.in = true
-                  if (isMinus) zoomGuard.out = true
-                  if (isReset) zoomGuard.reset = true
-                  e.preventDefault()
-                  e.stopPropagation()
-                  return
-                }
-              }
+              if (isPlus) { if (!zoomGuard.in) { applyZoom('in'); zoomGuard.in = true } return false }
+              if (isMinus) { if (!zoomGuard.out) { applyZoom('out'); zoomGuard.out = true } return false }
+              if (isReset) { if (!zoomGuard.reset) { applyZoom('reset'); zoomGuard.reset = true } return false }
             }
           } catch {}
         }
@@ -2352,7 +2350,19 @@
             await navigateLocal(targetDir)
           }
         })
-        menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.style.display = 'block'
+        function clampToViewport(x, y, el) {
+          try {
+            const vw = window.innerWidth || document.documentElement.clientWidth
+            const vh = window.innerHeight || document.documentElement.clientHeight
+            const w = el.offsetWidth || 220
+            const h = el.offsetHeight || 200
+            const nx = Math.max(0, Math.min(x, vw - w - 6))
+            const ny = Math.max(0, Math.min(y, vh - h - 6))
+            return { x: nx, y: ny }
+          } catch { return { x, y } }
+        }
+        const pos3 = clampToViewport(x, y, menu)
+        menu.style.left = pos3.x + 'px'; menu.style.top = pos3.y + 'px'; menu.style.display = 'block'
         setTimeout(() => { const onDoc = (e) => { if (!menu.contains(e.target)) { hideCtx(); document.removeEventListener('mousedown', onDoc) } }; document.addEventListener('mousedown', onDoc) }, 0)
       }
 
