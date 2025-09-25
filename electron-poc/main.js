@@ -323,6 +323,31 @@ ipcMain.handle('sftp-connect', async (evt, cfg) => {
   return { ok: true }
 })
 
+// Resolve remote home directory using SFTP realPath('~')
+ipcMain.handle('sftp-home', async (evt, id) => {
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  try {
+    // Prefer current working directory (usually home), then realPath('.') then realPath('~')
+    let p = ''
+    try { p = await rec.sftp.cwd() } catch {}
+    if (!p) { try { p = await rec.sftp.realPath('.') } catch {} }
+    if (!p) { try { p = await rec.sftp.realPath('~') } catch {} }
+    // Normalize odd returns like '/root/~' or trailing '/~'
+    try {
+      if (typeof p === 'string') {
+        p = p.trim()
+        if (p.endsWith('/~')) p = p.slice(0, -2) || '/'
+        if (p.includes('/~/')) p = p.replace('/~/', '/')
+      }
+    } catch {}
+    if (!p || typeof p !== 'string') return { ok: false, error: 'Cannot resolve home' }
+    return { ok: true, path: p }
+  } catch (e) {
+    return { ok: false, error: String(e?.message||e) }
+  }
+})
+
 // Local port forwarding via ssh2 (L->R)
 ipcMain.handle('tunnel-start', async (evt, payload) => {
   const { id, localHost='127.0.0.1', localPort, remoteHost='127.0.0.1', remotePort } = payload || {}
@@ -430,6 +455,14 @@ ipcMain.handle('sftp-mkdir', async (evt, payload) => {
   const rec = connections.get(id)
   if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
   await rec.sftp.mkdir(remotePath, true)
+  return { ok: true }
+})
+ipcMain.handle('sftp-touch', async (evt, payload) => {
+  const { id, path: remotePath } = payload || {}
+  const rec = connections.get(id)
+  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
+  const data = Buffer.alloc(0)
+  await rec.sftp.put(data, remotePath, { flags: 'w' })
   return { ok: true }
 })
 ipcMain.handle('sftp-upload', async (evt, payload) => {
@@ -549,6 +582,11 @@ ipcMain.handle('local-rename', async (evt, payload) => {
 ipcMain.handle('local-mkdir', async (evt, payload) => {
   const { path: localPath } = payload || {}
   await fsmkdir(localPath, { recursive: true })
+  return { ok: true }
+})
+ipcMain.handle('local-touch', async (evt, payload) => {
+  const { path: localPath } = payload || {}
+  await writeFile(localPath, '')
   return { ok: true }
 })
 

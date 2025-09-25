@@ -92,7 +92,7 @@
       .sftp-controls { display:flex; gap:8px; padding:8px; border-bottom:1px solid #1f2330; align-items:center; }
       .sftp-controls .input { width:100%; max-width:480px; }
       .sftp-list { flex:1; overflow:auto; padding:8px; }
-      .sftp-row { display:flex; gap:10px; padding:6px 8px; border-radius:6px; cursor:default; align-items:center; }
+      .sftp-row { display:flex; gap:10px; padding:6px 8px; border-radius:6px; cursor:pointer; align-items:center; }
       .sftp-row:hover { background:#121623; }
       .sftp-name { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
       .sftp-type { width:64px; text-transform:uppercase; color:#8b90a0; font-size:12px; text-align:right; overflow:hidden; }
@@ -1432,7 +1432,11 @@
                     }
                     activateTab(rid)
                     await initSftpSplitIfNeeded(rid)
-                    await navigateRemote('/')
+                    try {
+                      const homeRes = await window.api.sftpHome(rid)
+                      const start = (homeRes && homeRes.ok && homeRes.path) ? homeRes.path : '/'
+                      await navigateRemote(start)
+                    } catch { await navigateRemote('/') }
                   } catch (e) {
                     await showErrorModal('Connection error', String(e?.message||e))
                   }
@@ -2351,6 +2355,40 @@
         const fullPath = isRemote
           ? joinPath(basePath, (pathName || name))
           : await window.api.pathJoin(basePath, (pathName || name))
+
+        // Blank-area menu: only creation actions
+        if (!name) {
+          add('New Folder…', async () => {
+            const newName = await showInputModal('New Folder', 'Folder name', 'New Folder')
+            if (!newName) return
+            const targetDir = basePath
+            if (isRemote) {
+              const id = currentId
+              await window.api.sftpMkdir(id, joinPath(targetDir, newName))
+              await navigateRemote(targetDir)
+            } else {
+              await window.api.localMkdir(await window.api.pathJoin(targetDir, newName))
+              await navigateLocal(targetDir)
+            }
+          })
+          add('New File…', async () => {
+            const newName = await showInputModal('New File', 'File name', 'untitled.txt')
+            if (!newName) return
+            const targetDir = basePath
+            if (isRemote) {
+              const id = currentId
+              await window.api.sftpTouch(id, joinPath(targetDir, newName))
+              await navigateRemote(targetDir)
+            } else {
+              await window.api.localTouch(await window.api.pathJoin(targetDir, newName))
+              await navigateLocal(targetDir)
+            }
+          })
+          const posBlank = clampToViewport(x, y, menu)
+          menu.style.left = posBlank.x + 'px'; menu.style.top = posBlank.y + 'px'; menu.style.display = 'block'
+          setTimeout(() => { const onDoc = (e) => { if (!menu.contains(e.target)) { hideCtx(); document.removeEventListener('mousedown', onDoc) } }; document.addEventListener('mousedown', onDoc) }, 0)
+          return
+        }
         
         add('Rename…', async () => {
           const newName = await showInputModal('Rename', 'New name', name)
@@ -2407,6 +2445,17 @@
 
       ;['sftp-local-list','sftp-remote-list'].forEach((id) => {
         const el = document.getElementById(id)
+        // Blank area context menu
+        el.addEventListener('contextmenu', async (e) => {
+          try {
+            const isOnRow = e.target && e.target.closest && e.target.closest('.sftp-row')
+            if (isOnRow) return
+            e.preventDefault()
+            const basePath = (id === 'sftp-remote-list') ? sftpRemotePathEl.value : sftpLocalPathEl.value
+            const info = { basePath, name: '', pathName: '', isDir: false, ownerEl: el }
+            openSftpCtxMenu(e.clientX, e.clientY, info)
+          } catch {}
+        })
         el.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' })
         el.addEventListener('drop', async (e) => {
           e.preventDefault()
@@ -2474,8 +2523,12 @@
           await navigateLocal(home || '/')
           sftpLocalPathEl.dataset.ready = '1'
         }
-        // Remote path default root
-        await navigateRemote('/')
+        // Remote path default: try remote home, fallback to '/'
+        try {
+          const homeRes = await window.api.sftpHome(currentId)
+          const start = (homeRes && homeRes.ok && homeRes.path) ? homeRes.path : '/'
+          await navigateRemote(start)
+        } catch { await navigateRemote('/') }
       }
 
       sftpRemoteRefreshBtn.onclick = () => navigateRemote(sftpRemotePathEl.value)
