@@ -171,6 +171,15 @@
             <div id="sftp-remote-list" class="sftp-list"></div>
           </div>
         </div>
+        <div id="sftp-progress" style="position:absolute; right:12px; bottom:12px; z-index:1500; display:none; background:#0b0d14; border:1px solid #2a3040; border-radius:10px; padding:10px 12px; box-shadow:0 6px 18px rgba(0,0,0,.4); min-width:260px; color:#cfd3dc">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px">
+            <div id="sftp-progress-text" style="font-size:12px;">Transferring…</div>
+            <button id="sftp-progress-cancel" title="Cancel" style="background:transparent; border:1px solid #2a3040; color:#cfd3dc; padding:2px 6px; border-radius:6px; cursor:pointer; font-size:12px">✕</button>
+          </div>
+          <div style="height:8px; background:#121623; border:1px solid #2a3040; border-radius:6px; overflow:hidden">
+            <div id="sftp-progress-bar" style="height:100%; width:0%; background:linear-gradient(90deg,#2f66ef,#7a5cf0)"></div>
+          </div>
+        </div>
       </div>
       <div id="tun-panel">
         <div id="tun-controls">
@@ -579,6 +588,36 @@
         tunPanel.style.display = 'none'
         resize()
       }
+
+      // ===== SFTP Progress Overlay =====
+      ;(function initSftpProgress(){
+        const box = document.getElementById('sftp-progress')
+        const bar = document.getElementById('sftp-progress-bar')
+        const text = document.getElementById('sftp-progress-text')
+        const btn = document.getElementById('sftp-progress-cancel')
+        if (btn) btn.onclick = async () => {
+          try { if (currentId != null) window.api.sftpCancel(currentId) } catch {}
+          try { box.style.display = 'none' } catch {}
+        }
+        let hideTimer = null
+        function show(pct, label){
+          try { clearTimeout(hideTimer) } catch {}
+          box.style.display = 'block'
+          bar.style.width = Math.max(0, Math.min(100, pct)) + '%'
+          text.textContent = label
+        }
+        function hideSoon() { try { hideTimer = setTimeout(() => { box.style.display='none' }, 900) } catch {} }
+        try {
+          window.api.onSftpProgress((p) => {
+            if (!p || !p.direction) return
+            const pct = typeof p.percent === 'number' ? p.percent : 0
+            const dir = p.direction === 'upload' ? 'Uploading' : 'Downloading'
+            const name = (p.remote || p.local || '').toString().split(/[\\/]/).pop()
+            show(pct, `${dir} ${name}… ${pct}%`)
+            if (pct >= 100 || p.error) hideSoon()
+          })
+        } catch {}
+      })()
       function showSftpView() {
         const panes = document.getElementById('panes')
         const tabsBar = document.getElementById('tabs')

@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('api', {
   sftpDownload: (id, remote, local) => ipcRenderer.invoke('sftp-download', { id, remote, local }),
   sftpUploadDir: (id, localDir, remoteDir) => ipcRenderer.invoke('sftp-upload-dir', { id, localDir, remoteDir }),
   sftpDownloadDir: (id, remoteDir, localDir) => ipcRenderer.invoke('sftp-download-dir', { id, remoteDir, localDir }),
+  onSftpProgress: (cb) => ipcRenderer.on('sftp-progress', (_, payload) => cb(payload)),
+  sftpCancel: (id) => ipcRenderer.send('sftp-cancel', id),
 
   sessionsLoad: () => ipcRenderer.invoke('sessions-load'),
   sessionsAdd: (session) => ipcRenderer.invoke('sessions-add', session),
