@@ -58,6 +58,8 @@ app.whenReady().then(createWindow)
 const connections = new Map() // id -> { ssh, sftp, stream }
 // key `${id}:${localPort}` -> { server, sockets:Set<net.Socket>, streams:Set<ssh2.Stream> }
 const forwards = new Map()
+// Track SFTP transfer cancellation flags per connection id
+const sftpCancelFlags = new Map() // id -> boolean
 
 // Sessions persistence
 const sessionsFile = () => path.join(app.getPath('userData'), 'sessions.json')
@@ -315,6 +317,8 @@ ipcMain.handle('sftp-connect', async (evt, cfg) => {
   await sftp.connect(options)
   let rec = connections.get(id) || {}
   rec.sftp = sftp
+  // Persist options to allow auto-reconnect after cancel
+  rec.sftpOptions = options
   connections.set(id, rec)
   return { ok: true }
 })
@@ -431,16 +435,87 @@ ipcMain.handle('sftp-mkdir', async (evt, payload) => {
 ipcMain.handle('sftp-upload', async (evt, payload) => {
   const { id, local, remote } = payload || {}
   const rec = connections.get(id)
-  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
-  await rec.sftp.fastPut(local, remote)
+  if (!rec) throw new Error('No SFTP record for id')
+  if (!rec.sftp || !rec.sftp.sftp) {
+    // Try auto-reconnect if we have options
+    if (rec.sftpOptions) {
+      const s = new SFTPClient()
+      await s.connect(rec.sftpOptions)
+      rec.sftp = s
+      connections.set(id, rec)
+    } else {
+      throw new Error('No SFTP connection for id')
+    }
+  }
+  try {
+    sftpCancelFlags.set(id, false)
+    const options = {
+      step: (totalTransferred, _chunk, total) => {
+        try {
+          if (sftpCancelFlags.get(id)) throw new Error('Cancelled')
+          const percent = total ? Math.floor((totalTransferred / total) * 100) : 0
+          win.webContents.send('sftp-progress', { id, direction: 'upload', local, remote, transferred: totalTransferred, total, percent })
+        } catch {}
+      }
+    }
+    await rec.sftp.fastPut(local, remote, options)
+    try { win.webContents.send('sftp-progress', { id, direction: 'upload', local, remote, transferred: 1, total: 1, percent: 100 }) } catch {}
+  } catch (e) {
+    try { win.webContents.send('sftp-progress', { id, direction: 'upload', local, remote, error: String(e?.message||e) }) } catch {}
+    throw e
+  }
+  finally {
+    sftpCancelFlags.delete(id)
+  }
   return { ok: true }
 })
 ipcMain.handle('sftp-download', async (evt, payload) => {
   const { id, remote, local } = payload || {}
   const rec = connections.get(id)
-  if (!rec || !rec.sftp) throw new Error('No SFTP connection for id')
-  await rec.sftp.fastGet(remote, local)
+  if (!rec) throw new Error('No SFTP record for id')
+  if (!rec.sftp || !rec.sftp.sftp) {
+    if (rec.sftpOptions) {
+      const s = new SFTPClient()
+      await s.connect(rec.sftpOptions)
+      rec.sftp = s
+      connections.set(id, rec)
+    } else {
+      throw new Error('No SFTP connection for id')
+    }
+  }
+  try {
+    sftpCancelFlags.set(id, false)
+    const options = {
+      step: (totalTransferred, _chunk, total) => {
+        try {
+          if (sftpCancelFlags.get(id)) throw new Error('Cancelled')
+          const percent = total ? Math.floor((totalTransferred / total) * 100) : 0
+          win.webContents.send('sftp-progress', { id, direction: 'download', local, remote, transferred: totalTransferred, total, percent })
+        } catch {}
+      }
+    }
+    await rec.sftp.fastGet(remote, local, options)
+    try { win.webContents.send('sftp-progress', { id, direction: 'download', local, remote, transferred: 1, total: 1, percent: 100 }) } catch {}
+  } catch (e) {
+    try { win.webContents.send('sftp-progress', { id, direction: 'download', local, remote, error: String(e?.message||e) }) } catch {}
+    throw e
+  }
+  finally {
+    sftpCancelFlags.delete(id)
+  }
   return { ok: true }
+})
+
+// Allow renderer to request cancellation of ongoing SFTP transfer for a connection id
+ipcMain.on('sftp-cancel', (evt, id) => {
+  try {
+    sftpCancelFlags.set(id, true)
+    const rec = connections.get(id)
+    // Best-effort: force-close current SFTP to abort any active transfers
+    try { rec?.sftp?.end?.() || rec?.sftp?.close?.() } catch {}
+    // Mark as disconnected so next operation triggers auto-reconnect
+    if (rec) { rec.sftp = undefined; connections.set(id, rec) }
+  } catch {}
 })
 ipcMain.handle('sftp-upload-dir', async (evt, payload) => {
   const { id, localDir, remoteDir } = payload || {}
