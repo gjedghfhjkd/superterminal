@@ -103,6 +103,7 @@
       .tun-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#2fbf71; margin-left:6px }
       @keyframes pulse { 0% { opacity:.5; transform:scale(1) } 50% { opacity:1; transform:scale(1.3) } 100% { opacity:.5; transform:scale(1) } }
       .tun-dot.active { animation:pulse 1.2s ease-in-out infinite }
+      .tun-dot.inactive { background:#6b7280; opacity:0.6 }
       .icon-btn { background:transparent; border:1px solid #2a3040; border-radius:8px; padding:6px; cursor:pointer; color:#cfd3dc }
       .icon-btn:hover { background:#22283a }
       .spin { animation:spin 1s linear infinite }
@@ -183,7 +184,11 @@
       </div>
       <div id="tun-panel">
         <div id="tun-controls">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
           <button id="tun-create" class="btn primary">Create Tunnel</button>
+            <button id="tun-start-all" class="btn">Start All</button>
+            <button id="tun-stop-all" class="btn">Stop All</button>
+          </div>
         </div>
         <div id="tun-list"></div>
       </div>
@@ -875,8 +880,8 @@
         } catch {}
         // Keyboard toggle: Ctrl+B (like VS Code)
         window.toggleSidebar = () => {
-          const isCollapsed = left.dataset.collapsed==='1'
-          setCollapsed(!isCollapsed)
+            const isCollapsed = left.dataset.collapsed==='1'
+            setCollapsed(!isCollapsed)
         }
         // Prevent key repeat from toggling multiple times while holding the keys
         window.__sidebarToggleGuard = false
@@ -2564,7 +2569,46 @@
       // ===== Tunneling UI =====
       const tunListEl = document.getElementById('tun-list')
       const tunCreateBtn = document.getElementById('tun-create')
+      const tunStartAllBtn = document.getElementById('tun-start-all')
+      const tunStopAllBtn = document.getElementById('tun-stop-all')
       let tunnels = [] // persisted list: { id, sessionId, name, localHost, localPort, remoteHost, remotePort, active }
+      
+      // Start all tunnels
+      async function startAllTunnels() {
+        for (const t of tunnels) {
+          if (t.active) continue
+          try {
+            if (!t.connId) {
+              t.connId = genId('tunconn')
+              const cfg = Object.assign({}, t.sessionCfg || {}, { id: t.connId })
+              await window.api.sshConnect(cfg)
+            }
+            await window.api.tunnelStart(t.connId, t.localHost||'127.0.0.1', t.localPort, (t.sessionCfg?.host || t.remoteHost || '127.0.0.1'), t.remotePort)
+            t.active = true
+          } catch (e) { /* ignore individual errors, continue others */ }
+        }
+        await window.api.tunnelsSave({ tunnels })
+        renderTunnels()
+      }
+
+      // Stop all tunnels
+      async function stopAllTunnels() {
+        for (const t of tunnels) {
+          if (!t.active) continue
+          try {
+            await window.api.tunnelStop(t.connId || t.sessionId, t.localPort)
+            try { if (t.connId) await window.api.sshDisconnect(t.connId) } catch {}
+          } catch {}
+          t.active = false
+          t.connId = undefined
+        }
+        await window.api.tunnelsSave({ tunnels })
+        renderTunnels()
+      }
+
+      // Wire buttons
+      if (tunStartAllBtn) tunStartAllBtn.onclick = () => startAllTunnels()
+      if (tunStopAllBtn) tunStopAllBtn.onclick = () => stopAllTunnels()
       
       // Find first session in folder (recursive)
       function findFirstSessionInFolder(folder) {
@@ -2636,13 +2680,16 @@
         btnCreate.onclick = async () => {
           const localPort = Number(inLocal.value || '0')
           const remotePort = Number(inRemote.value || '0')
-          if (!localPort || !remotePort) { alert('Ports are required'); return }
+          if (!localPort || !remotePort || localPort < 1 || localPort > 65535 || remotePort < 1 || remotePort > 65535) { 
+            alert('Valid ports (1-65535) are required'); 
+            return 
+          }
           const name = (inName.value || '').trim()
           const remoteHost = (sessNode.session && (sessNode.session.host || sessNode.session.hostname)) || '127.0.0.1'
           // Add tunnel inactive by default
           const entry = { id: genId('tun'), sessionId: sessNode.id, sessionCfg: sessNode.session, name, localHost:'127.0.0.1', localPort, remoteHost, remotePort, active:false }
           tunnels.push(entry)
-          await window.api.tunnelsSave(tunnels)
+          await window.api.tunnelsSave({ tunnels })
           renderTunnels()
           close()
         }
@@ -2657,8 +2704,52 @@
           const row = document.createElement('div')
           row.className = 'tun-row'
           const colA = document.createElement('div'); colA.className='tun-col small'; colA.textContent = t.name || '(no name)'
-          const colB = document.createElement('div'); colB.className='tun-col'; colB.textContent = `${t.remoteHost||'127.0.0.1'}:${t.remotePort} -> ${t.localHost||'127.0.0.1'}:${t.localPort}`
-          if (t.active) { const dot = document.createElement('span'); dot.className='tun-dot active'; colB.appendChild(dot) }
+          const colB = document.createElement('div'); colB.className='tun-col';
+          const dstLabel = `${t.remoteHost||'127.0.0.1'}:${t.remotePort}`
+          const localHost = t.localHost || '127.0.0.1'
+          const srcLabel = `${localHost}:${t.localPort}`
+          
+          // Simple text display first
+          colB.textContent = `${dstLabel} -> ${srcLabel}`
+          
+          // If local host is a loopback, add clickable link
+          if (localHost === '127.0.0.1' || localHost.toLowerCase() === 'localhost') {
+            colB.innerHTML = `${dstLabel} -> `
+            const link = document.createElement('a')
+            link.href = `http://localhost:${t.localPort}`
+            link.textContent = `http://localhost:${t.localPort}`
+            link.style.color = '#4ea1ff'
+            link.style.textDecoration = 'underline'
+            link.style.cursor = 'pointer'
+            link.onclick = async (e) => {
+              e.preventDefault()
+              try {
+                if (window.api && window.api.openExternal) {
+                  const result = await window.api.openExternal(link.href)
+                  if (!result || !result.ok) {
+                    window.open(link.href, '_blank')
+                  }
+                } else {
+                  window.open(link.href, '_blank')
+                }
+              } catch (err) {
+                console.error('Failed to open external link:', err)
+                window.open(link.href, '_blank')
+              }
+            }
+            colB.appendChild(link)
+          }
+          if (t.active) { 
+            const dot = document.createElement('span'); 
+            dot.className='tun-dot active'; 
+            dot.title = 'Tunnel is active';
+            colB.appendChild(dot) 
+          } else {
+            const dot = document.createElement('span'); 
+            dot.className='tun-dot inactive'; 
+            dot.title = 'Tunnel is inactive';
+            colB.appendChild(dot) 
+          }
           const colC = document.createElement('div'); colC.className='tun-col small'
           const startBtn = document.createElement('button'); startBtn.className='icon-btn'; startBtn.title='Start'
           startBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>'
@@ -2668,21 +2759,40 @@
           editBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/></svg>'
           const delBtn = document.createElement('button'); delBtn.className='icon-btn'; delBtn.title='Delete'
           delBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 7h12l-1 12H7L6 7zm3-3h6l1 2H8l1-2z"/></svg>'
-          if (t.active) startBtn.style.opacity = '0.4'; else stopBtn.style.opacity = '0.4'
+          if (t.active) { 
+            startBtn.style.opacity = '0.4'; 
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+          } else { 
+            stopBtn.style.opacity = '0.4'; 
+            stopBtn.disabled = true;
+            startBtn.disabled = false;
+          }
           startBtn.onclick = async () => {
             if (t.active) return
             try {
-              // Ensure SSH connection exists for this tunnel
-              if (!t.connId) {
-                t.connId = genId('tunconn')
-                const cfg = Object.assign({}, t.sessionCfg || {}, { id: t.connId })
-                await window.api.sshConnect(cfg)
-              }
+              // Always create new SSH connection for tunnel to ensure it's fresh
+              t.connId = genId('tunconn')
+              const cfg = Object.assign({}, t.sessionCfg || {}, { id: t.connId })
+              await window.api.sshConnect(cfg)
               await window.api.tunnelStart(t.connId, t.localHost||'127.0.0.1', t.localPort, (t.sessionCfg?.host || t.remoteHost || '127.0.0.1'), t.remotePort)
               t.active = true
-              await window.api.tunnelsSave(tunnels)
+              t.startError = null
+              await window.api.tunnelsSave({ tunnels })
               renderTunnels()
-            } catch (e) { alert('Start error: ' + (e?.message||e)) }
+            } catch (e) { 
+              console.error('Tunnel start error:', e)
+              alert('Start error: ' + (e?.message||e))
+              // Reset connection ID on error
+              if (t.connId) {
+                try { await window.api.sshDisconnect(t.connId) } catch {}
+                t.connId = undefined
+              }
+              t.startError = e?.message || String(e)
+              t.active = false
+              await window.api.tunnelsSave({ tunnels })
+              renderTunnels()
+            }
           }
           stopBtn.onclick = async () => {
             if (!t.active) return
@@ -2691,7 +2801,7 @@
               try { if (t.connId) await window.api.sshDisconnect(t.connId) } catch {}
               t.active = false
               t.connId = undefined
-              await window.api.tunnelsSave(tunnels)
+              await window.api.tunnelsSave({ tunnels })
               renderTunnels()
             } catch (e) { alert('Stop error: ' + (e?.message||e)) }
           }
@@ -2704,7 +2814,7 @@
               updated.connId = t.connId
               if (!updated.id) updated.id = t.id
               tunnels[i] = updated
-              await window.api.tunnelsSave(tunnels)
+              await window.api.tunnelsSave({ tunnels })
               renderTunnels()
             } catch (e) { alert('Edit error: ' + (e?.message||e)) }
           }
@@ -2719,7 +2829,7 @@
             } catch {}
             const idx = tunnels.indexOf(t)
             if (idx >= 0) tunnels.splice(idx,1)
-            await window.api.tunnelsSave(tunnels)
+            await window.api.tunnelsSave({ tunnels })
             renderTunnels()
           }
           colC.appendChild(startBtn); colC.appendChild(stopBtn); colC.appendChild(editBtn); colC.appendChild(delBtn)
@@ -2731,7 +2841,10 @@
       tunCreateBtn.onclick = async () => {
         const selInfo0 = selectedId ? findNodeById(sessionTree, selectedId, null) : null
         const sessNode0 = selInfo0 && selInfo0.node && selInfo0.node.type==='session' ? selInfo0.node : null
-        if (!sessNode0) { await showConfirmModal('Error', 'Select a session in the left tree first.', 'OK', ''); return }
+        if (!sessNode0) { 
+          await showConfirmModal('Error', 'Select a session in the left tree first.', 'OK', ''); 
+          return 
+        }
         // Modal wizard
         const overlay = document.createElement('div'); overlay.className='modal-overlay'
         const modal = document.createElement('div'); modal.className='modal'
@@ -2772,21 +2885,70 @@
         btnNext.onclick = () => { step = Math.min(3, step+1); update() }
 
         btnCreate.onclick = async () => {
-        // Use selected session
-        const selInfo = selectedId ? findNodeById(sessionTree, selectedId, null) : null
-        const sessNode = selInfo && selInfo.node && selInfo.node.type==='session' ? selInfo.node : null
-        if (!sessNode) { await showConfirmModal('Error', 'Select a session in the left tree first.', 'OK', ''); return }
-        const remoteHost = (sessNode.session && (sessNode.session.host || sessNode.session.hostname)) || '127.0.0.1'
+          // Use the session captured when the modal opened to avoid races
+          const sessNode = sessNode0
+          if (!sessNode) {
+            await showConfirmModal('Error', 'Select a session in the left tree first.', 'OK', '');
+            return
+          }
+          
         const localPort = Number(inLocal.value || '0')
         const remotePort = Number(inRemote.value || '0')
-        if (!localPort || !remotePort) { alert('Ports are required'); return }
+          if (!localPort || !remotePort || localPort < 1 || localPort > 65535 || remotePort < 1 || remotePort > 65535) { 
+            alert('Valid ports (1-65535) are required'); 
+            return 
+          }
+          
         const name = (inName.value || '').trim()
+          const remoteHost = (sessNode.session && (sessNode.session.host || sessNode.session.hostname)) || '127.0.0.1'
+          
         // Add tunnel inactive by default
-        const entry = { id: genId('tun'), sessionId: sessNode.id, sessionCfg: sessNode.session, name, localHost:'127.0.0.1', localPort, remoteHost, remotePort, active:false }
+          const entry = { 
+            id: genId('tun'),
+            sessionId: sessNode.id, 
+            sessionCfg: sessNode.session, 
+            name, 
+            localHost:'127.0.0.1', 
+            localPort, 
+            remoteHost, 
+            remotePort, 
+            active:false 
+          }
         tunnels.push(entry)
-        await window.api.tunnelsSave(tunnels)
+        await window.api.tunnelsSave({ tunnels })
         renderTunnels()
           close()
+        }
+      }
+
+      // Update tunnel states when sessions disconnect
+      async function updateTunnelStates() {
+        try {
+          const res = await window.api.tunnelsLoad()
+          let tunnels = []
+          if (Array.isArray(res)) {
+            tunnels = res
+          } else if (res && Array.isArray(res.tunnels)) {
+            tunnels = res.tunnels
+          }
+          // Only reset connId on start errors to allow retry
+          tunnels.forEach(t => {
+            if (t.startError) {
+              t.connId = null
+              t.startError = null
+              t.active = false
+            }
+            // Don't reset active state or connId otherwise - preserve tunnel state
+          })
+          // Save in the same format as loaded
+          if (Array.isArray(res)) {
+            await window.api.tunnelsSave({ tunnels })
+          } else {
+            await window.api.tunnelsSave({ tunnels })
+          }
+          renderTunnels()
+        } catch (e) {
+          console.error('Failed to update tunnel states:', e)
         }
       }
 
@@ -2794,12 +2956,27 @@
       async function loadTunnelsUI() {
         try {
           const res = await window.api.tunnelsLoad()
-          tunnels = Array.isArray(res?.tunnels) ? res.tunnels : []
+          // Handle both old format (array) and new format (object with tunnels property)
+          if (Array.isArray(res)) {
+            tunnels = res
+          } else if (res && Array.isArray(res.tunnels)) {
+            tunnels = res.tunnels
+          } else {
+            tunnels = []
+          }
+          // Don't call updateTunnelStates on initial load - it resets everything
           renderTunnels()
-        } catch {}
+        } catch (e) {
+          console.error('Failed to load tunnels:', e)
+          tunnels = []
+          renderTunnels()
+        }
       }
       loadTunnelsUI()
       window.api.onTunnelsUpdated?.(() => loadTunnelsUI())
+      
+      // Update tunnel states periodically to catch disconnections
+      setInterval(updateTunnelStates, 5000)
     </script>
   </body>
   </html>

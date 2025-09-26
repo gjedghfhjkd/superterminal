@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer, clipboard } = require('electron')
+const { contextBridge, ipcRenderer, clipboard, shell } = require('electron')
 
 contextBridge.exposeInMainWorld('api', {
   copyText: (text) => { try { clipboard.writeText(String(text||'')) } catch {} },
@@ -37,8 +37,7 @@ contextBridge.exposeInMainWorld('api', {
   // multi-connection aware helpers (optional)
   sshOpenPtyId: (id) => ipcRenderer.invoke('ssh-open-pty-id', { id }),
   sshSendId: (id, data) => ipcRenderer.send('ssh-send', { id, data }),
-  sshResizeId: (id, cols, rows) => ipcRenderer.send('ssh-resize', { id, cols, rows })
-  ,
+  sshResizeId: (id, cols, rows) => ipcRenderer.send('ssh-resize', { id, cols, rows }),
   // Local FS + SFTP helpers
   localList: (localPath) => ipcRenderer.invoke('local-list', localPath),
   localDelete: (localPath, isDir) => ipcRenderer.invoke('local-delete', { path: localPath, isDir }),
@@ -57,8 +56,17 @@ contextBridge.exposeInMainWorld('api', {
   tunnelsSave: (list) => ipcRenderer.invoke('tunnels-save', list),
   onTunnelsUpdated: (cb) => ipcRenderer.on('tunnels-updated', cb),
   openTunnelWindow: (preset=null) => ipcRenderer.invoke('open-tunnel-window', { preset }),
-  tunnelFormSubmit: (tunnel) => ipcRenderer.send('tunnel-form-submit', tunnel)
-  ,
+  tunnelFormSubmit: (tunnel) => ipcRenderer.send('tunnel-form-submit', tunnel),
+  // External links via main process (always system browser)
+  openExternal: async (url) => {
+    try {
+      const result = await ipcRenderer.invoke('open-external', String(url))
+      return result
+    } catch (err) {
+      console.error('openExternal error:', err)
+      return { ok: false, error: err.message }
+    }
+  },
   // Users management
   usersLoad: () => ipcRenderer.invoke('users-load'),
   usersSave: (list) => ipcRenderer.invoke('users-save', list),
