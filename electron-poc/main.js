@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { readFile, writeFile, readdir, stat, rm as fsrm, mkdir as fsmkdir, rename as fsrename } from 'fs/promises'
 import fs from 'fs'
 import path from 'path'
@@ -35,6 +35,33 @@ function createWindow() {
   })
   try { app.setName('SuperTerminal') } catch {}
   try { win.setTitle('SuperTerminal') } catch {}
+  // Force all external links to open in the system browser
+  try {
+    win.webContents.setWindowOpenHandler(({ url }) => {
+      try {
+        if (/^https?:\/\//i.test(url)) { shell.openExternal(url); return { action: 'deny' } }
+      } catch {}
+      return { action: 'deny' }
+    })
+    win.webContents.on('will-navigate', (event, url) => {
+      try {
+        if (/^https?:\/\//i.test(url)) { event.preventDefault(); shell.openExternal(url) }
+      } catch {}
+    })
+  } catch {}
+  // IPC: open external URL in system browser
+  try {
+    _ipcMain.removeHandler?.('open-external')
+    _ipcMain.handle('open-external', async (_evt, url) => {
+  try { 
+    await shell.openExternal(String(url))
+    return { ok: true }
+  } catch (err) {
+    console.error('openExternal error:', err)
+    return { ok: false, error: err.message }
+  }
+})
+  } catch {}
   try {
     win.webContents.on('before-input-event', (event, input) => {
       try {
@@ -135,10 +162,12 @@ ipcMain.handle('tunnels-load', async () => {
   const tunnels = await loadTunnels()
   return { ok: true, tunnels }
 })
-ipcMain.handle('tunnels-save', async (evt, tunnels) => {
-  await saveTunnels(tunnels || [])
+ipcMain.handle('tunnels-save', async (evt, data) => {
+  // Handle both array format and object format
+  const tunnels = Array.isArray(data) ? data : (data?.tunnels || [])
+  await saveTunnels(tunnels)
   try { win.webContents.send('tunnels-updated') } catch {}
-  return { ok: true }
+  return { ok: true, tunnels }
 })
 // Users load/save
 ipcMain.handle('users-load', async () => {
