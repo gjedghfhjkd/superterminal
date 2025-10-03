@@ -60,8 +60,9 @@
       .drop-target { outline:1px dashed #3a4160; background:#141a29; }
       #right { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
       #tabs { height:36px; background:#0b0d14; color:#cfd3dc; border-bottom:1px solid #1f2330; display:flex; align-items:flex-end; gap:6px; padding:0 8px; box-sizing:border-box; }
-      .tab { cursor: pointer; padding:4px 7px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:174px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; position:relative; transition:background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease; display:flex; align-items:center; }
+      .tab { cursor: pointer; padding:4px 7px; background:#1a1f2d; border:1px solid #2a3040; border-bottom:none; border-radius:6px 6px 0 0; color:#cfd3dc; max-width:174px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; position:relative; transition:background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease, max-width .33s ease, padding .33s ease, margin .33s ease, opacity .2s ease; display:flex; align-items:center; }
       .tab:hover { background:#22283a; border-color:#3a4160; }
+      .tab.closing { opacity:0; max-width:0; padding-left:0; padding-right:0; margin-left:0; margin-right:0; border-color:transparent; }
       .tab.active { background:#0b0d14; color:#ffffff; border-color:#3a4160; box-shadow:0 0 0 1px #3a4160 inset; font-weight:600; }
       .tab.active::after { content:""; position:absolute; left:8px; right:8px; bottom:-1px; height:3px; border-radius:3px 3px 0 0; background:linear-gradient(90deg,#2f66ef,#7a5cf0); }
       .tab .title { pointer-events:none; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
@@ -212,13 +213,30 @@
 
       function closeTabById(id) {
         try {
+          const tabEl = tabs.get(id)
           const rec = terminals.get(id)
-          if (rec) { try { rec.term.dispose() } catch {}; try { rec.el.remove() } catch {}; terminals.delete(id) }
-          const t = tabs.get(id)
-          if (t) { try { t.remove() } catch {}; tabs.delete(id) }
-          if (currentId === id) currentId = null
-          const next = [...tabs.keys()][0]
-          if (next != null) activateTab(next)
+          if (!tabEl && !rec) return
+          // Start CSS closing animation
+          if (tabEl) {
+            try { tabEl.classList.add('closing') } catch {}
+          }
+          // Delay actual removal by ~0.33s
+          setTimeout(async () => {
+            try {
+              if (currentId === id) { currentId = null }
+              if (rec) {
+                try { await window.api.sshDisconnect?.(id) } catch {}
+                try { rec.term.dispose() } catch {}
+                try { rec.el.remove() } catch {}
+                terminals.delete(id)
+              }
+              const t = tabs.get(id)
+              if (t) { try { t.remove() } catch {}; tabs.delete(id) }
+              const next = [...tabs.keys()][0]
+              if (next != null) activateTab(next)
+              else { showSshView?.() }
+            } catch {}
+          }, 330)
         } catch {}
       }
 
@@ -460,19 +478,17 @@
         const close = document.createElement('span')
         close.textContent = '✕'
         close.className = 'close'
-        close.onclick = async (e) => {
-          e.stopPropagation()
-          if (currentId === id) { currentId = null }
-          try { await window.api.sshDisconnect?.(id) } catch {}
-          const rec = terminals.get(id)
-          if (rec) { try { rec.term.dispose() } catch {}; rec.el.remove(); terminals.delete(id) }
-          const t = tabs.get(id); if (t) { t.remove(); tabs.delete(id) }
-          // Activate another tab if any
-          const next = [...tabs.keys()][0]
-          if (next != null) activateTab(next)
-        }
+        close.onclick = (e) => { e.stopPropagation(); closeTabById(id) }
         tab.appendChild(close)
         tab.onclick = () => activateTab(id)
+        // Middle click to close tab
+        tab.onmousedown = (e) => {
+          if (e.button === 1) { // Middle mouse button
+            e.preventDefault()
+            e.stopPropagation()
+            closeTabById(id)
+          }
+        }
         // Drag support for tab reordering
         try {
           tab.draggable = true
@@ -512,18 +528,17 @@
         const close = document.createElement('span')
         close.textContent = '✕'
         close.className = 'close'
-        close.onclick = async (e) => {
-          e.stopPropagation()
-          try { await window.api.sftpDisconnect?.(id) } catch {}
-          if (currentId === id) currentId = null
-          const t = tabs.get(id); if (t) { t.remove(); tabs.delete(id) }
-          // Activate another tab if any, otherwise show SSH view baseline
-          const next = [...tabs.keys()][0]
-          if (next != null) activateTab(next)
-          else { showSshView() }
-        }
+        close.onclick = (e) => { e.stopPropagation(); closeTabById(id) }
         tab.appendChild(close)
         tab.onclick = () => { activateTab(id); showSftpView() }
+        // Middle click to close tab
+        tab.onmousedown = (e) => {
+          if (e.button === 1) { // Middle mouse button
+            e.preventDefault()
+            e.stopPropagation()
+            closeTabById(id)
+          }
+        }
         // Drag support for tab reordering
         try {
           tab.draggable = true
